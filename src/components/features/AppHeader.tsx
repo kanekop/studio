@@ -3,32 +3,74 @@
 import React from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { Trash2, Home, Save } from 'lucide-react';
+import { Trash2, Home, LogOut, UserCircle } from 'lucide-react';
+import { auth } from '@/lib/firebase';
+import { signOut } from 'firebase/auth';
+import { useToast } from '@/hooks/use-toast';
 
 const AppHeader = () => {
   const context = useFaceRoster();
+  const { toast } = useToast();
+  const { currentUser, imageDataUrl } = context;
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
+      // Context's onAuthStateChanged will handle state update and redirection if needed
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({ title: "Logout Failed", description: "Could not log you out. Please try again.", variant: "destructive" });
+    }
+  };
 
   return (
     <header className="bg-primary text-primary-foreground p-4 shadow-md sticky top-0 z-50">
       <div className="container mx-auto flex justify-between items-center">
-        <h1 className="text-2xl font-headline font-bold flex items-center">
+        <a href="/" className="text-2xl font-headline font-bold flex items-center hover:opacity-90 transition-opacity">
           <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-7 w-7">
             <path d="M12 2a10 10 0 0 0-9.95 9.276c.02.04.038.081.058.122A10.001 10.001 0 0 0 12 22a10 10 0 0 0 10-10c0-.283-.012-.564-.035-.842L21.965 11A10 10 0 0 0 12 2Z"/>
             <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
             <path d="M9 9h.01"/><path d="M15 9h.01"/>
           </svg>
           FaceRoster
-        </h1>
-        {context && context.imageDataUrl && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={context.saveAndReturnToLanding} size="sm" className="bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground">
-              <Home className="mr-2 h-4 w-4" /> Save &amp; Exit to Home
+        </a>
+        
+        <div className="flex items-center gap-2">
+          {currentUser && imageDataUrl && (
+            <>
+              {/* <Button 
+                variant="outline" 
+                // onClick={context.saveAndReturnToLanding} // This function is removed for now
+                onClick={() => { 
+                  // Placeholder for future "Save to DB and Exit"
+                  context.clearAllData(false); // Clears editor, effectively exiting
+                  toast({ title: "Editor Exited", description: "Save to cloud will be implemented here."});
+                }}
+                size="sm" 
+                className="bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground"
+                disabled // Disabled until DB save is implemented
+              >
+                <Home className="mr-2 h-4 w-4" /> Save & Exit (Cloud)
+              </Button> */}
+              <Button variant="destructive" onClick={() => context.clearAllData(true)} size="sm">
+                <Trash2 className="mr-2 h-4 w-4" /> Clear Editor
+              </Button>
+            </>
+          )}
+          {currentUser && (
+            <Button variant="ghost" onClick={handleLogout} size="sm" className="text-primary-foreground hover:bg-primary-foreground/20">
+              <LogOut className="mr-2 h-4 w-4" /> Logout
             </Button>
-            <Button variant="destructive" onClick={() => context.clearAllData(true)} size="sm">
-              <Trash2 className="mr-2 h-4 w-4" /> Clear All Data
+          )}
+          {!currentUser && !context.isLoading && (
+             <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/20">
+                <a href="/login">
+                    <UserCircle className="mr-2 h-4 w-4" /> Login / Sign Up
+                </a>
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );

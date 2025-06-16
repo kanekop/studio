@@ -1,21 +1,38 @@
 
 "use client";
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import type { Person, Region, DisplayRegion, StoredAppState } from '@/types';
-import { loadStateFromLocalStorage, saveStateToLocalStorage, clearStateFromLocalStorage } from '@/lib/localStorage';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { User as FirebaseUser } from 'firebase/auth';
+import { auth } from '@/lib/firebase'; // Firebase auth instance
+import { onAuthStateChanged } from 'firebase/auth';
+
+import type { Person, Region, DisplayRegion } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
+// This interface is for the current in-memory Person being edited.
+// It uses faceImageUrl (data URL) for immediate display.
+// The src/types/Person interface uses faceImageStoragePath for DB persistence.
+interface EditablePerson extends Omit<Person, 'id' | 'faceImageStoragePath' | 'originalRegion'> {
+  id: string;
+  faceImageUrl: string; // Data URL for local display before upload
+  name: string;
+  aiName?: string;
+  notes?: string;
+  originalRegion: Region;
+}
+
+
 interface FaceRosterContextType {
+  currentUser: FirebaseUser | null;
   imageDataUrl: string | null;
   originalImageSize: { width: number; height: number } | null;
   drawnRegions: Region[];
-  roster: Person[];
+  roster: EditablePerson[]; // Using internal EditablePerson
   selectedPersonId: string | null;
-  isLoading: boolean;
+  isLoading: boolean; // For auth state loading and initial data loading later
   isProcessing: boolean; // For long operations like roster creation
 
   handleImageUpload: (file: File) => Promise<void>;
@@ -23,26 +40,43 @@ interface FaceRosterContextType {
   clearDrawnRegions: () => void;
   createRosterFromRegions: () => Promise<void>;
   selectPerson: (id: string | null) => void;
-  updatePersonDetails: (id: string, details: Partial<Pick<Person, 'name' | 'notes'>>) => void;
-  clearAllData: (showToast?: boolean) => void;
-  loadFromLocalStorageAndInitialize: () => void;
+  updatePersonDetails: (id: string, details: Partial<Pick<EditablePerson, 'name' | 'notes'>>) => void;
+  clearAllData: (showToast?: boolean) => void; // Resets current editor state
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
-  saveAndReturnToLanding: () => void;
+  // loadFromLocalStorageAndInitialize and saveAndReturnToLanding are removed for now
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
 
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [originalImageSize, setOriginalImageSize] = useState<{ width: number; height: number } | null>(null);
   const [drawnRegions, setDrawnRegions] = useState<Region[]>([]);
-  const [roster, setRoster] = useState<Person[]>([]);
+  const [roster, setRoster] = useState<EditablePerson[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Initial loading from localStorage
+  const [isLoading, setIsLoading] = useState<boolean>(true); // True until auth state is determined
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const { toast } = useToast();
 
-  const hasAttemptedInitialLoad = useRef(false);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setIsLoading(false);
+      if (!user) {
+        // If user logs out, clear any sensitive editor state if necessary
+        // For now, we'll clear the editor if a user logs out.
+        // This behavior might be refined later depending on desired UX.
+        setImageDataUrl(null);
+        setOriginalImageSize(null);
+        setDrawnRegions([]);
+        setRoster([]);
+        setSelectedPersonId(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
 
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -50,13 +84,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setDrawnRegions([]);
     setRoster([]);
     setSelectedPersonId(null);
-    clearStateFromLocalStorage();
+    // No longer interacts with localStorage
     if (showToast) {
-      toast({ title: "Data Cleared", description: "Image and roster have been cleared." });
+      toast({ title: "Editor Cleared", description: "Current image and roster have been cleared." });
     }
   }, [toast]);
 
   const handleImageUpload = useCallback(async (file: File) => {
+    if (!currentUser) {
+      toast({ title: "Authentication Required", description: "Please log in to upload images.", variant: "destructive" });
+      return;
+    }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       toast({ title: "File Too Large", description: `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`, variant: "destructive" });
       return;
@@ -66,7 +104,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    clearAllData(false); 
+    // Reset current editor state for the new image
+    setImageDataUrl(null);
+    setOriginalImageSize(null);
+    setDrawnRegions([]);
+    setRoster([]);
+    setSelectedPersonId(null);
     setIsProcessing(true);
 
     const reader = new FileReader();
@@ -77,7 +120,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setImageDataUrl(dataUrl);
         setOriginalImageSize({ width: img.width, height: img.height });
         setIsProcessing(false);
-        toast({ title: "Image Uploaded", description: "You can now draw regions on the image." });
+        toast({ title: "Image Ready", description: "You can now draw regions on the image." });
       };
       img.onerror = () => {
         toast({ title: "Image Load Error", description: "Could not load the image.", variant: "destructive" });
@@ -90,49 +133,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsProcessing(false);
     }
     reader.readAsDataURL(file);
-  }, [toast, clearAllData]);
+  }, [toast, currentUser]);
   
-  const loadFromLocalStorageAndInitialize = useCallback(() => {
-    setIsLoading(true);
-    const storedState = loadStateFromLocalStorage();
-
-    if (storedState && storedState.imageDataUrl && storedState.roster) { // Allow loading if roster is empty array
-      setImageDataUrl(storedState.imageDataUrl);
-      setOriginalImageSize(storedState.originalImageSize || null);
-      setRoster(storedState.roster || []); // Ensure roster is always an array
-      // setSelectedPersonId(storedState.selectedPersonId || null); 
-      if (hasAttemptedInitialLoad.current) {
-        toast({
-          title: "Session Restored",
-          description: `Loaded your previous work with ${storedState.roster?.length || 0} person(s).`
-        });
-      }
-    } else {
-      if (hasAttemptedInitialLoad.current) {
-         toast({
-            title: "Nothing to Load",
-            description: "No complete saved session (image and roster) found to display in the editor.",
-         });
-      }
-    }
-    setIsLoading(false);
-    if (!hasAttemptedInitialLoad.current) {
-        hasAttemptedInitialLoad.current = true;
-    }
-  }, [toast]);
-
-
-  useEffect(() => {
-    if (!hasAttemptedInitialLoad.current) {
-      loadFromLocalStorageAndInitialize();
-    }
-  }, [loadFromLocalStorageAndInitialize]);
-
-  useEffect(() => {
-    if (!isLoading && hasAttemptedInitialLoad.current && imageDataUrl) { 
-      saveStateToLocalStorage({ imageDataUrl, originalImageSize, roster });
-    }
-  }, [imageDataUrl, originalImageSize, roster, isLoading]);
 
   const convertDisplayToOriginalRegion = (
     displayRegion: Omit<DisplayRegion, 'id'>,
@@ -171,7 +173,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
     setIsProcessing(true);
-    const newRoster: Person[] = [];
+    const newRoster: EditablePerson[] = [];
     const img = new Image();
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
@@ -196,19 +198,21 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           0, 0, tempCanvas.width, tempCanvas.height
         );
         
-        const faceImageUrl = tempCanvas.toDataURL('image/png');
+        const faceImageUrlData = tempCanvas.toDataURL('image/png'); // Still data URL for now
         newRoster.push({
-          id: `${Date.now()}-${i}`,
-          faceImageUrl,
+          id: `${Date.now()}-${i}`, // Temporary ID, will be Firestore ID later
+          faceImageUrl: faceImageUrlData,
           name: `Person ${roster.length + newRoster.length + 1}`,
           aiName: `Person ${roster.length + newRoster.length + 1}`, 
           notes: '',
           originalRegion: region,
         });
       }
+      // In a DB context, this would likely be an "activeRoster" that gets saved.
+      // For now, it just updates the local state.
       setRoster(prev => [...prev, ...newRoster]);
       setDrawnRegions([]); 
-      toast({ title: "Roster Created", description: `${newRoster.length} person(s) added to the roster.` });
+      toast({ title: "Roster Updated", description: `${newRoster.length} person(s) added to the current roster.` });
     } catch (error) {
       console.error("Error creating roster:", error);
       toast({ title: "Roster Creation Failed", description: (error as Error).message || "Could not process regions.", variant: "destructive" });
@@ -221,13 +225,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setSelectedPersonId(id);
   }, []);
 
-  const updatePersonDetails = useCallback((id: string, details: Partial<Pick<Person, 'name' | 'notes'>>) => {
+  const updatePersonDetails = useCallback((id: string, details: Partial<Pick<EditablePerson, 'name' | 'notes'>>) => {
     setRoster(prevRoster =>
       prevRoster.map(person =>
         person.id === id ? { ...person, ...details } : person
       )
     );
-    toast({ title: "Details Updated", description: "Person's details have been saved." });
+    // This save will eventually be to Firestore
+    toast({ title: "Details Updated", description: "Person's details have been updated for the current session." });
   }, [toast]);
 
   const getScaledRegionForDisplay = useCallback((
@@ -247,24 +252,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [originalImageSize]);
 
-  const saveAndReturnToLanding = useCallback(() => {
-    // The save useEffect (which now only saves if imageDataUrl is truthy)
-    // should have already saved the current state with the active imageDataUrl.
-    // Setting imageDataUrl to null here will navigate to the landing page.
-    // The save useEffect will run again but won't save because imageDataUrl will be null.
-    setImageDataUrl(null); 
-    setSelectedPersonId(null); // Reset selection when exiting
-    // Drawn regions are transient for the current editing session.
-    toast({ title: "Work Saved", description: "Returning to home. Your roster is saved." });
-  }, [toast]);
-
 
   return (
     <FaceRosterContext.Provider value={{
-      imageDataUrl, originalImageSize, drawnRegions, roster, selectedPersonId, isLoading, isProcessing,
+      currentUser, imageDataUrl, originalImageSize, drawnRegions, roster, selectedPersonId, isLoading, isProcessing,
       handleImageUpload, addDrawnRegion, clearDrawnRegions, createRosterFromRegions,
-      selectPerson, updatePersonDetails, clearAllData, loadFromLocalStorageAndInitialize, 
-      getScaledRegionForDisplay, saveAndReturnToLanding
+      selectPerson, updatePersonDetails, clearAllData, 
+      getScaledRegionForDisplay
     }}>
       {children}
     </FaceRosterContext.Provider>
@@ -278,4 +272,3 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-
