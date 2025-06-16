@@ -43,10 +43,38 @@ interface FaceRosterContextType {
   updatePersonDetails: (id: string, details: Partial<Pick<EditablePerson, 'name' | 'notes'>>) => void;
   clearAllData: (showToast?: boolean) => void; // Resets current editor state
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
-  // loadFromLocalStorageAndInitialize and saveAndReturnToLanding are removed for now
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
+
+// Mock user for development environment
+const mockDevUser: FirebaseUser = {
+  uid: 'dev-user-uid-12345',
+  email: 'dev@example.com',
+  displayName: 'Dev User',
+  photoURL: null,
+  emailVerified: true,
+  isAnonymous: false,
+  metadata: {},
+  providerData: [],
+  refreshToken: 'dev-refresh-token',
+  tenantId: null,
+  delete: async () => {},
+  getIdToken: async () => 'dev-id-token',
+  getIdTokenResult: async () => ({
+    token: 'dev-id-token',
+    expirationTime: '',
+    authTime: '',
+    issuedAtTime: '',
+    signInProvider: null,
+    signInSecondFactor: null,
+    claims: {},
+  }),
+  reload: async () => {},
+  toJSON: () => ({}),
+  providerId: 'password' // Or any relevant provider ID
+};
+
 
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -60,13 +88,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { toast } = useToast();
 
   useEffect(() => {
+    // Skip Firebase auth and use mock user in development
+    if (process.env.NODE_ENV === 'development') {
+      console.log("DEV MODE: Skipping Firebase Auth, using mock user.");
+      setCurrentUser(mockDevUser);
+      setIsLoading(false);
+      return; // Skip Firebase auth listener
+    }
+
+    // Production: Use Firebase Auth
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setIsLoading(false);
       if (!user) {
-        // If user logs out, clear any sensitive editor state if necessary
-        // For now, we'll clear the editor if a user logs out.
-        // This behavior might be refined later depending on desired UX.
         setImageDataUrl(null);
         setOriginalImageSize(null);
         setDrawnRegions([]);
@@ -84,14 +118,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setDrawnRegions([]);
     setRoster([]);
     setSelectedPersonId(null);
-    // No longer interacts with localStorage
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared." });
     }
   }, [toast]);
 
   const handleImageUpload = useCallback(async (file: File) => {
-    if (!currentUser) {
+    if (!currentUser && process.env.NODE_ENV !== 'development') { // Allow upload for mock user in dev
       toast({ title: "Authentication Required", description: "Please log in to upload images.", variant: "destructive" });
       return;
     }
@@ -104,7 +137,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    // Reset current editor state for the new image
     setImageDataUrl(null);
     setOriginalImageSize(null);
     setDrawnRegions([]);
@@ -198,9 +230,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           0, 0, tempCanvas.width, tempCanvas.height
         );
         
-        const faceImageUrlData = tempCanvas.toDataURL('image/png'); // Still data URL for now
+        const faceImageUrlData = tempCanvas.toDataURL('image/png'); 
         newRoster.push({
-          id: `${Date.now()}-${i}`, // Temporary ID, will be Firestore ID later
+          id: `${Date.now()}-${i}`, 
           faceImageUrl: faceImageUrlData,
           name: `Person ${roster.length + newRoster.length + 1}`,
           aiName: `Person ${roster.length + newRoster.length + 1}`, 
@@ -208,8 +240,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           originalRegion: region,
         });
       }
-      // In a DB context, this would likely be an "activeRoster" that gets saved.
-      // For now, it just updates the local state.
       setRoster(prev => [...prev, ...newRoster]);
       setDrawnRegions([]); 
       toast({ title: "Roster Updated", description: `${newRoster.length} person(s) added to the current roster.` });
@@ -231,7 +261,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         person.id === id ? { ...person, ...details } : person
       )
     );
-    // This save will eventually be to Firestore
     toast({ title: "Details Updated", description: "Person's details have been updated for the current session." });
   }, [toast]);
 
@@ -272,3 +301,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
