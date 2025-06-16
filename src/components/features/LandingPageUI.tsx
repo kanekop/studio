@@ -1,15 +1,33 @@
 
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { UploadCloud, History } from 'lucide-react';
 import ImageUploadForm from './ImageUploadForm';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { loadStateFromLocalStorage } from '@/lib/localStorage';
+import type { StoredAppState } from '@/types';
 
 const LandingPageUI = () => {
   const { loadFromLocalStorageAndInitialize } = useFaceRoster();
+  const [savedRosterInfo, setSavedRosterInfo] = useState<{ count: number; canLoad: boolean } | null>(null);
+  const [isCheckingStorage, setIsCheckingStorage] = useState(true);
+
+  useEffect(() => {
+    setIsCheckingStorage(true);
+    const storedState: StoredAppState | null = loadStateFromLocalStorage();
+    if (storedState && storedState.roster && storedState.roster.length > 0) {
+      setSavedRosterInfo({
+        count: storedState.roster.length,
+        canLoad: !!storedState.imageDataUrl, // Can only load if image data also exists
+      });
+    } else {
+      setSavedRosterInfo({ count: 0, canLoad: false });
+    }
+    setIsCheckingStorage(false);
+  }, []);
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -68,14 +86,18 @@ const LandingPageUI = () => {
                   </span>
                 </div>
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="w-full group hover:border-primary"
                 onClick={loadFromLocalStorageAndInitialize}
+                disabled={isCheckingStorage || !savedRosterInfo || !savedRosterInfo.canLoad || savedRosterInfo.count === 0}
                 aria-label="Display saved roster from previous session"
               >
                 <History className="mr-2 h-5 w-5 text-primary group-hover:animate-spin" />
-                Display Saved Roster
+                {isCheckingStorage ? 'Checking storage...' :
+                  (savedRosterInfo && savedRosterInfo.count > 0 ?
+                    `Display Saved Roster (${savedRosterInfo.count})${!savedRosterInfo.canLoad ? ' (Image missing)' : ''}` :
+                    'No Saved Roster')}
               </Button>
             </CardContent>
           </Card>

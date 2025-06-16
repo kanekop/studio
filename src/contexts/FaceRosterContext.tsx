@@ -41,7 +41,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const { toast } = useToast();
 
-  const hasLoadedFromStorage = useRef(false);
+  const hasAttemptedInitialLoad = useRef(false);
 
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -65,7 +65,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    clearAllData(false); // Clear previous data without toast
+    clearAllData(false); 
     setIsProcessing(true);
 
     const reader = new FileReader();
@@ -94,29 +94,46 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const loadFromLocalStorageAndInitialize = useCallback(() => {
     setIsLoading(true);
     const storedState = loadStateFromLocalStorage();
-    if (storedState) {
-      setImageDataUrl(storedState.imageDataUrl || null);
+
+    if (storedState && storedState.imageDataUrl && storedState.roster && storedState.roster.length > 0) {
+      setImageDataUrl(storedState.imageDataUrl);
       setOriginalImageSize(storedState.originalImageSize || null);
-      setRoster(storedState.roster || []);
-      // drawnRegions are not typically saved as they are transient before roster creation.
-      // If needed, they could be added to StoredAppState.
-      toast({ title: "Data Restored", description: "Previously saved roster has been loaded." });
+      setRoster(storedState.roster);
+      // Optionally restore selectedPersonId if it was part of StoredAppState
+      // setSelectedPersonId(storedState.selectedPersonId || null); 
+      if (hasAttemptedInitialLoad.current) { // Only show success toast if this is a manual load, not the initial auto-load
+        toast({
+          title: "Session Restored",
+          description: `Loaded your previous work with ${storedState.roster.length} person(s).`
+        });
+      }
     } else {
-      // toast({ title: "No Saved Data", description: "No previously saved roster found." });
+      // Not enough data to load the editor or no data at all.
+      // If this is a manual click (not the initial silent load attempt), inform the user.
+      if (hasAttemptedInitialLoad.current) {
+         toast({
+            title: "Nothing to Load",
+            description: "No complete saved session (image and roster) found to display in the editor.",
+         });
+      }
     }
     setIsLoading(false);
-    hasLoadedFromStorage.current = true;
+    if (!hasAttemptedInitialLoad.current) {
+        hasAttemptedInitialLoad.current = true;
+    }
   }, [toast]);
 
 
   useEffect(() => {
-    if (!hasLoadedFromStorage.current) {
+    // Attempt to load from local storage once on initial mount
+    if (!hasAttemptedInitialLoad.current) {
       loadFromLocalStorageAndInitialize();
     }
   }, [loadFromLocalStorageAndInitialize]);
 
   useEffect(() => {
-    if (!isLoading && hasLoadedFromStorage.current) { // Only save after initial load and if not loading
+    // Save state whenever relevant data changes, but only after the initial load attempt has finished.
+    if (!isLoading && hasAttemptedInitialLoad.current) { 
       saveStateToLocalStorage({ imageDataUrl, originalImageSize, roster });
     }
   }, [imageDataUrl, originalImageSize, roster, isLoading]);
@@ -126,7 +143,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     imageDisplaySize: { width: number; height: number }
   ): Region => {
     if (!originalImageSize || !imageDisplaySize.width || !imageDisplaySize.height) {
-      return { ...displayRegion };
+      // This case should ideally not happen if an image is loaded.
+      // Return a zero-sized region or throw an error, depending on desired strictness.
+      console.warn("Cannot convert display region: originalImageSize or imageDisplaySize is invalid.");
+      return { x: 0, y: 0, width: 0, height: 0 };
     }
     const scaleX = originalImageSize.width / imageDisplaySize.width;
     const scaleY = originalImageSize.height / imageDisplaySize.height;
@@ -139,10 +159,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addDrawnRegion = useCallback((displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => {
-    if (!originalImageSize) return;
+    if (!originalImageSize) {
+        toast({ title: "Error", description: "Cannot add region: original image dimensions not set.", variant: "destructive" });
+        return;
+    }
     const originalRegion = convertDisplayToOriginalRegion(displayRegion, imageDisplaySize);
     setDrawnRegions(prev => [...prev, originalRegion]);
-  }, [originalImageSize]);
+  }, [originalImageSize, toast]);
 
   const clearDrawnRegions = useCallback(() => {
     setDrawnRegions([]);
@@ -168,7 +191,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.max(1, region.width); // Ensure canvas has at least 1x1 dimensions
+        tempCanvas.width = Math.max(1, region.width); 
         tempCanvas.height = Math.max(1, region.height);
         const ctx = tempCanvas.getContext('2d');
         if (!ctx) continue;
@@ -184,13 +207,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           id: `${Date.now()}-${i}`,
           faceImageUrl,
           name: `Person ${roster.length + newRoster.length + 1}`,
-          aiName: `Person ${roster.length + newRoster.length + 1}`,
+          aiName: `Person ${roster.length + newRoster.length + 1}`, // Placeholder
           notes: '',
           originalRegion: region,
         });
       }
       setRoster(prev => [...prev, ...newRoster]);
-      setDrawnRegions([]); // Clear regions after processing
+      setDrawnRegions([]); 
       toast({ title: "Roster Created", description: `${newRoster.length} person(s) added to the roster.` });
     } catch (error) {
       console.error("Error creating roster:", error);
@@ -249,4 +272,3 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-
