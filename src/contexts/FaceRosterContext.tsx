@@ -1,8 +1,8 @@
 
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { User as FirebaseUser, UserMetadata, IdTokenResult } from 'firebase/auth'; // Import UserMetadata and IdTokenResult
-import { auth } from '@/lib/firebase'; // Firebase auth instance
+import type { User as FirebaseUser } from 'firebase/auth';
+import { auth } from '@/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 
 import type { Person, Region, DisplayRegion } from '@/types';
@@ -44,42 +44,6 @@ interface FaceRosterContextType {
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
 
-// More complete mock user for development environment
-const mockDevUser: FirebaseUser = {
-  uid: 'dev-mock-user-uid-67890',
-  email: 'dev-user@example.com',
-  displayName: 'Development User',
-  photoURL: null,
-  phoneNumber: null, // Added from UserInfo
-  providerId: 'mockProvider', // Added from UserInfo
-  emailVerified: true,
-  isAnonymous: false,
-  metadata: { // UserMetadata
-    creationTime: new Date().toISOString(),
-    lastSignInTime: new Date().toISOString(),
-  } as UserMetadata,
-  providerData: [], // UserInfo[]
-  refreshToken: 'mock-dev-refresh-token',
-  tenantId: null,
-  delete: async () => { console.log('MockUser: delete method called'); },
-  getIdToken: async (forceRefresh?: boolean) => { console.log('MockUser: getIdToken called, forceRefresh:', forceRefresh); return 'mock-dev-id-token'; },
-  getIdTokenResult: async (forceRefresh?: boolean) => {
-    console.log('MockUser: getIdTokenResult called, forceRefresh:', forceRefresh);
-    return {
-      token: 'mock-dev-id-token',
-      authTime: new Date(Date.now() - 3600 * 1000).toISOString(),
-      expirationTime: new Date(Date.now() + 3600 * 1000).toISOString(),
-      issuedAtTime: new Date().toISOString(),
-      signInProvider: 'mockProvider',
-      signInSecondFactor: null,
-      claims: { mockUser: true, role: 'developer' },
-    } as IdTokenResult;
-  },
-  reload: async () => { console.log('MockUser: reload method called'); },
-  toJSON: () => ({ uid: 'dev-mock-user-uid-67890', email: 'dev-user@example.com', displayName: 'Development User' }),
-};
-
-
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
@@ -92,36 +56,23 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { toast } = useToast();
 
   useEffect(() => {
-    console.log(`FaceRosterContext useEffect: NODE_ENV is "${process.env.NODE_ENV}"`);
-    if (process.env.NODE_ENV === 'development') {
-      console.log("DEV MODE: Attempting to apply mock user.", mockDevUser);
-      setCurrentUser(mockDevUser);
-      setIsLoading(false);
-      console.log("DEV MODE: Mock user applied. isLoading set to false. currentUser:", mockDevUser);
-      return () => {
-        // No-op cleanup for dev mode, prevents auth listener cleanup if effect re-runs.
-        console.log("DEV MODE: useEffect cleanup (no-op).");
-      };
-    }
-
-    // Production: Use Firebase Auth
-    console.log("PRODUCTION MODE: Setting up Firebase Auth listener.");
+    console.log("Setting up Firebase Auth listener.");
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       console.log("Firebase Auth state changed. User:", user ? user.uid : null);
       setCurrentUser(user);
       setIsLoading(false);
       if (!user) {
-        // Clear editor state if user logs out or is not found (in production)
+        // Clear editor state if user logs out or is not found
         setImageDataUrl(null);
         setOriginalImageSize(null);
         setDrawnRegions([]);
         setRoster([]);
         setSelectedPersonId(null);
-        console.log("Production mode: User is null, editor state cleared.");
+        console.log("User is null, editor state cleared.");
       }
     });
     return () => {
-      console.log("PRODUCTION MODE: Cleaning up Firebase Auth listener.");
+      console.log("Cleaning up Firebase Auth listener.");
       unsubscribe();
     };
   }, []);
@@ -139,7 +90,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [toast]);
 
   const handleImageUpload = useCallback(async (file: File) => {
-    if (!currentUser && process.env.NODE_ENV !== 'development') {
+    if (!currentUser) {
       toast({ title: "Authentication Required", description: "Please log in to upload images.", variant: "destructive" });
       return;
     }
@@ -152,7 +103,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    clearAllData(false); // Clear previous editor state before loading new image
+    clearAllData(false); 
     setIsProcessing(true);
 
     const reader = new FileReader();
@@ -251,7 +202,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           originalRegion: region,
         });
       }
-      setRoster(prev => [...prev, ...newRosterItems]); // Append to existing roster if any
+      setRoster(prev => [...prev, ...newRosterItems]); 
       setDrawnRegions([]); 
       toast({ title: "Roster Updated", description: `${newRosterItems.length} person(s) added to the current roster.` });
     } catch (error) {
@@ -272,8 +223,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         person.id === id ? { ...person, ...details } : person
       )
     );
-    // No toast here, as it was removed in previous step. Re-add if desired for immediate feedback.
-    // toast({ title: "Details Updated", description: "Person's details have been updated for this session." });
   }, []);
 
   const getScaledRegionForDisplay = useCallback((
@@ -313,5 +262,3 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-
-    
