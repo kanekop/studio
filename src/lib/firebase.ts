@@ -6,20 +6,37 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // --- User's Firebase Project Configuration ---
+// IMPORTANT: Replace the placeholder values below with your ACTUAL Firebase project settings.
+// You can find these in your Firebase project console:
+// Project settings (gear icon) > General tab > Your apps > Web app > SDK setup and configuration (Config)
 const firebaseConfig = {
-  apiKey: "AIzaSyBQMTKCV77S6LI0Tkh0LjicsR-j9BU5eK8",
+  apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // <<< --- !!! REPLACE THIS WITH YOUR ACTUAL API KEY !!!
   authDomain: "faceroster.firebaseapp.com",
   projectId: "faceroster",
-  storageBucket: "faceroster.firebasestorage.app", // Note: your screenshot showed "faceroster.firebasestorage.app", usually it's "your-project-id.appspot.com". Ensure this is correct from your Firebase console.
-  messagingSenderId: "17864523080", // Note: your screenshot showed "17864523080", ensure this is correct.
-  appId: "1:17864523080:web:e03c71bdbe26ba4712077d" // Note: your screenshot showed "1:17864523080:web:e03c71bdbe26ba4712077d", ensure this is correct.
-  // measurementId: "YOUR_MEASUREMENT_ID" // Optional, not present in screenshot
+  storageBucket: "faceroster.firebasestorage.app", // Verify this too, usually "your-project-id.appspot.com"
+  messagingSenderId: "17864523080",
+  appId: "1:17864523080:web:e03c71bdbe26ba4712077d",
+  // measurementId: "YOUR_MEASUREMENT_ID" // Optional
 };
 
-// --- Configuration Validation ---
-// These are for the *template* placeholders, not for the user's actual values.
+// --- Configuration Validation Logic (Do NOT modify this section) ---
+const PLACEHOLDER_PATTERNS: string[] = [
+  "YOUR_API_KEY",
+  "YOUR_AUTH_DOMAIN",
+  "YOUR_PROJECT_ID",
+  "YOUR_STORAGE_BUCKET",
+  "YOUR_MESSAGING_SENDER_ID",
+  "YOUR_APP_ID",
+  "AIzaSy", // Common prefix for API keys, check if it's just a generic example
+  "firebase-rules", // A common placeholder often seen in tutorials
+  "YOURMEASUREMENTID", // Placeholder for measurementId
+  "your-project-id",
+  "your-app-id",
+  "your-api-key"
+];
+
 const EXACT_PLACEHOLDERS: Record<string, string> = {
-    apiKey: "YOUR_API_KEY",
+    apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // Updated to match the new placeholder
     authDomain: "YOUR_AUTH_DOMAIN",
     projectId: "YOUR_PROJECT_ID",
     storageBucket: "YOUR_STORAGE_BUCKET",
@@ -28,63 +45,67 @@ const EXACT_PLACEHOLDERS: Record<string, string> = {
 };
 
 const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
-const problematicConfigKeys: string[] = [];
+let problematicConfigKeys: string[] = [];
+let isConfigComplete = true;
 
 for (const key of criticalKeys) {
   const value = firebaseConfig[key as keyof typeof firebaseConfig];
-  // Check if the value is one of the generic placeholders I might have used previously.
-  // This check is less relevant now that we're using the user's direct values, but harmless.
-  if (!value || value === EXACT_PLACEHOLDERS[key] || (EXACT_PLACEHOLDERS[key] && typeof value === 'string' && value.includes(EXACT_PLACEHOLDERS[key]) && value.length < EXACT_PLACEHOLDERS[key].length + 5) ) {
+  let isProblematic = !value || value.trim() === ""; // Check for empty or just whitespace
+
+  if (!isProblematic) {
+    // Check against exact placeholders first
+    if (EXACT_PLACEHOLDERS[key] && value === EXACT_PLACEHOLDERS[key]) {
+      isProblematic = true;
+    }
+    // Then check against general placeholder patterns
+    if (!isProblematic) {
+      for (const pattern of PLACEHOLDER_PATTERNS) {
+        if (typeof value === 'string' && value.toUpperCase().includes(pattern.toUpperCase())) {
+          // More nuanced check for API key as it often starts with "AIzaSy"
+          if (key === "apiKey" && value.startsWith("AIzaSy") && value.length > 10) { // Actual keys are longer
+             // Potentially valid, don't mark as problematic based on "AIzaSy" alone
+          } else if (key !== "apiKey" || !value.startsWith("AIzaSy")) {
+            isProblematic = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (isProblematic) {
     problematicConfigKeys.push(key);
+    isConfigComplete = false;
   }
 }
-
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let storage: FirebaseStorage | null = null;
-
-const isConfigPotentiallyProblematic = problematicConfigKeys.length > 0;
 let firebaseInitializationError: Error | null = null;
 
-if (getApps().length === 0) {
-  // Check if any critical values are obviously empty before trying to init
-  const essentialValuesMissing = !firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId;
-
-  if (essentialValuesMissing) {
-    console.error(
-      `Firebase configuration in src/lib/firebase.ts is MISSING one or more critical values (apiKey, authDomain, projectId). ` +
-      "Please ensure these are correctly set with your actual Firebase project settings. " +
-      "Firebase services will not be available."
-    );
-  } else if (isConfigPotentiallyProblematic) {
-    // This warning is less likely to trigger now, as we are using user-provided values
-    // but kept for robustness if somehow placeholders were re-introduced.
-    console.warn(
-      `Firebase configuration in src/lib/firebase.ts might still contain PLACEHOLDER values for: [${problematicConfigKeys.join(', ')}]. ` +
-      "Please ensure these are replaced with your actual Firebase project settings. "
-    );
-  }
-
-  // Attempt initialization regardless of the placeholder check if essential values seem present,
-  // as the Firebase SDK itself will throw a more accurate error if the config is truly invalid.
-  if (!essentialValuesMissing) {
+if (!isConfigComplete) {
+  console.error(
+    `Firebase configuration in src/lib/firebase.ts is INCOMPLETE or contains PLACEHOLDERS for critical keys: [${problematicConfigKeys.join(', ')}]. ` +
+    "Please replace these with your actual Firebase project settings from the Firebase console. " +
+    "Firebase services will not be available until this is corrected."
+  );
+} else {
+  if (getApps().length === 0) {
     try {
-      console.log("Firebase configuration found. Initializing Firebase app...");
+      console.log("Firebase configuration appears complete. Initializing Firebase app...");
       app = initializeApp(firebaseConfig);
       console.log("Firebase app initialized successfully.");
     } catch (error) {
       firebaseInitializationError = error as Error;
       console.error("Firebase SDK initialization error:", firebaseInitializationError);
-      app = null; // Ensure app is null on error
+      app = null;
     }
+  } else {
+    app = getApp();
+    console.log("Firebase app already initialized.");
   }
-} else {
-  app = getApp();
-  console.log("Firebase app already initialized.");
-  // It's hard to re-validate an already initialized app's config directly from here.
-  // We assume if it's initialized, it used some config.
 }
 
 if (app) {
@@ -94,22 +115,26 @@ if (app) {
     storage = getStorage(app);
     console.log("Firebase services (Auth, Firestore, Storage) obtained.");
   } catch (error) {
-    console.error("Error getting Firebase services (Auth, Firestore, Storage) AFTER app initialization:", error);
-    // This might indicate the app object is valid but services fail for other reasons
-    // or if the initial config was subtly wrong and only caught at service level.
+    const typedError = error as any;
+    console.error("Error getting Firebase services (Auth, Firestore, Storage) AFTER app initialization:", typedError);
+    if (typedError.code === 'auth/configuration-not-found' || typedError.code === 'auth/api-key-not-valid') {
+        console.error(
+          `This error (${typedError.code}) strongly suggests the firebaseConfig object in src/lib/firebase.ts, ` +
+          "even if seemingly populated, is not valid for your project or specific services (like Auth) aren't correctly enabled or configured in the Firebase/Google Cloud console."
+        );
+    }
     auth = null;
     db = null;
     storage = null;
-    if ((error as any).code === 'auth/configuration-not-found') {
-        console.error("This 'auth/configuration-not-found' error suggests the firebaseConfig object, even if populated, is not valid for your project or services aren't enabled.");
-    }
   }
 } else {
-    if (firebaseInitializationError) {
-         console.error("Firebase app could not be initialized due to an SDK error (see above). Auth, Firestore, and Storage will be unavailable.");
-    } else {
-         console.warn("Firebase app object is null, possibly due to missing essential configuration or prior initialization failure. Auth, Firestore, and Storage will be unavailable.");
-    }
+  if (!isConfigComplete) {
+    // Error already logged above about incomplete config
+  } else if (firebaseInitializationError) {
+       console.error("Firebase app could not be initialized due to an SDK error (see above). Auth, Firestore, and Storage will be unavailable.");
+  } else {
+       console.warn("Firebase app object is null for an unknown reason (and config was thought to be complete). Auth, Firestore, and Storage will be unavailable.");
+  }
 }
 
 export { app, auth, db, storage };
