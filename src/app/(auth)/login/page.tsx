@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,29 +17,15 @@ export default function LoginPage() {
   const [password, setPassword] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
 
-  // useEffect(() => {
-  //   if (process.env.NODE_ENV === 'development') {
-  //     console.log("LoginPage: In development mode, redirecting to /");
-  //     router.replace('/'); 
-  //   }
-  // }, [router]);
-
-  // if (process.env.NODE_ENV === 'development') {
-  //   return (
-  //     <div className="flex items-center justify-center min-h-screen bg-background p-4">
-  //       <p className="text-lg text-foreground">Redirecting for development...</p>
-  //     </div>
-  //   );
-  // }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push('/'); // Redirect to main page
+      router.push('/'); 
     } catch (error: any) {
+      console.error("Login error details:", error);
       toast({ title: "Login Failed", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -52,9 +38,14 @@ export default function LoginPage() {
     try {
       await signInWithPopup(auth, provider);
       toast({ title: "Login Successful", description: "Welcome!" });
-      router.push('/'); // Redirect to main page
+      router.push('/'); 
     } catch (error: any) {
-      toast({ title: "Google Sign-In Failed", description: error.message, variant: "destructive" });
+      console.error("Google Sign-In error details:", error);
+      toast({ 
+        title: "Google Sign-In Failed", 
+        description: `Error: ${error.message}. Code: ${error.code}. Check console for more details.`, 
+        variant: "destructive" 
+      });
     } finally {
       setIsLoading(false);
     }
