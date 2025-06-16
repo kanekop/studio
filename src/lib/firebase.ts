@@ -11,13 +11,12 @@ import { getStorage, type FirebaseStorage } from "firebase/storage";
 // Firebase project settings.
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY", // Replace with your actual API key
-  authDomain: "YOUR_AUTH_DOMAIN", // Replace with your actual auth domain (e.g., project-id.firebaseapp.com)
-  projectId: "YOUR_PROJECT_ID", // Replace with your actual project ID
-  storageBucket: "YOUR_STORAGE_BUCKET", // Replace with your actual storage bucket (e.g., project-id.appspot.com)
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // Replace with your actual messaging sender ID
-  appId: "YOUR_APP_ID", // Replace with your actual app ID
-  // measurementId: "YOUR_MEASUREMENT_ID" // Optional: Replace if you use Analytics
+  apiKey: "AIzaSyBQMTKCV77S6LI0TkhOLjicsR-j9BU5eK8",
+  authDomain: "faceroster.firebaseapp.com",
+  projectId: "faceroster",
+  storageBucket: "faceroster.firebasestorage.app",
+  messagingSenderId: "17864523080",
+  appId: "1:17864523080:web:e03c71bdbe26ba4712077d"
 };
 
 // --- Configuration Validation ---
