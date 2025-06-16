@@ -16,6 +16,7 @@ const firebaseConfig = {
   projectId: "faceroster",
   // Verify this storageBucket. Usually it's "your-project-id.appspot.com"
   // If "faceroster.firebasestorage.app" is what's in your console, it's fine.
+  // Please double-check this value from your Firebase console (Storage section).
   storageBucket: "faceroster.firebasestorage.app",
   messagingSenderId: "17864523080",
   appId: "1:17864523080:web:e03c71bdbe26ba4712077d",
@@ -24,7 +25,7 @@ const firebaseConfig = {
 
 // --- Configuration Validation Logic (Do NOT modify this section) ---
 const PLACEHOLDER_PATTERNS: string[] = [
-  "YOUR_API_KEY",
+  "YOUR_API_KEY", // General placeholder
   "YOUR_AUTH_DOMAIN",
   "YOUR_PROJECT_ID",
   "YOUR_STORAGE_BUCKET",
@@ -33,18 +34,18 @@ const PLACEHOLDER_PATTERNS: string[] = [
   "AIzaSy", // Common prefix for API keys, but needs to be checked if it's *just* a generic example vs a real key.
   "firebase-rules",
   "YOURMEASUREMENTID",
-  "your-project-id",
+  "your-project-id", // Common in examples
   "your-app-id",
   "your-api-key"
 ];
 
 const EXACT_PLACEHOLDERS: Record<string, string> = {
-    apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // This is the placeholder the code specifically looks for.
-    authDomain: "YOUR_AUTH_DOMAIN", // General placeholder
-    projectId: "YOUR_PROJECT_ID", // General placeholder
-    storageBucket: "YOUR_STORAGE_BUCKET", // General placeholder
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // General placeholder
-    appId: "YOUR_APP_ID", // General placeholder
+    apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // This is the specific placeholder the code looks for in the apiKey field.
+    authDomain: "YOUR_AUTH_DOMAIN", 
+    projectId: "YOUR_PROJECT_ID", 
+    storageBucket: "YOUR_STORAGE_BUCKET", 
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID", 
 };
 
 const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
@@ -56,9 +57,11 @@ for (const key of criticalKeys) {
   let isProblematic = !value || value.trim() === "";
 
   if (!isProblematic) {
+    // Check against the exact placeholder for this specific key
     if (EXACT_PLACEHOLDERS[key] && value === EXACT_PLACEHOLDERS[key]) {
       isProblematic = true;
     }
+    // Check against general placeholder patterns
     if (!isProblematic) {
       for (const pattern of PLACEHOLDER_PATTERNS) {
         if (typeof value === 'string' && value.toUpperCase().includes(pattern.toUpperCase())) {
@@ -144,4 +147,4 @@ if (app) {
 }
 
 export { app, auth, db, storage };
-    
+
