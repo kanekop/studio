@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '@/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 import type { Person, Region, DisplayRegion } from '@/types';
 import { useToast } from "@/hooks/use-toast";
@@ -24,7 +25,8 @@ interface EditablePerson extends Omit<Person, 'id' | 'faceImageStoragePath' | 'o
 
 interface FaceRosterContextType {
   currentUser: FirebaseUser | null;
-  imageDataUrl: string | null;
+  imageDataUrl: string | null; // Can be local data URI or cloud download URL
+  originalImageStoragePath: string | null; // Full path in Firebase Storage for the original image
   originalImageSize: { width: number; height: number } | null;
   drawnRegions: Region[];
   roster: EditablePerson[];
@@ -47,6 +49,7 @@ const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undef
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [originalImageStoragePath, setOriginalImageStoragePath] = useState<string | null>(null);
   const [originalImageSize, setOriginalImageSize] = useState<{ width: number; height: number } | null>(null);
   const [drawnRegions, setDrawnRegions] = useState<Region[]>([]);
   const [roster, setRoster] = useState<EditablePerson[]>([]);
@@ -56,30 +59,22 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { toast } = useToast();
 
   useEffect(() => {
-    console.log("Setting up Firebase Auth listener.");
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      console.log("Firebase Auth state changed. User:", user ? user.uid : null);
       setCurrentUser(user);
       setIsLoading(false);
       if (!user) {
-        // Clear editor state if user logs out or is not found
-        setImageDataUrl(null);
-        setOriginalImageSize(null);
-        setDrawnRegions([]);
-        setRoster([]);
-        setSelectedPersonId(null);
-        console.log("User is null, editor state cleared.");
+        clearAllData(false); // Clear editor state if user logs out
       }
     });
-    return () => {
-      console.log("Cleaning up Firebase Auth listener.");
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
 
   const clearAllData = useCallback((showToast = true) => {
+    // Note: Deleting from cloud storage is not handled here.
+    // That would typically happen when a "Roster" entity is deleted from Firestore.
     setImageDataUrl(null);
+    setOriginalImageStoragePath(null);
     setOriginalImageSize(null);
     setDrawnRegions([]);
     setRoster([]);
@@ -108,19 +103,47 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
+      const localDataUrl = e.target?.result as string;
       const img = new Image();
-      img.onload = () => {
-        setImageDataUrl(dataUrl);
+      img.onload = async () => {
+        // Set local preview first
+        setImageDataUrl(localDataUrl);
         setOriginalImageSize({ width: img.width, height: img.height });
-        setIsProcessing(false);
-        toast({ title: "Image Ready", description: "You can now draw regions on the image." });
+        toast({ title: "Image Preview Ready", description: "Uploading to cloud storage..." });
+
+        // Then upload to Firebase Cloud Storage
+        try {
+          const storage = await import('@/lib/firebase').then(mod => mod.storage);
+          if (!storage || !currentUser.uid) {
+            throw new Error("Storage service or user ID is not available.");
+          }
+          
+          const imageName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`; // Sanitize filename
+          const imagePath = `users/${currentUser.uid}/original_images/${imageName}`;
+          const imageFileRef = storageRef(storage, imagePath);
+
+          const uploadTask = await uploadBytes(imageFileRef, file);
+          const downloadURL = await getDownloadURL(uploadTask.ref);
+
+          setOriginalImageStoragePath(uploadTask.ref.fullPath);
+          setImageDataUrl(downloadURL); // Update to cloud URL
+          
+          toast({ title: "Upload Successful", description: "Image saved to cloud and ready for use." });
+        } catch (uploadError: any) {
+          console.error("Cloud upload error:", uploadError);
+          toast({ title: "Cloud Upload Failed", description: uploadError.message || "Could not save image to cloud.", variant: "destructive" });
+          // Revert to local data URL if cloud upload fails, so user can still work if they choose
+          setImageDataUrl(localDataUrl);
+          setOriginalImageStoragePath(null); // Ensure no stale path
+        } finally {
+          setIsProcessing(false);
+        }
       };
       img.onerror = () => {
-        toast({ title: "Image Load Error", description: "Could not load the image.", variant: "destructive" });
+        toast({ title: "Image Load Error", description: "Could not load the image for preview.", variant: "destructive" });
         setIsProcessing(false);
       }
-      img.src = dataUrl;
+      img.src = localDataUrl;
     };
     reader.onerror = () => {
       toast({ title: "File Read Error", description: "Could not read the file.", variant: "destructive"});
@@ -166,14 +189,26 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toast({ title: "No Regions", description: "Please draw regions on the image first.", variant: "destructive" });
       return;
     }
+    if (!originalImageStoragePath && !imageDataUrl.startsWith('data:')) {
+        toast({ title: "Image Not Saved", description: "Original image must be saved to cloud first.", variant: "destructive" });
+        // This case might occur if initial cloud upload failed and user tries to proceed.
+        // Or if local state is somehow corrupted.
+        return;
+    }
+
     setIsProcessing(true);
     const newRosterItems: EditablePerson[] = [];
     const img = new Image();
+    // Important for canvas operations on images from different origins (like Firebase Storage)
+    img.crossOrigin = "anonymous"; 
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = () => reject(new Error("Failed to load base image for cropping."));
-      img.src = imageDataUrl;
+      img.onerror = (err) => {
+        console.error("Error loading image for cropping. URL:", imageDataUrl, "Error:", err);
+        reject(new Error("Failed to load base image for cropping. Check console for details."));
+      };
+      img.src = imageDataUrl; // This could be a data: URL or an https:// cloud URL
     });
 
     try {
@@ -181,21 +216,23 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.max(1, region.width); 
-        tempCanvas.height = Math.max(1, region.height);
+        // Ensure cropped dimensions are at least 1x1 to avoid errors with toDataURL
+        tempCanvas.width = Math.max(1, Math.floor(region.width)); 
+        tempCanvas.height = Math.max(1, Math.floor(region.height));
         const ctx = tempCanvas.getContext('2d');
         if (!ctx) continue;
 
         ctx.drawImage(
           img,
-          region.x, region.y, region.width, region.height,
+          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height),
           0, 0, tempCanvas.width, tempCanvas.height
         );
         
+        // For now, faceImageUrl is a data URL. Uploading cropped faces will be a separate step.
         const faceImageUrlData = tempCanvas.toDataURL('image/png'); 
         newRosterItems.push({
           id: `${Date.now()}-${i}`, 
-          faceImageUrl: faceImageUrlData,
+          faceImageUrl: faceImageUrlData, 
           name: `Person ${roster.length + newRosterItems.length + 1}`,
           aiName: `Person ${roster.length + newRosterItems.length + 1}`, 
           notes: '',
@@ -211,7 +248,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessing(false);
     }
-  }, [imageDataUrl, drawnRegions, roster.length, toast]);
+  }, [imageDataUrl, drawnRegions, roster.length, toast, originalImageStoragePath]);
 
   const selectPerson = useCallback((id: string | null) => {
     setSelectedPersonId(id);
@@ -245,9 +282,22 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   return (
     <FaceRosterContext.Provider value={{
-      currentUser, imageDataUrl, originalImageSize, drawnRegions, roster, selectedPersonId, isLoading, isProcessing,
-      handleImageUpload, addDrawnRegion, clearDrawnRegions, createRosterFromRegions,
-      selectPerson, updatePersonDetails, clearAllData, 
+      currentUser, 
+      imageDataUrl, 
+      originalImageStoragePath,
+      originalImageSize, 
+      drawnRegions, 
+      roster, 
+      selectedPersonId, 
+      isLoading, 
+      isProcessing,
+      handleImageUpload, 
+      addDrawnRegion, 
+      clearDrawnRegions, 
+      createRosterFromRegions,
+      selectPerson, 
+      updatePersonDetails, 
+      clearAllData, 
       getScaledRegionForDisplay
     }}>
       {children}
@@ -262,3 +312,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
