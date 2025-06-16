@@ -3,12 +3,9 @@
 import React from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Home, Save } from 'lucide-react';
 
 const AppHeader = () => {
-  // This component will re-render when context values change.
-  // We need to access context carefully if it might not be fully initialized.
-  // However, FaceRosterProvider sets isLoading, so we can rely on that.
   const context = useFaceRoster();
 
   return (
@@ -23,9 +20,14 @@ const AppHeader = () => {
           FaceRoster
         </h1>
         {context && context.imageDataUrl && (
-          <Button variant="destructive" onClick={() => context.clearAllData(true)} size="sm">
-            <Trash2 className="mr-2 h-4 w-4" /> Clear All Data
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={context.saveAndReturnToLanding} size="sm" className="bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground">
+              <Home className="mr-2 h-4 w-4" /> Save &amp; Exit to Home
+            </Button>
+            <Button variant="destructive" onClick={() => context.clearAllData(true)} size="sm">
+              <Trash2 className="mr-2 h-4 w-4" /> Clear All Data
+            </Button>
+          </div>
         )}
       </div>
     </header>

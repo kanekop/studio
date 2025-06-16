@@ -27,6 +27,7 @@ interface FaceRosterContextType {
   clearAllData: (showToast?: boolean) => void;
   loadFromLocalStorageAndInitialize: () => void;
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
+  saveAndReturnToLanding: () => void;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -95,21 +96,18 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsLoading(true);
     const storedState = loadStateFromLocalStorage();
 
-    if (storedState && storedState.imageDataUrl && storedState.roster && storedState.roster.length > 0) {
+    if (storedState && storedState.imageDataUrl && storedState.roster) { // Allow loading if roster is empty array
       setImageDataUrl(storedState.imageDataUrl);
       setOriginalImageSize(storedState.originalImageSize || null);
-      setRoster(storedState.roster);
-      // Optionally restore selectedPersonId if it was part of StoredAppState
+      setRoster(storedState.roster || []); // Ensure roster is always an array
       // setSelectedPersonId(storedState.selectedPersonId || null); 
-      if (hasAttemptedInitialLoad.current) { // Only show success toast if this is a manual load, not the initial auto-load
+      if (hasAttemptedInitialLoad.current) {
         toast({
           title: "Session Restored",
-          description: `Loaded your previous work with ${storedState.roster.length} person(s).`
+          description: `Loaded your previous work with ${storedState.roster?.length || 0} person(s).`
         });
       }
     } else {
-      // Not enough data to load the editor or no data at all.
-      // If this is a manual click (not the initial silent load attempt), inform the user.
       if (hasAttemptedInitialLoad.current) {
          toast({
             title: "Nothing to Load",
@@ -125,15 +123,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
   useEffect(() => {
-    // Attempt to load from local storage once on initial mount
     if (!hasAttemptedInitialLoad.current) {
       loadFromLocalStorageAndInitialize();
     }
   }, [loadFromLocalStorageAndInitialize]);
 
   useEffect(() => {
-    // Save state whenever relevant data changes, but only after the initial load attempt has finished.
-    if (!isLoading && hasAttemptedInitialLoad.current) { 
+    if (!isLoading && hasAttemptedInitialLoad.current && imageDataUrl) { 
       saveStateToLocalStorage({ imageDataUrl, originalImageSize, roster });
     }
   }, [imageDataUrl, originalImageSize, roster, isLoading]);
@@ -143,8 +139,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     imageDisplaySize: { width: number; height: number }
   ): Region => {
     if (!originalImageSize || !imageDisplaySize.width || !imageDisplaySize.height) {
-      // This case should ideally not happen if an image is loaded.
-      // Return a zero-sized region or throw an error, depending on desired strictness.
       console.warn("Cannot convert display region: originalImageSize or imageDisplaySize is invalid.");
       return { x: 0, y: 0, width: 0, height: 0 };
     }
@@ -207,7 +201,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           id: `${Date.now()}-${i}`,
           faceImageUrl,
           name: `Person ${roster.length + newRoster.length + 1}`,
-          aiName: `Person ${roster.length + newRoster.length + 1}`, // Placeholder
+          aiName: `Person ${roster.length + newRoster.length + 1}`, 
           notes: '',
           originalRegion: region,
         });
@@ -253,12 +247,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [originalImageSize]);
 
+  const saveAndReturnToLanding = useCallback(() => {
+    // The save useEffect (which now only saves if imageDataUrl is truthy)
+    // should have already saved the current state with the active imageDataUrl.
+    // Setting imageDataUrl to null here will navigate to the landing page.
+    // The save useEffect will run again but won't save because imageDataUrl will be null.
+    setImageDataUrl(null); 
+    setSelectedPersonId(null); // Reset selection when exiting
+    // Drawn regions are transient for the current editing session.
+    toast({ title: "Work Saved", description: "Returning to home. Your roster is saved." });
+  }, [toast]);
+
 
   return (
     <FaceRosterContext.Provider value={{
       imageDataUrl, originalImageSize, drawnRegions, roster, selectedPersonId, isLoading, isProcessing,
       handleImageUpload, addDrawnRegion, clearDrawnRegions, createRosterFromRegions,
-      selectPerson, updatePersonDetails, clearAllData, loadFromLocalStorageAndInitialize, getScaledRegionForDisplay
+      selectPerson, updatePersonDetails, clearAllData, loadFromLocalStorageAndInitialize, 
+      getScaledRegionForDisplay, saveAndReturnToLanding
     }}>
       {children}
     </FaceRosterContext.Provider>
@@ -272,3 +278,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
