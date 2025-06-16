@@ -1,107 +1,186 @@
+# FaceRoster アプリケーション仕様書 (改訂版)
 
-# FaceRoster アプリケーション: データベース統合への次のステップ
+## 1. 概要
 
-このドキュメントでは、FaceRosterアプリケーションを現在のローカルストレージベースからデータベース管理（Firebaseを想定）に移行するための主要なステップを概説します。
+FaceRosterは、ユーザーが画像（会議のスクリーンショットや集合写真など）をアップロードし、画像内の顔を識別して、クラウド上に保存される視覚的な名簿（ロスター）を作成・管理・共有できるウェブアプリケーションです。
 
-## 1. Firebase プロジェクトのセットアップと設定
+本アプリケーションの核心は、単なる名簿作成ツールに留まらず、**Cloud Firestoreをバックエンドに採用することで、友人、同僚、イベント参加者といったあらゆる人間関係を視覚的に記録・管理・検索できる「パーソナル関係者管理プラットフォーム」**を目指す点にあります。
 
-1.  **Firebase プロジェクト作成**:
-    *   Firebase Console ([https://console.firebase.google.com/](https://console.firebase.google.com/)) で新しいプロジェクトを作成するか、既存のプロジェクトを使用します。
+作成されたデータはFirebaseに安全に保存され、どのデバイスからでもアクセス可能です。将来的にはGenkitを利用したAIによる顔の自動認識や情報連携機能の実装を視野に入れています。
 
-2.  **Firebase SDK のアプリへの追加**:
-    *   ウェブアプリとしてFirebaseプロジェクトにアプリを登録します。
-    *   提供されるFirebase SDKの設定情報（`apiKey`, `authDomain`など）をプロジェクトに安全に組み込みます（例:環境変数を利用）。
-    *   Firebase SDK (`firebase`パッケージ) を `package.json` に追加します。
+## 2. 主要技術スタック
 
-3.  **有効化するFirebaseサービス**:
-    *   **Authentication**: ユーザー認証（メール/パスワード、Googleサインインなど）を有効にします。
-    *   **Firestore**: NoSQLデータベースをセットアップします。適切なリージョンを選択します。
-    *   **Storage**: 画像ファイル（元画像、顔の切り抜き画像）を保存するためのクラウドストレージをセットアップします。適切なリージョンを選択します。
+### 【フロントエンド】
+*   フロントエンドフレームワーク: Next.js (App Router)
+*   UIライブラリ: React
+*   UIコンポーネント: ShadCN UI
+*   スタイリング: Tailwind CSS
+*   状態管理: React Context API
 
-## 2. 認証機能の実装
+### 【バックエンド & インフラ】
+*   データベース: Cloud Firestore
+    *   人物情報、名簿情報、関係性などを管理するNoSQLドキュメントデータベース。柔軟なデータ構造と強力なクエリ機能が特徴です。
+*   認証: Firebase Authentication
+    *   メールアドレス/パスワード、Googleアカウントなどを用いた安全なユーザー認証機能を提供します。
+*   ストレージ: Cloud Storage for Firebase
+    *   ユーザーがアップロードする元画像や、切り抜かれた顔画像を保存します。
+*   サーバーレス機能: Cloud Functions for Firebase (将来的に検討)
+    *   画像アップロード後の後処理や、データベースの整合性を保つためのバックグラウンド処理を実行します。
 
-1.  **認証UIの作成**:
-    *   サインアップ、ログイン、ログアウトのためのUIコンポーネントを `src/components/auth/` などに作成します。
-    *   Next.jsのルートグループ（例: `(auth)/signup`, `(auth)/login`）を利用して認証関連ページを整理します。
+### 【AI機能 (将来利用予定)】
+*   AI連携フレームワーク: Genkit
 
-2.  **認証ロジックの実装**:
-    *   `FaceRosterContext` または新しい `AuthContext` を作成し、ユーザーの認証状態をグローバルに管理します。
-    *   Firebase Authentication SDKを使用して、サインアップ、ログイン、ログアウト処理を実装します。
-    *   認証状態に応じて、ページの表示/非表示やリダイレクトを制御します（例: ログインしていないユーザーはエディタにアクセスできないようにする）。
+## 3. 主な機能
 
-## 3. Firestore データベース設計と連携
+### 3.1. ユーザー認証
+*   Firebase Authenticationを利用した、新規登録およびログイン機能。
+*   認証によってユーザーごとのデータが保護され、自分だけの名簿を管理できます。
 
-1.  **データモデルの確認**:
-    *   `src/types/index.ts` で定義した `ImageSet` と `Person` の型定義に基づいて、Firestoreのコレクションとドキュメント構造を設計します。
-        *   例: `imageSets` コレクションを作成し、各ドキュメントが1つの `ImageSet` を表す。各ドキュメントには `userId` フィールドを含め、所有者ユーザーと関連付ける。
+### 3.2. 画像アップロード
+*   対応ファイル形式: PNG, JPG, WEBP
+*   最大ファイルサイズ: 10MB
+*   アップロードされた画像はCloud Storage for Firebaseに保存され、エディタ画面に表示されます。
 
-2.  **CRUD操作の実装**:
-    *   `ImageSet` の作成、読み取り、更新、削除 (CRUD) を行うためのサービス関数群を `src/services/imageSetService.ts` などに作成します。これらの関数はFirebase SDK (Firestore) を使用します。
-    *   これらのサービス関数を `FaceRosterContext` や関連コンポーネントから呼び出すように変更します。
+### 3.3. 顔領域の描画と名簿の作成
+*   画像上に矩形を描画し、顔の領域を指定できます。
+*   描画された領域から、個々の人物エントリを持つ名簿を生成します。
+*   各エントリには、Cloud Storageに保存された顔画像へのリンクと、編集可能な情報が紐付きます。
 
-## 4. Firebase Storage との連携
+### 3.4. 名簿アイテムの編集 (機能拡張)
+*   各人物について、以下の情報を編集できます。
+    *   名前
+    *   会社
+    *   趣味（複数登録可能）
+    *   誕生日
+    *   出会った日・きっかけ
+    *   共通の知人（他の人物エントリへの参照）
+    *   配偶者
+    *   メモ
+*   編集内容はリアルタイムでCloud Firestoreに保存され、他のデバイスにも即座に反映されます。
 
-1.  **画像アップロード処理の変更**:
-    *   ユーザーが画像をアップロードする際、画像をData URLとしてContextに保持する代わりに、Firebase Storageにアップロードします。
-    *   アップロード後、Storageから返される画像のダウンロードURL（またはパス）をFirestoreの `ImageSet.originalImageStoragePath` に保存します。
+### 3.5. クラウドデータ永続化と同期
+*   画像、名簿情報、人物情報はすべてFirebase上に保存されます。
+*   ユーザーがページを再読み込みしたり、別のデバイスでログインしたりしても、常に最新の作業状態が復元されます。
 
-2.  **顔画像の切り抜きと保存**:
-    *   名簿作成時に顔画像を切り抜く際、切り抜いた画像を同様にFirebase Storageにアップロードします。
-    *   各 `Person.faceImageStoragePath` に、Storage上の顔画像のパスを保存します。
+### 3.6. 高度な検索機能 (新規)
+*   Cloud Firestoreの強力なクエリ機能を活用し、登録された人物を様々な条件で検索できます。
+    *   例：「A社に所属している人」「趣味がゴルフの人」「2024年以降に出会った人」
 
-3.  **画像表示**:
-    *   `next/image` コンポーネントや通常の `<img>` タグで、Firestoreに保存されたStorageパスから画像を表示するようにします。
-    *   Firebase StorageのダウンロードURL取得には権限が必要な場合があるため、セキュリティルールを適切に設定します。
+### 3.7. データ管理
+*   名簿の削除: 特定の名簿を削除する機能。
+*   人物データの削除: 登録した人物情報を削除する機能。
+*   アカウントの削除: ユーザーアカウントに関連する全てのデータを削除する機能。
 
-## 5. `FaceRosterContext` のリファクタリング
+## 4. データモデル (Cloud Firestore)
 
-1.  **ローカルストレージロジックの削除**:
-    *   `loadStateFromLocalStorage`, `saveStateToLocalStorage`, `clearStateFromLocalStorage` に関連するロジックを削除します。
-    *   状態の永続化はFirebaseサービスを通じて行われるようになります。
+アプリケーションのデータは、以下のコレクション構造でCloud Firestoreに保存されます。
 
-2.  **Firebaseサービスとの連携**:
-    *   画像や名簿データの取得、保存、更新処理を、Firebase SDKを直接呼び出すか、ステップ3.2で作成したサービス関数を呼び出す形に変更します。
-    *   `imageDataUrl` は、Storageから取得した画像のダウンロードURLを一時的に保持するために使用されるかもしれませんが、主要な状態はFirestoreから取得した `ImageSet` になります。
-    *   `isProcessing` や `isLoading` の状態管理は、非同期のFirebase操作に対応するように調整します。
+### `users` コレクション
+*   ドキュメントID: Firebase AuthenticationのUID
+*   役割: ユーザー固有の情報を保存します。
+*   フィールド (例):
+    *   `email`: String (ユーザーのメールアドレス)
+    *   `displayName`: String (ユーザーの表示名)
+    *   `createdAt`: Timestamp (アカウント作成日時)
 
-## 6. UIの変更と機能拡張
+### `rosters` コレクション
+*   役割: １つのアップロード画像（またはイベント）に紐づく名簿情報を管理します。
+*   フィールド (例):
+    *   `rosterName`: String (例: "2025年6月 定例会議")
+    *   `ownerId`: String (usersコレクションのドキュメントIDへの参照)
+    *   `originalImageStoragePath`: String (Cloud Storage上の元画像へのパス)
+    *   `createdAt`: Timestamp (名簿作成日時)
+    *   `updatedAt`: Timestamp (名簿最終更新日時)
 
-1.  **ランディングページの変更**:
-    *   ログインしているユーザーが作成した `ImageSet` の一覧を表示するように変更します。
-    *   各 `ImageSet` をクリックすると、その `ImageSet` をエディタで開けるようにします。
-    *   新しい `ImageSet` を作成するためのボタン/UIを設けます（例: 画像アップロードをトリガー）。
+### `people` コレクション
+*   役割: このアプリの核となるコレクション。登録された全人物の情報を一元管理します。同じ人物が複数の名簿に登場する場合も、データはここに集約されます。
+*   フィールド (例):
+    *   `name`: String (人物の名前)
+    *   `company`: String (所属会社)
+    *   `memo`: String (自由記述メモ)
+    *   `hobbies`: Array<String> (趣味のリスト)
+    *   `knownAcquaintances`: Array<String> (他のpeopleドキュメントIDへの参照リスト)
+    *   `spouse`: String (他のpeopleドキュメントIDへの参照)
+    *   `birthday`: Timestamp (誕生日)
+    *   `firstMet`: Timestamp (初めて会った日)
+    *   `firstMetContext`: String (初めて会った状況やきっかけ)
+    *   `faceImageStoragePaths`: Array<String> (Cloud Storageに保存された顔写真パスのリスト)
+    *   `addedBy`: String (この人物情報を追加したユーザーのusersドキュメントIDへの参照)
+    *   `rosterIds`: Array<String> (この人物が含まれるrostersドキュメントIDのリスト、非正規化データ)
+    *   `createdAt`: Timestamp (人物データ作成日時)
+    *   `updatedAt`: Timestamp (人物データ最終更新日時)
 
-2.  **エディタUIの変更**:
-    *   特定の `ImageSet` を編集するモードになります。
-    *   「保存してホームに戻る」ボタンは、変更をFirestoreに保存し、ランディングページ（`ImageSet`一覧）に戻るようにします。
+## 5. ファイル構成と各ファイルの役割 (主要な変更点)
 
-3.  **`ImageSet` の命名**:
-    *   ユーザーが各 `ImageSet` に名前を付けられるようにUIとロジックを追加します（例: 「Q1チームミーティング」）。
+*   **`src/app/(auth)/` (新規)**:
+    *   ログインページ (`login/page.tsx`)
+    *   新規登録ページ (`signup/page.tsx`)
+    *   パスワードリセットページなど、認証関連のUIコンポーネントとロジックを配置。
+*   **`src/app/(main)/page.tsx`**:
+    *   Firebase Authenticationの状態を監視し、ログインしていればメインコンテンツ (例: `ImageSet` の一覧やエディタへの導線) を、未ログインであればランディングページやログインページへの誘導を表示。
+*   **`src/components/features/`**:
+    *   **`ImageUploadForm.tsx`**: 画像をCloud Storageにアップロードし、そのパスをFirestoreに保存するロジックに変更。
+    *   **`RosterItemDetail.tsx`**: 表示・編集するデータソースをローカル状態からFirestoreに変更。入力内容はFirestoreに直接保存/更新。
+    *   **`LandingPageUI.tsx` (または `ImageSetList.tsx`など)**: ログインユーザーが所有する`ImageSet`の一覧をFirestoreから取得して表示。新しい`ImageSet`を作成するUIを提供。
+*   **`src/contexts/FaceRosterContext.tsx` (または `FirebaseDataContext.tsx` などに改名も検討)**:
+    *   ローカルストレージへの依存を排除。
+    *   Firebase SDK (Auth, Firestore, Storage) との連携を全面的に担当。
+    *   ユーザー認証状態の管理。
+    *   Firestoreからのデータ読み込み (リアルタイムリスナー `onSnapshot` の活用)。
+    *   Firestoreへのデータ書き込み (CRUD操作)。
+    *   Cloud Storageへのファイルアップロード/ダウンロード処理。
+*   **`src/lib/`**:
+    *   **`firebase.ts` (新規)**: Firebaseプロジェクトの設定情報を記述し、Firebase Appインスタンスを初期化・エクスポート。
+    *   **`localStorage.ts`**: アプリケーションデータの保存・読み込み処理を削除。UIテーマ設定など、ユーザーセッションに依存しないごく軽微な設定情報のみに限定的に利用（または完全に廃止）。
+*   **`src/services/` (新規ディレクトリ検討)**:
+    *   Firestoreの各コレクションに対するCRUD操作をカプセル化したサービス関数群 (例: `imageSetService.ts`, `personService.ts`) を作成。Contextやコンポーネントはこれらのサービスを呼び出す。
+*   **`src/ai/`**:
+    *   将来的に、Cloud FunctionsからGenkitフローを呼び出すためのコードを配置。
+        *   例: 画像がCloud Storageにアップロードされたのをトリガーに、顔認識を実行し、`people`コレクションのデータと照合する、といった処理を記述。
 
-## 7. セキュリティルールの設定
+## 6. データフロー (主要な変更点)
 
-1.  **Firestoreセキュリティルール**:
-    *   `firestore.rules` ファイルを編集し、認証されたユーザーが自身のデータのみを読み書きできるようにルールを設定します。
-    *   例: `allow read, write: if request.auth != null && request.auth.uid == resource.data.userId;`
+1.  **ユーザー認証**:
+    *   アプリ起動時、Firebase SDKを通じて認証状態を確認。
+    *   未認証ならログイン/新規登録ページへリダイレクト。
+    *   認証後は、ユーザーIDに基づいてパーソナライズされたデータを表示。
+2.  **画像アップロードと名簿(Roster)作成**:
+    *   `ImageUploadForm`から画像が選択されると、Cloud Storageにアップロード。
+    *   アップロード成功後、`rosters`コレクションに新しいドキュメントを作成。このドキュメントには、画像のStorageパス、所有者ユーザーID、名簿名などが保存される。
+3.  **顔領域の登録と人物(People)情報作成/関連付け**:
+    *   `ImageCanvas`で顔領域を描画後、「名簿を作成」または「人物を追加」といった操作を行う。
+    *   各顔領域について:
+        *   顔画像を切り抜き、Cloud Storageにアップロード。
+        *   `people`コレクション内で既存の人物を検索 (将来的なAI機能)、または新規に人物ドキュメントを作成。
+        *   人物ドキュメントに顔画像のStorageパス、名前などの情報を保存/更新。
+        *   現在の`rosters`ドキュメントと、この`people`ドキュメントを関連付ける (例: `rosters`ドキュメント内に`peopleIds`配列を持つか、`people`ドキュメント内に`rosterIds`配列を持つなど、設計による)。
+4.  **データ表示と編集**:
+    *   各コンポーネントは、主にFirestoreのリアルタイムリスナー (`onSnapshot`) を用いて、データの変更を即座にUIに反映。
+    *   `RosterItemDetail`での編集は、対応する`people`ドキュメントおよび関連する`rosters`ドキュメントを直接更新。
+5.  **検索**:
+    *   ユーザーが検索UI（未実装）で条件を入力すると、Firestoreのクエリを発行し、`people`コレクションや`rosters`コレクションから合致するデータを取得して表示。
 
-2.  **Firebase Storageセキュリティルール**:
-    *   `storage.rules` ファイルを編集し、認証されたユーザーが自身の画像をアップロード・ダウンロードできるようにルールを設定します。
-    *   例: `allow read, write: if request.auth != null && request.auth.uid == request.resource.metadata.userId;` (アップロード時にカスタムメタデータとしてuserIdを付与する場合)
+## 7. 認証とセキュリティルール
 
-## 8. エラーハンドリングと状態管理の改善
+*   **Firebase Authentication**: ユーザーのサインアップ、ログイン、ログアウト、セッション管理を担当。
+*   **Cloud Firestore セキュリティルール**:
+    *   ユーザーは自身のデータ（自分が作成した`rosters`、自分が追加した`people`など）のみ読み書きできるように設定。
+    *   `users`コレクションのドキュメントは、対応するUIDのユーザーのみが読み書き可能。
+*   **Cloud Storage セキュリティルール**:
+    *   認証されたユーザーのみが画像をアップロード可能。
+    *   ユーザーは自身がアップロードした画像、または自身がアクセス権を持つ`rosters`に関連付けられた画像のみ読み取り可能。
 
-*   Firebase操作（データの読み書き、画像のアップロード/ダウンロード）に関するエラーハンドリングを強化します。
-*   非同期処理に伴うローディング状態の表示をより適切に行います。
+## 8. 次のステップ (概要)
 
-## 9. テスト
+1.  FirebaseプロジェクトのセットアップとアプリへのSDK導入。
+2.  Firebase Authenticationを用いた認証機能の実装。
+3.  Cloud Firestoreのデータベース設計に基づいたコレクション作成とセキュリティルール設定。
+4.  Cloud Storageのセットアップとセキュリティルール設定。
+5.  画像アップロード処理をCloud Storage連携に変更。
+6.  名簿作成・人物登録処理をFirestore連携に変更。
+7.  データ表示・編集処理をFirestore連携に変更。
+8.  `FaceRosterContext`をFirebase連携中心にリファクタリング。
+9.  ランディングページを、ログインユーザーの`ImageSet`（または`Roster`）一覧表示に変更。
+10. エラーハンドリングと状態管理の改善。
 
-*   各機能（認証、CRUD操作、画像処理）について、手動テストまたは自動テストを実施します。
-
-## 10. (オプション) Firebase Functions の利用検討
-
-*   複雑なサーバーサイドロジックが必要になった場合（例: 高度な画像処理、一括処理など）、Firebase Functions (Cloud Functions for Firebase) の利用を検討します。
-*   現時点では、クライアントサイドのFirebase SDKで多くのことが実現可能です。
-
----
-
-このステップに従って開発を進めることで、より堅牢でスケーラブルなFaceRosterアプリケーションを構築できるでしょう。各ステップはさらに詳細なタスクに分割できます。
+この仕様書は、アプリケーションの成長に合わせて継続的に更新されるものです。
