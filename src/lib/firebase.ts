@@ -8,12 +8,12 @@ import { getStorage } from "firebase/storage";
 // TODO: Add your own Firebase configuration snippet here
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "YOUR_API_KEY", // <-- ここにFirebaseプロジェクトのAPIキーを入力してください
+  authDomain: "YOUR_AUTH_DOMAIN", // <-- ここにFirebaseプロジェクトのAuthドメインを入力してください
+  projectId: "YOUR_PROJECT_ID", // <-- ここにFirebaseプロジェクトのプロジェクトIDを入力してください
+  storageBucket: "YOUR_STORAGE_BUCKET", // <-- ここにFirebaseプロジェクトのストレージバケットを入力してください
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID", // <-- ここにFirebaseプロジェクトのメッセージングセンダーIDを入力してください
+  appId: "YOUR_APP_ID", // <-- ここにFirebaseプロジェクトのApp IDを入力してください
   // measurementId: "YOUR_MEASUREMENT_ID" // Optional
 };
 
