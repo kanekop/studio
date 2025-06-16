@@ -6,47 +6,41 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // --- User's Firebase Project Configuration ---
-// IMPORTANT: You MUST replace the placeholder for "apiKey" below with your ACTUAL Firebase project API key.
-// You can find these in your Firebase project console:
-// Project settings (gear icon) > General tab > Your apps > Web app > SDK setup and configuration (Config)
 const firebaseConfig = {
-  // --- >>> !!! REPLACE THE NEXT LINE WITH YOUR ACTUAL API KEY FROM THE FIREBASE CONSOLE !!! <<< ---
-  apiKey: "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY",
+  apiKey: "AIzaSyBQMTKCV77S6LI0TkhOLjicsR-j9BU5eK8",
   authDomain: "faceroster.firebaseapp.com",
   projectId: "faceroster",
-  // Verify this storageBucket. Usually it's "<your-project-id>.appspot.com"
-  // If "faceroster.firebasestorage.app" is what's in your console, it's fine.
-  // Please double-check this value from your Firebase console (Storage section).
   storageBucket: "faceroster.firebasestorage.app",
   messagingSenderId: "17864523080",
-  appId: "1:17864523080:web:e03c71bdbe26ba4712077d",
+  appId: "1:17864523080:web:e03c71bdbe26ba4712077d"
   // measurementId: "YOUR_MEASUREMENT_ID" // Optional
 };
 
-// --- Configuration Validation Logic (Do NOT modify this section) ---
+// --- Configuration Validation Logic (Do NOT modify this section unless you are sure) ---
+// This list contains common placeholder patterns that might be accidentally left in the config.
 const GENERAL_PLACEHOLDER_PATTERNS: string[] = [
-  "YOUR_API_KEY", // General placeholder
+  "YOUR_API_KEY",
   "YOUR_AUTH_DOMAIN",
   "YOUR_PROJECT_ID",
   "YOUR_STORAGE_BUCKET",
   "YOUR_MESSAGING_SENDER_ID",
   "YOUR_APP_ID",
-  "AIzaSy", // Common prefix for API keys, but needs to be checked if it's *just* a generic example vs a real key.
   "firebase-rules",
   "YOURMEASUREMENTID",
-  "your-project-id", // Common in examples
+  "your-project-id",
   "your-app-id",
-  "your-api-key"
+  "your-api-key",
+  "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY" // Explicit placeholder used in previous steps
 ];
 
-// This checks for the specific placeholder used in the firebaseConfig above for apiKey
+// This checks for the exact placeholders that might have been used in instructions.
 const EXACT_PLACEHOLDERS: Record<string, string> = {
-    apiKey: "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY", // This is the specific placeholder for apiKey
-    authDomain: "YOUR_AUTH_DOMAIN", // Placeholder for other fields if they were also templated
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID",
+    apiKey: "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN_PLACEHOLDER",
+    projectId: "YOUR_PROJECT_ID_PLACEHOLDER",
+    storageBucket: "YOUR_STORAGE_BUCKET_PLACEHOLDER",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID_PLACEHOLDER",
+    appId: "YOUR_APP_ID_PLACEHOLDER",
 };
 
 const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
@@ -58,7 +52,7 @@ for (const key of criticalKeys) {
   let isProblematic = !value || value.trim() === "";
 
   if (!isProblematic) {
-    // Check against the exact placeholder for this specific key
+    // Check against the exact placeholder for this specific key if it exists in EXACT_PLACEHOLDERS
     if (EXACT_PLACEHOLDERS[key] && value === EXACT_PLACEHOLDERS[key]) {
       isProblematic = true;
     }
@@ -66,19 +60,23 @@ for (const key of criticalKeys) {
     if (!isProblematic) {
       for (const pattern of GENERAL_PLACEHOLDER_PATTERNS) {
         if (typeof value === 'string' && value.toUpperCase().includes(pattern.toUpperCase())) {
-          // API keys often start with "AIzaSy".
-          // A real API key starting with "AIzaSy" is much longer.
-          // If it's *just* "AIzaSy" or a very short string after, it's likely a placeholder.
-          // If it's the exact placeholder for apiKey, it's already caught.
-          if (key === "apiKey" && value.startsWith("AIzaSy") && value.length > 10 && value !== EXACT_PLACEHOLDERS.apiKey) {
-             // Potentially valid, don't mark as problematic based on "AIzaSy" alone if it's long enough
-             // and not the specific "YOU_MUST_REPLACE..." placeholder.
-          } else if (key === "apiKey" && value === "AIzaSy") { // Exact "AIzaSy" is a placeholder
+          // A real API key starting with "AIzaSy" is much longer than the prefix itself.
+          // If it's just "AIzaSy", it's a placeholder.
+          if (key === "apiKey" && value === "AIzaSy") {
             isProblematic = true;
             break;
-          } else if (key !== "apiKey" || !value.startsWith("AIzaSy")) { // Check other patterns for non-API keys or API keys not starting with "AIzaSy"
-            isProblematic = true;
-            break;
+          }
+          // For other keys, or if API key is not just "AIzaSy" but matches another general placeholder.
+          if (key !== "apiKey" || value !== "AIzaSy") {
+             // If the value IS the API key and starts with "AIzaSy" and is long enough,
+             // it's likely real, so don't flag it for just containing "AIzaSy".
+             // However, if it matches a MORE specific placeholder, it's still problematic.
+             if (key === "apiKey" && value.startsWith("AIzaSy") && value.length > 10 && pattern.toUpperCase() === "AIzaSy".toUpperCase()){
+                // This is likely a real key, continue loop to check other patterns.
+             } else {
+                isProblematic = true;
+                break;
+             }
           }
         }
       }
@@ -112,7 +110,7 @@ if (!isConfigComplete) {
     } catch (error) {
       firebaseInitializationError = error as Error;
       console.error("Firebase SDK initialization error:", firebaseInitializationError);
-      app = null; // Ensure app is null if initialization fails
+      app = null; 
     }
   } else {
     app = getApp();
@@ -127,7 +125,7 @@ if (app) {
     storage = getStorage(app);
     console.log("Firebase services (Auth, Firestore, Storage) obtained.");
   } catch (error) {
-    const typedError = error as any; // Cast to any to access error.code
+    const typedError = error as any; 
     console.error("Error getting Firebase services (Auth, Firestore, Storage) AFTER app initialization:", typedError);
     if (typedError.code && (typedError.code === 'auth/configuration-not-found' || typedError.code === 'auth/api-key-not-valid')) {
         console.error(
@@ -135,18 +133,22 @@ if (app) {
           "even if seemingly populated, is not valid for your project or specific services (like Auth) aren't correctly enabled or configured in the Firebase/Google Cloud console."
         );
     }
-    // Ensure services are null if there's an error obtaining them
     auth = null;
     db = null;
     storage = null;
   }
 } else {
   if (!isConfigComplete) {
-    // Error already logged about incomplete config
+    // Error already logged above about incomplete config
   } else if (firebaseInitializationError) {
        console.error("Firebase app could not be initialized due to an SDK error (see above). Auth, Firestore, and Storage will be unavailable.");
+  } else if (getApps().length === 0 && isConfigComplete) {
+       // This case might happen if initializeApp was called but 'app' is still null for an unknown reason
+       // and no specific initialization error was caught.
+       console.warn("Firebase app object is null after attempted initialization, despite configuration appearing complete and no caught SDK error. Auth, Firestore, and Storage will be unavailable.");
   } else {
-       console.warn("Firebase app object is null (and config was thought to be complete, or initialization failed silently). Auth, Firestore, and Storage will be unavailable.");
+      // Fallback for other scenarios where app is null.
+      console.warn("Firebase app object is null. Auth, Firestore, and Storage will be unavailable.");
   }
 }
 
