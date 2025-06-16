@@ -14,17 +14,16 @@ const firebaseConfig = {
   storageBucket: "faceroster.firebasestorage.app",
   messagingSenderId: "17864523080",
   appId: "1:17864523080:web:e03c71bdbe26ba4712077d"
-  // measurementId: "YOUR_MEASUREMENT_ID" // Optional
 };
 console.log("FirebaseConfig object in firebase.ts:", firebaseConfig);
 
 // --- Basic Configuration Validation Logic ---
-const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
 let isConfigSufficient = true;
-let missingKeys: string[] = [];
+const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
+const missingKeys: string[] = [];
 
 for (const key of criticalKeys) {
-  const value = firebaseConfig[key as keyof typeof firebaseConfig];
+  const value = firebaseConfig[key];
   if (!value || typeof value !== 'string' || value.trim() === "") {
     isConfigSufficient = false;
     missingKeys.push(key);
@@ -40,24 +39,27 @@ let firebaseInitializationError: Error | null = null;
 if (!isConfigSufficient) {
   console.error(
     `Firebase configuration in src/lib/firebase.ts is MISSING critical keys: [${missingKeys.join(', ')}]. ` +
-    "Please ensure these are correctly set in firebaseConfig. " +
     "Firebase services will not be available until this is corrected."
   );
 } else {
   console.log("Firebase configuration appears to have all critical keys. Attempting to initialize...");
-  if (getApps().length === 0) {
-    try {
-      console.log("No Firebase app initialized yet. Calling initializeApp...");
-      app = initializeApp(firebaseConfig);
-      console.log("Firebase app initialized successfully. App object:", app);
-    } catch (error) {
-      firebaseInitializationError = error as Error;
-      console.error("Firebase SDK initializeApp error:", firebaseInitializationError);
-      app = null; 
+  if (typeof window !== "undefined") { // Ensure this runs only on the client
+    if (getApps().length === 0) {
+      try {
+        console.log("No Firebase app initialized yet. Calling initializeApp...");
+        app = initializeApp(firebaseConfig);
+        console.log("Firebase app initialized successfully. App name:", app.name);
+      } catch (error) {
+        firebaseInitializationError = error as Error;
+        console.error("Firebase SDK initializeApp error:", firebaseInitializationError);
+        app = null; 
+      }
+    } else {
+      app = getApp();
+      console.log("Firebase app already initialized. Reusing existing app. App name:", app.name);
     }
   } else {
-    app = getApp();
-    console.log("Firebase app already initialized. Reusing existing app. App object:", app);
+    console.warn("Firebase initialization skipped on the server-side for now.");
   }
 }
 
@@ -65,29 +67,31 @@ if (app) {
   try {
     console.log("Attempting to get Firebase Auth instance...");
     auth = getAuth(app);
-    console.log("Firebase Auth instance obtained. Auth object:", auth);
-    if (!auth) {
-        console.warn("getAuth(app) returned null or undefined. Auth will be unavailable.");
+    if (auth) {
+        console.log("Firebase Auth instance obtained successfully.");
+    } else {
+        console.warn("getAuth(app) returned null or undefined. Auth will be unavailable. This often means an issue with the backend Auth configuration for your project/API key.");
     }
 
     console.log("Attempting to get Firebase Firestore instance...");
     db = getFirestore(app);
-    console.log("Firebase Firestore instance obtained. DB object:", db);
+    console.log("Firebase Firestore instance obtained.");
 
     console.log("Attempting to get Firebase Storage instance...");
     storage = getStorage(app);
-    console.log("Firebase Storage instance obtained. Storage object:", storage);
+    console.log("Firebase Storage instance obtained.");
 
   } catch (error) {
     const typedError = error as any; 
     console.error("Error getting Firebase services (Auth, Firestore, Storage) AFTER app initialization:", typedError);
-    if (typedError.code && (typedError.code.startsWith('auth/'))) {
+     if (typedError.code && (typedError.code.includes('auth/'))) {
         console.error(
-          `This Auth error (${typedError.code}) after app initialization strongly suggests that while the basic config might be present, ` +
-          "the Authentication service isn't correctly enabled or configured for this app in the Firebase/Google Cloud console, or there's a mismatch with the project settings."
+          `This Auth error (${typedError.code}) after app initialization strongly suggests that while the basic config might be present on the client, ` +
+          "the Authentication service isn't correctly enabled or configured for this app/API key in the Firebase/Google Cloud console, or there's a mismatch with the project settings."
         );
     }
-    auth = null; // Ensure auth is null if there was an error getting it
+    // Explicitly nullify if there was an error
+    auth = null;
     db = null;
     storage = null;
   }
@@ -95,9 +99,9 @@ if (app) {
   if (!isConfigSufficient) {
     // Error already logged above about missing config keys
   } else if (firebaseInitializationError) {
-     console.error("Firebase app could not be initialized due to an SDK error (see above). Auth, Firestore, and Storage will be unavailable.");
-  } else {
-     console.warn("Firebase app object is null for an unknown reason, despite configuration appearing sufficient and no caught SDK error. Auth, Firestore, and Storage will be unavailable.");
+     console.error("Firebase app could not be initialized due to an SDK error (see console above). Auth, Firestore, and Storage will be unavailable.");
+  } else if (typeof window !== "undefined") { // Only log this specific warning on client
+     console.warn("Firebase app object is null. Auth, Firestore, and Storage will be unavailable. This is unexpected if configuration seemed okay.");
   }
 }
 
