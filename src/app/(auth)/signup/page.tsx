@@ -1,6 +1,7 @@
 
 "use client";
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,17 +9,29 @@ import { Label } from '@/components/ui/label';
 // import { createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 // import { auth } from '@/lib/firebase';
 // import { useToast } from '@/hooks/use-toast';
-// import { useRouter } from 'next/navigation';
-
-// TODO: Implement full signup logic
 
 export default function SignupPage() {
-  // const router = useRouter();
+  const router = useRouter();
   // const { toast } = useToast();
   // const [email, setEmail] = React.useState('');
   // const [password, setPassword] = React.useState('');
   // const [confirmPassword, setConfirmPassword] = React.useState('');
   // const [isLoading, setIsLoading] = React.useState(false);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log("SignupPage: In development mode, redirecting to /");
+      router.replace('/'); 
+    }
+  }, [router]);
+
+  if (process.env.NODE_ENV === 'development') {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background p-4">
+        <p className="text-lg text-foreground">Redirecting for development...</p>
+      </div>
+    );
+  }
 
   // const handleSignup = async (e: React.FormEvent) => {
   //   e.preventDefault();
