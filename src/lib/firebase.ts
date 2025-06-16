@@ -6,15 +6,15 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // --- User's Firebase Project Configuration ---
-// IMPORTANT: Replace the placeholder values below with your ACTUAL Firebase project settings.
+// IMPORTANT: You MUST replace the placeholder for "apiKey" below with your ACTUAL Firebase project API key.
 // You can find these in your Firebase project console:
 // Project settings (gear icon) > General tab > Your apps > Web app > SDK setup and configuration (Config)
 const firebaseConfig = {
-  // --- >>> !!! REPLACE THIS WITH YOUR ACTUAL API KEY FROM THE FIREBASE CONSOLE !!! <<< ---
-  apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE",
+  // --- >>> !!! REPLACE THE NEXT LINE WITH YOUR ACTUAL API KEY FROM THE FIREBASE CONSOLE !!! <<< ---
+  apiKey: "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY",
   authDomain: "faceroster.firebaseapp.com",
   projectId: "faceroster",
-  // Verify this storageBucket. Usually it's "your-project-id.appspot.com"
+  // Verify this storageBucket. Usually it's "<your-project-id>.appspot.com"
   // If "faceroster.firebasestorage.app" is what's in your console, it's fine.
   // Please double-check this value from your Firebase console (Storage section).
   storageBucket: "faceroster.firebasestorage.app",
@@ -24,7 +24,7 @@ const firebaseConfig = {
 };
 
 // --- Configuration Validation Logic (Do NOT modify this section) ---
-const PLACEHOLDER_PATTERNS: string[] = [
+const GENERAL_PLACEHOLDER_PATTERNS: string[] = [
   "YOUR_API_KEY", // General placeholder
   "YOUR_AUTH_DOMAIN",
   "YOUR_PROJECT_ID",
@@ -39,13 +39,14 @@ const PLACEHOLDER_PATTERNS: string[] = [
   "your-api-key"
 ];
 
+// This checks for the specific placeholder used in the firebaseConfig above for apiKey
 const EXACT_PLACEHOLDERS: Record<string, string> = {
-    apiKey: "YOUR_API_KEY_FROM_FIREBASE_CONSOLE", // This is the specific placeholder the code looks for in the apiKey field.
-    authDomain: "YOUR_AUTH_DOMAIN", 
-    projectId: "YOUR_PROJECT_ID", 
-    storageBucket: "YOUR_STORAGE_BUCKET", 
+    apiKey: "YOU_MUST_REPLACE_THIS_WITH_YOUR_REAL_API_KEY", // This is the specific placeholder for apiKey
+    authDomain: "YOUR_AUTH_DOMAIN", // Placeholder for other fields if they were also templated
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
     messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID", 
+    appId: "YOUR_APP_ID",
 };
 
 const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
@@ -61,14 +62,17 @@ for (const key of criticalKeys) {
     if (EXACT_PLACEHOLDERS[key] && value === EXACT_PLACEHOLDERS[key]) {
       isProblematic = true;
     }
-    // Check against general placeholder patterns
+    // Check against general placeholder patterns only if not already caught by exact placeholder
     if (!isProblematic) {
-      for (const pattern of PLACEHOLDER_PATTERNS) {
+      for (const pattern of GENERAL_PLACEHOLDER_PATTERNS) {
         if (typeof value === 'string' && value.toUpperCase().includes(pattern.toUpperCase())) {
-          // API keys often start with "AIzaSy". If it's *just* "AIzaSy" or a very short string after, it's likely a placeholder.
+          // API keys often start with "AIzaSy".
           // A real API key starting with "AIzaSy" is much longer.
-          if (key === "apiKey" && value.startsWith("AIzaSy") && value.length > 10) {
-             // Potentially valid, don't mark as problematic based on "AIzaSy" alone if it's long enough.
+          // If it's *just* "AIzaSy" or a very short string after, it's likely a placeholder.
+          // If it's the exact placeholder for apiKey, it's already caught.
+          if (key === "apiKey" && value.startsWith("AIzaSy") && value.length > 10 && value !== EXACT_PLACEHOLDERS.apiKey) {
+             // Potentially valid, don't mark as problematic based on "AIzaSy" alone if it's long enough
+             // and not the specific "YOU_MUST_REPLACE..." placeholder.
           } else if (key === "apiKey" && value === "AIzaSy") { // Exact "AIzaSy" is a placeholder
             isProblematic = true;
             break;
@@ -147,4 +151,3 @@ if (app) {
 }
 
 export { app, auth, db, storage };
-
