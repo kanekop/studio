@@ -30,8 +30,8 @@ export interface Person {
   
   company?: string;
   hobbies?: string[];
-  birthday?: string | Date | null; // Consider storing as ISO string or Firebase Timestamp
-  firstMet?: string | Date | null; // Consider storing as ISO string or Firebase Timestamp
+  birthday?: string | Date | any; // Consider storing as ISO string or Firebase Timestamp
+  firstMet?: string | Date | any; // Consider storing as ISO string or Firebase Timestamp
   firstMetContext?: string;
   knownAcquaintances?: string[]; // Array of other 'people' document IDs
   spouse?: string | null; // Document ID of another 'people' entry
@@ -39,6 +39,19 @@ export interface Person {
   createdAt: any; // Firestore serverTimestamp for creation
   updatedAt: any; // Firestore serverTimestamp for last update
 }
+
+// Represents an individual person for display and editing within the context.
+// Derived from the Person type, but faceImageUrl will be a live GCS URL.
+export interface EditablePersonInContext {
+  id: string; // Firestore document ID
+  faceImageUrl: string; // Cloud Storage Download URL for the cropped face
+  name: string;
+  aiName?: string;
+  notes?: string;
+  originalRegion: Region; // From the 'people' doc
+  faceImageStoragePath: string; // From the 'people' doc, used to generate faceImageUrl
+}
+
 
 // Represents a single image upload and its associated roster.
 // This corresponds to a document in Firestore's 'rosters' collection.
@@ -52,18 +65,6 @@ export interface ImageSet {
   
   peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
   
-  createdAt: any; // Firestore serverTimestamp for creation
+  createdAt: any; // Firestore serverTimestamp for creation (can be Timestamp object or Date for display)
   updatedAt: any; // Firestore serverTimestamp for last update
 }
-
-/*
-// OLD type, for local storage. This will be replaced by structures
-// that manage multiple ImageSets, likely fetched from a database.
-export interface StoredAppState {
-  imageDataUrl?: string | null;
-  originalImageSize?: { width: number; height: number } | null;
-  roster?: Person[] | null; // This would be an array of the Firestore-like Person objects if used
-}
-*/
-
-    
