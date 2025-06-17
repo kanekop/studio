@@ -2,9 +2,9 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { auth, db, storage as appFirebaseStorage } from '@/lib/firebase'; // Direct import with alias for storage and db
+import { auth, db, storage as appFirebaseStorage } from '@/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, listAll, deleteObject } from 'firebase/storage'; 
+import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, FirestoreError } from 'firebase/firestore';
 
 import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext } from '@/types';
@@ -81,7 +81,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.log("FRC: Fetched rosters:", fetchedRosters.length);
     } catch (error) {
       console.error("FRC: Error fetching user rosters:", error);
-      toast({ title: "Error Loading Rosters", description: "Could not fetch your saved rosters.", variant: "destructive" });
+      if (error instanceof FirestoreError && error.code === 'failed-precondition' && error.message.includes('query requires an index')) {
+        toast({ title: "Database Index Required", description: "A database index is needed. The console provides a link to create it.", variant: "destructive", duration: 10000});
+      } else {
+        toast({ title: "Error Loading Rosters", description: "Could not fetch your saved rosters.", variant: "destructive" });
+      }
       setUserRosters([]);
     } finally {
       setIsLoadingUserRosters(false);
@@ -113,7 +117,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setRoster([]);
     setSelectedPersonId(null);
     setCurrentRosterDocId(null); 
-    // setUserRosters([]); // Do not clear userRosters here, only on logout.
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
     }
@@ -201,7 +204,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const rosterDocRef = await addDoc(collection(db, "rosters"), rosterData);
           setCurrentRosterDocId(rosterDocRef.id);
           console.log("FRC: Roster document created in Firestore. ID:", rosterDocRef.id);
-          await fetchUserRosters(); // Refresh roster list
+          await fetchUserRosters();
 
           toast({ title: "Upload Successful", description: "Image saved to cloud and new roster created." });
         } catch (uploadError: any) {
@@ -298,19 +301,27 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       img.onerror = (errEvent) => {
         let specificErrorMessage = 'Image load failed.';
         let errorDetails: any = {};
-         if (typeof errEvent === 'string') {
+
+        if (typeof errEvent === 'string') {
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
           specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
+           // Attempt to get more details, but be cautious
            for (const key in errEvent) {
-             if (Object.prototype.hasOwnProperty.call(errEvent, key)) {
-               try {
-                errorDetails[`event_${key}`] = (errEvent as any)[key];
-               } catch (e) {
-                 // ignore properties that can't be accessed
-               }
-             }
-           }
+            if (Object.prototype.hasOwnProperty.call(errEvent, key)) {
+              try {
+                const value = (errEvent as any)[key];
+                // Avoid functions or complex objects that might not serialize well
+                if (typeof value !== 'function' && (typeof value !== 'object' || value === null || Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype)) {
+                  errorDetails[key] = value;
+                } else if (typeof value === 'object' && value !== null) {
+                   errorDetails[key] = `[Object type: ${value.constructor ? value.constructor.name : 'unknown'}]`;
+                }
+              } catch (e) {
+                errorDetails[key] = '[Error accessing property]';
+              }
+            }
+          }
         } else if (typeof errEvent === 'object' && errEvent !== null) {
           try {
             specificErrorMessage = `Image load failed with object error. Check details.`;
@@ -388,7 +399,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         newEditablePeople.push({
           id: personDocRef.id, 
-          faceImageUrl: faceImageDownloadUrl, // Use download URL
+          faceImageUrl: faceImageDownloadUrl, 
           name: personData.name,
           aiName: personData.aiName, 
           notes: personData.notes,
@@ -407,7 +418,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         console.log("FRC: Roster document updated.");
       }
 
-      setRoster(prev => [...prev, ...newEditablepeople]); 
+      setRoster(prev => [...prev, ...newEditablePeople]); 
       setDrawnRegions([]); 
       toast({ title: "Roster Updated", description: `${newEditablePeople.length} person(s) added, cropped images uploaded, and data saved to cloud.` });
     } catch (error: any) {
@@ -487,7 +498,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     console.log("FRC: Loading roster for editing, ID:", rosterId);
     setIsProcessing(true);
-    clearAllData(false); // Clear current editor state first
+    clearAllData(false); 
 
     try {
       const rosterDocRef = doc(db, "rosters", rosterId);
@@ -496,7 +507,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!rosterSnap.exists()) {
         toast({ title: "Not Found", description: "The selected roster could not be found.", variant: "destructive" });
         setIsProcessing(false);
-        await fetchUserRosters(); // Refresh list in case it was deleted elsewhere
+        await fetchUserRosters(); 
         return;
       }
 
@@ -511,22 +522,18 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setOriginalImageStoragePath(rosterData.originalImageStoragePath);
       setOriginalImageSize(rosterData.originalImageDimensions);
 
-      // Get download URL for the original image
       const mainImageRef = storageRef(appFirebaseStorage, rosterData.originalImageStoragePath);
       const mainImageUrl = await getDownloadURL(mainImageRef);
       setImageDataUrl(mainImageUrl);
 
-      // Fetch people associated with this roster
       const peopleForRoster: EditablePersonInContext[] = [];
       if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
-        // Firestore 'in' query has a limit of 30 items per query.
-        // If more people, batch the requests. For now, assume <30.
-        const peopleQuery = query(collection(db, "people"), where("__name__", "in", rosterData.peopleIds));
+        const peopleQuery = query(collection(db, "people"), where("__name__", "in", rosterData.peopleIds.slice(0,30))); // Max 30 for 'in' query
         const peopleSnapshots = await getDocs(peopleQuery);
         
         for (const personDoc of peopleSnapshots.docs) {
           const personData = personDoc.data() as Person;
-          let faceImgUrl = "https://placehold.co/100x100.png"; // Default placeholder
+          let faceImgUrl = "https://placehold.co/100x100.png"; 
           if (personData.faceImageStoragePath) {
             try {
               const faceRef = storageRef(appFirebaseStorage, personData.faceImageStoragePath);
@@ -549,7 +556,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       setRoster(peopleForRoster);
       if (peopleForRoster.length > 0) {
-        setSelectedPersonId(peopleForRoster[0].id); // Select the first person by default
+        setSelectedPersonId(peopleForRoster[0].id); 
       } else {
         setSelectedPersonId(null);
       }
@@ -559,7 +566,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error: any) {
       console.error("FRC: Error loading roster for editing:", error);
       toast({ title: "Load Failed", description: `Could not load the roster: ${error.message}`, variant: "destructive" });
-      clearAllData(false); // Clear partially loaded state
+      clearAllData(false); 
     } finally {
       setIsProcessing(false);
     }
@@ -579,25 +586,22 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         if (!rosterSnap.exists()) {
             toast({ title: "Not Found", description: "Roster to delete was not found.", variant: "destructive" });
+            setIsProcessing(false);
             return;
         }
         const rosterData = rosterSnap.data() as ImageSet;
 
         if (rosterData.ownerId !== currentUser.uid) {
             toast({ title: "Access Denied", description: "You cannot delete this roster.", variant: "destructive" });
+            setIsProcessing(false);
             return;
         }
 
         const batch = writeBatch(db);
 
-        // 1. Delete associated people documents
         if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
-            // For simplicity, one by one. Batching people deletion could be complex if they are in multiple rosters.
-            // A more robust solution would involve checking if a person is only in this roster before deleting.
-            // For now, we assume people are unique to a roster or this is an acceptable simplification.
             for (const personId of rosterData.peopleIds) {
                 const personDocRef = doc(db, "people", personId);
-                // Optionally: Fetch person to get faceImageStoragePath for deletion from Storage
                 const personSnap = await getDoc(personDocRef);
                 if (personSnap.exists()) {
                     const personToDelete = personSnap.data() as Person;
@@ -606,8 +610,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                         try {
                             await deleteObject(faceImageFileRef);
                             console.log("FRC: Deleted face image from Storage:", personToDelete.faceImageStoragePath);
-                        } catch (e) {
-                             console.warn("FRC: Failed to delete face image from Storage (may not exist or permissions):", personToDelete.faceImageStoragePath, e);
+                        } catch (e:any) {
+                             console.warn("FRC: Failed to delete face image from Storage (may not exist or permissions):", personToDelete.faceImageStoragePath, e.code, e.message);
                         }
                     }
                 }
@@ -615,29 +619,26 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
         }
         
-        // 2. Delete original image from Storage
         if (rosterData.originalImageStoragePath) {
             const originalImageFileRef = storageRef(appFirebaseStorage, rosterData.originalImageStoragePath);
              try {
                 await deleteObject(originalImageFileRef);
                 console.log("FRC: Deleted original image from Storage:", rosterData.originalImageStoragePath);
-            } catch (e) {
-                console.warn("FRC: Failed to delete original image from Storage (may not exist or permissions):", rosterData.originalImageStoragePath, e);
+            } catch (e:any) {
+                console.warn("FRC: Failed to delete original image from Storage (may not exist or permissions):", rosterData.originalImageStoragePath, e.code, e.message);
             }
         }
         
-        // 3. Delete the roster document itself
         batch.delete(rosterDocRef);
 
         await batch.commit();
         console.log("FRC: Roster and associated data deleted successfully:", rosterId);
         toast({ title: "Roster Deleted", description: `${rosterData.rosterName} and its contents have been removed.` });
 
-        // If the deleted roster was currently loaded in editor, clear editor
         if (currentRosterDocId === rosterId) {
             clearAllData(false);
         }
-        await fetchUserRosters(); // Refresh the list of rosters
+        await fetchUserRosters(); 
 
     } catch (error: any) {
         console.error("FRC: Error deleting roster:", error);
@@ -686,3 +687,6 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
+
+    
