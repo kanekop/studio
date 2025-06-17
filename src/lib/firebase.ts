@@ -6,13 +6,15 @@ import { getFirestore, type Firestore } from "firebase/firestore";
 import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 // --- User's Firebase Project Configuration ---
+// IMPORTANT: REPLACE THIS ENTIRE OBJECT with the firebaseConfig
+// from your own Firebase project settings.
 const firebaseConfig = {
-  apiKey: "AIzaSyBQMTKCV77S6LI0TkhOLjicsR-j9BU5eK8",
-  authDomain: "faceroster.firebaseapp.com",
-  projectId: "faceroster",
-  storageBucket: "faceroster.firebasestorage.app",
-  messagingSenderId: "17864523080",
-  appId: "1:17864523080:web:e03c71bdbe26ba4712077d"
+  apiKey: "AIzaSyBQMTKCV77S6LI0TkhOLjicsR-j9BU5eK8", // REPLACE ME
+  authDomain: "faceroster.firebaseapp.com", // REPLACE ME
+  projectId: "faceroster", // REPLACE ME
+  storageBucket: "faceroster.firebasestorage.app", // REPLACE ME
+  messagingSenderId: "17864523080", // REPLACE ME
+  appId: "1:17864523080:web:e03c71bdbe26ba4712077d" // REPLACE ME
 };
 // console.log("FirebaseConfig object in firebase.ts:", firebaseConfig);
 
@@ -23,12 +25,12 @@ let storage: FirebaseStorage | null = null;
 let firebaseInitializationError: Error | null = null;
 
 let isConfigComplete = true;
-const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId"];
+const criticalKeys: (keyof typeof firebaseConfig)[] = ["apiKey", "authDomain", "projectId", "storageBucket"];
 const problematicConfigKeys: string[] = [];
 
 for (const key of criticalKeys) {
   const value = firebaseConfig[key];
-  if (!value || typeof value !== 'string' || value.trim() === "") {
+  if (!value || typeof value !== 'string' || value.trim() === "" || value.startsWith("YOUR_") || value.includes("REPLACE ME")) {
     isConfigComplete = false;
     problematicConfigKeys.push(key);
   }
@@ -36,8 +38,8 @@ for (const key of criticalKeys) {
 
 if (!isConfigComplete) {
   console.error(
-    `Firebase configuration in src/lib/firebase.ts is INCOMPLETE for critical keys: [${problematicConfigKeys.join(', ')}]. ` +
-    "Firebase services will not be available until this is corrected."
+    `Firebase configuration in src/lib/firebase.ts is INCOMPLETE or uses placeholder values for critical keys: [${problematicConfigKeys.join(', ')}]. ` +
+    "Please update it with the configuration from your Firebase project. Firebase services will not be available until this is corrected."
   );
 } else {
   // console.log("Firebase configuration appears complete with critical keys. Attempting to initialize...");
