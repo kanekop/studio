@@ -201,25 +201,35 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     
     setIsProcessing(true);
-    console.log("FRC: Started createRosterFromRegions, isProcessing: true. Image URL:", imageDataUrl);
+    console.log("FRC: Started createRosterFromRegions, isProcessing: true. Image URL for cropping:", imageDataUrl);
     const newRosterItems: EditablePerson[] = [];
+    
     const img = new Image();
-    img.crossOrigin = "anonymous"; 
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
-      img.onload = () => { console.log("FRC: Base image loaded for cropping."); resolve(); };
+      img.onload = () => { 
+        console.log("FRC: Base image loaded successfully for cropping. Dimensions:", img.width, "x", img.height); 
+        resolve(); 
+      };
       img.onerror = (errEvent) => {
-        let specificErrorMessage = 'Generic image load error. Check browser console for CORS details.';
-        let errorDetails = {};
+        let specificErrorMessage = 'Image load failed.';
+        let errorDetails: any = {};
+        
         if (typeof errEvent === 'string') {
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
           specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
-          errorDetails = { type: errEvent.type, target: errEvent.target ? 'has target' : 'no target' };
+          // Attempt to gather more details from the event if possible
+          errorDetails = { 
+            type: errEvent.type, 
+            targetCurrentSrc: (errEvent.target as HTMLImageElement)?.currentSrc,
+            bubbles: errEvent.bubbles,
+            cancelable: errEvent.cancelable,
+           };
         } else if (typeof errEvent === 'object' && errEvent !== null) {
           try {
             specificErrorMessage = `Image load failed with object error.`;
-            errorDetails = JSON.parse(JSON.stringify(errEvent)); // Attempt to serialize for logging
+            errorDetails = JSON.parse(JSON.stringify(errEvent));
           } catch (e) {
             specificErrorMessage = `Image load failed with non-serializable object error.`;
           }
@@ -227,6 +237,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Details:", errorDetails, "Raw event:", errEvent);
         reject(new Error(`Failed to load base image for cropping. URL: ${imageDataUrl}. Error: ${specificErrorMessage}`));
       };
+      
+      // CRITICAL: Set crossOrigin *before* setting src
+      img.crossOrigin = "anonymous"; 
       img.src = imageDataUrl; 
     });
 
@@ -235,21 +248,27 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         const tempCanvas = document.createElement('canvas');
+        // Ensure cropped dimensions are at least 1x1
         tempCanvas.width = Math.max(1, Math.floor(region.width)); 
         tempCanvas.height = Math.max(1, Math.floor(region.height));
         const ctx = tempCanvas.getContext('2d');
+
         if (!ctx) {
-          console.warn("FRC: Could not get 2D context for cropping canvas for region:", i);
-          continue;
+          console.warn("FRC: Could not get 2D context for cropping canvas for region index:", i);
+          continue; // Skip this region if context fails
         }
 
+        console.log(`FRC: Cropping region ${i}: Original Region (x:${region.x}, y:${region.y}, w:${region.width}, h:${region.height}), Canvas Size (w:${tempCanvas.width}, h:${tempCanvas.height})`);
+        
+        // Perform the drawing operation
         ctx.drawImage(
-          img,
-          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height),
-          0, 0, tempCanvas.width, tempCanvas.height
+          img, // The successfully loaded image object
+          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), // Source rectangle (from original image)
+          0, 0, tempCanvas.width, tempCanvas.height // Destination rectangle (on the temporary canvas)
         );
         
-        const faceImageUrlData = tempCanvas.toDataURL('image/png'); 
+        const faceImageUrlData = tempCanvas.toDataURL('image/png'); // Convert the cropped canvas content to a data URL
+        
         newRosterItems.push({
           id: `${Date.now()}-${i}`, 
           faceImageUrl: faceImageUrlData, 
@@ -263,8 +282,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setDrawnRegions([]); 
       toast({ title: "Roster Updated", description: `${newRosterItems.length} person(s) added to the current roster.` });
     } catch (error: any) {
-      console.error("FRC: Error creating roster from regions:", error.message, error.stack, error);
-      toast({ title: "Roster Creation Failed", description: (error as Error).message || "Could not process regions.", variant: "destructive" });
+      console.error("FRC: Error during roster creation process (after image load attempt):", error.message, error.stack, error);
+      toast({ title: "Roster Creation Failed", description: (error as Error).message || "Could not process regions due to an internal error.", variant: "destructive" });
     } finally {
       console.log("FRC: createRosterFromRegions 'finally' block. Setting isProcessing to false.");
       setIsProcessing(false);
@@ -288,6 +307,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     imageDisplaySize: { width: number; height: number }
   ): DisplayRegion => {
     if (!originalImageSize || !imageDisplaySize.width || !imageDisplaySize.height) {
+      // Return a zero-size region or handle as an error, instead of potentially returning last valid one
+      console.warn("FRC: getScaledRegionForDisplay - originalImageSize or imageDisplaySize invalid. Returning zero region.");
       return { x: 0, y: 0, width: 0, height: 0 };
     }
     const scaleX = imageDisplaySize.width / originalImageSize.width;
