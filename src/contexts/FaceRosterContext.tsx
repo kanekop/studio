@@ -219,17 +219,20 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
           specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
-          // Attempt to gather more details from the event if possible
           errorDetails = { 
             type: errEvent.type, 
-            targetCurrentSrc: (errEvent.target as HTMLImageElement)?.currentSrc,
             bubbles: errEvent.bubbles,
             cancelable: errEvent.cancelable,
+            composed: errEvent.composed,
+            isTrusted: errEvent.isTrusted,
+            timeStamp: errEvent.timeStamp,
+            targetCurrentSrc: (errEvent.target as HTMLImageElement)?.currentSrc,
+            targetReadyState: (errEvent.target as HTMLImageElement)?.readyState,
            };
         } else if (typeof errEvent === 'object' && errEvent !== null) {
           try {
             specificErrorMessage = `Image load failed with object error.`;
-            errorDetails = JSON.parse(JSON.stringify(errEvent));
+            errorDetails = JSON.parse(JSON.stringify(errEvent)); // Attempt to serialize for logging
           } catch (e) {
             specificErrorMessage = `Image load failed with non-serializable object error.`;
           }
@@ -240,7 +243,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       
       // CRITICAL: Set crossOrigin *before* setting src
       img.crossOrigin = "anonymous"; 
-      img.src = imageDataUrl; 
+      // Try to catch potential errors during src assignment, though highly unlikely for valid URLs
+      try {
+        img.src = imageDataUrl; 
+      } catch (srcError: any) {
+        console.error("FRC: Error directly setting img.src. URL:", imageDataUrl, "Error:", srcError);
+        reject(new Error(`Failed to set image source. URL: ${imageDataUrl}. Error: ${srcError.message || 'Unknown src assignment error'}`));
+        return; // Exit promise executor
+      }
     });
 
     try {
@@ -248,26 +258,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         const tempCanvas = document.createElement('canvas');
-        // Ensure cropped dimensions are at least 1x1
         tempCanvas.width = Math.max(1, Math.floor(region.width)); 
         tempCanvas.height = Math.max(1, Math.floor(region.height));
         const ctx = tempCanvas.getContext('2d');
 
         if (!ctx) {
           console.warn("FRC: Could not get 2D context for cropping canvas for region index:", i);
-          continue; // Skip this region if context fails
+          continue; 
         }
 
         console.log(`FRC: Cropping region ${i}: Original Region (x:${region.x}, y:${region.y}, w:${region.width}, h:${region.height}), Canvas Size (w:${tempCanvas.width}, h:${tempCanvas.height})`);
         
-        // Perform the drawing operation
         ctx.drawImage(
-          img, // The successfully loaded image object
-          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), // Source rectangle (from original image)
-          0, 0, tempCanvas.width, tempCanvas.height // Destination rectangle (on the temporary canvas)
+          img, 
+          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 
+          0, 0, tempCanvas.width, tempCanvas.height 
         );
         
-        const faceImageUrlData = tempCanvas.toDataURL('image/png'); // Convert the cropped canvas content to a data URL
+        const faceImageUrlData = tempCanvas.toDataURL('image/png'); 
         
         newRosterItems.push({
           id: `${Date.now()}-${i}`, 
@@ -307,7 +315,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     imageDisplaySize: { width: number; height: number }
   ): DisplayRegion => {
     if (!originalImageSize || !imageDisplaySize.width || !imageDisplaySize.height) {
-      // Return a zero-size region or handle as an error, instead of potentially returning last valid one
       console.warn("FRC: getScaledRegionForDisplay - originalImageSize or imageDisplaySize invalid. Returning zero region.");
       return { x: 0, y: 0, width: 0, height: 0 };
     }
@@ -355,3 +362,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   return context;
 };
 
+    
