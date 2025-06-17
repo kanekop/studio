@@ -205,6 +205,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const newRosterItems: EditablePerson[] = [];
     
     const img = new Image();
+    img.crossOrigin = "anonymous"; // Set crossOrigin *before* setting src. Crucial for canvas.
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => { 
@@ -219,6 +220,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
           specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
+          // Attempt to get more info from the event target if it's an HTMLImageElement
+          const target = errEvent.target as HTMLImageElement;
           errorDetails = { 
             type: errEvent.type, 
             bubbles: errEvent.bubbles,
@@ -226,13 +229,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             composed: errEvent.composed,
             isTrusted: errEvent.isTrusted,
             timeStamp: errEvent.timeStamp,
-            targetCurrentSrc: (errEvent.target as HTMLImageElement)?.currentSrc,
-            targetReadyState: (errEvent.target as HTMLImageElement)?.readyState,
+            targetCurrentSrc: target?.currentSrc,
+            targetNaturalWidth: target?.naturalWidth,
+            targetNaturalHeight: target?.naturalHeight,
+            targetComplete: target?.complete,
+            targetReadyState: target?.readyState,
+            targetCrossOrigin: target?.crossOrigin,
            };
         } else if (typeof errEvent === 'object' && errEvent !== null) {
           try {
             specificErrorMessage = `Image load failed with object error.`;
-            errorDetails = JSON.parse(JSON.stringify(errEvent)); // Attempt to serialize for logging
+            errorDetails = JSON.parse(JSON.stringify(errEvent)); 
           } catch (e) {
             specificErrorMessage = `Image load failed with non-serializable object error.`;
           }
@@ -241,15 +248,16 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         reject(new Error(`Failed to load base image for cropping. URL: ${imageDataUrl}. Error: ${specificErrorMessage}`));
       };
       
-      // CRITICAL: Set crossOrigin *before* setting src
-      img.crossOrigin = "anonymous"; 
-      // Try to catch potential errors during src assignment, though highly unlikely for valid URLs
       try {
         img.src = imageDataUrl; 
+        console.log("FRC: img.src set to:", imageDataUrl);
+        if (!imageDataUrl.startsWith('data:')) { // For non-data URLs, especially remote ones
+          console.log("FRC: Loading remote image. Ensure CORS is correctly configured on the server for:", new URL(imageDataUrl).origin);
+        }
       } catch (srcError: any) {
         console.error("FRC: Error directly setting img.src. URL:", imageDataUrl, "Error:", srcError);
         reject(new Error(`Failed to set image source. URL: ${imageDataUrl}. Error: ${srcError.message || 'Unknown src assignment error'}`));
-        return; // Exit promise executor
+        return; 
       }
     });
 
@@ -361,5 +369,7 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
+    
 
     
