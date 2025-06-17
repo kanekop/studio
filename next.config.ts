@@ -1,8 +1,6 @@
-
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -17,13 +15,17 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
-  experimental: {
-    allowedDevOrigins: [
-      "https://6000-firebase-studio-1750053728636.cluster-zkm2jrwbnbd4awuedc2alqxrpk.cloudworkstations.dev"
-    ],
-  }
+  allowedDevOrigins: [
+    "https://6000-firebase-studio-1750053728636.cluster-zkm2jrwbnbd4awuedc2alqxrpk.cloudworkstations.dev"
+  ],
 };
 
 export default nextConfig;
