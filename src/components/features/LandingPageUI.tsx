@@ -1,34 +1,16 @@
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { UploadCloud, History, LogIn } from 'lucide-react';
 import ImageUploadForm from './ImageUploadForm';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-// import { loadStateFromLocalStorage } from '@/lib/localStorage'; // Removed
-// import type { StoredAppState } from '@/types'; // Removed
+
 
 const LandingPageUI = () => {
-  const { currentUser, isLoading: isAuthLoading } = useFaceRoster(); // isLoading here is auth loading
-  // const { loadFromLocalStorageAndInitialize } = useFaceRoster(); // Removed
-  // const [savedRosterInfo, setSavedRosterInfo] = useState<{ count: number; canLoad: boolean } | null>(null); // Removed
-  // const [isCheckingStorage, setIsCheckingStorage] = useState(true); // Removed
-
-  // useEffect(() => { // Removed: Local storage check is no longer needed
-  //   setIsCheckingStorage(true);
-  //   const storedState: StoredAppState | null = loadStateFromLocalStorage();
-  //   if (storedState && storedState.roster && storedState.roster.length > 0) {
-  //     setSavedRosterInfo({
-  //       count: storedState.roster.length,
-  //       canLoad: !!storedState.imageDataUrl, 
-  //     });
-  //   } else {
-  //     setSavedRosterInfo({ count: 0, canLoad: false });
-  //   }
-  //   setIsCheckingStorage(false);
-  // }, []);
+  const { currentUser } = useFaceRoster(); 
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -62,6 +44,7 @@ const LandingPageUI = () => {
               height={338}
               className="object-cover w-full h-full"
               data-ai-hint="team meeting video"
+              priority 
             />
           </div>
         </div>
@@ -107,16 +90,11 @@ const LandingPageUI = () => {
                   <Button
                     variant="outline"
                     className="w-full group hover:border-primary"
-                    // onClick={loadFromLocalStorageAndInitialize} // Removed
-                    disabled={true} // TODO: Re-enable when Firestore loading is implemented
+                    disabled={true} 
                     aria-label="Display saved roster from previous session (To be implemented with Cloud)"
                   >
                     <History className="mr-2 h-5 w-5 text-primary group-hover:animate-spin" />
                     Load Saved Roster (Cloud - Coming Soon)
-                    {/* {isCheckingStorage ? 'Checking storage...' : // Removed
-                      (savedRosterInfo && savedRosterInfo.count > 0 ?
-                        `Display Saved Roster (${savedRosterInfo.count})${!savedRosterInfo.canLoad ? ' (Image missing)' : ''}` :
-                        'No Saved Roster')} */}
                   </Button>
                    <p className="text-xs text-center text-muted-foreground">
                     Loading rosters from your account will be available here.
