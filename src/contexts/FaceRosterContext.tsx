@@ -116,7 +116,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (!currentUser?.uid) {
             throw new Error("User is not authenticated for cloud upload.");
           }
-          if (!appFirebaseStorage) { // Check if storage instance is available
+          if (!appFirebaseStorage) { 
             throw new Error("Firebase Storage service instance is not available.");
           }
           
@@ -209,22 +209,22 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => { console.log("FRC: Base image loaded for cropping."); resolve(); };
       img.onerror = (errEvent) => {
-        // Enhanced error logging
         let specificErrorMessage = 'Generic image load error. Check browser console for CORS details.';
+        let errorDetails = {};
         if (typeof errEvent === 'string') {
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
-          specificErrorMessage = `Event type: ${errEvent.type}. Check browser console for more details.`;
+          specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
+          errorDetails = { type: errEvent.type, target: errEvent.target ? 'has target' : 'no target' };
         } else if (typeof errEvent === 'object' && errEvent !== null) {
-          // Attempt to stringify, but be cautious of circular structures if not a simple event.
           try {
-            specificErrorMessage = `Error object: ${JSON.stringify(errEvent)}`;
+            specificErrorMessage = `Image load failed with object error.`;
+            errorDetails = JSON.parse(JSON.stringify(errEvent)); // Attempt to serialize for logging
           } catch (e) {
-            specificErrorMessage = `Error object (could not stringify). Check raw log.`;
+            specificErrorMessage = `Image load failed with non-serializable object error.`;
           }
         }
-        console.error("FRC: Raw error event during image load for cropping:", errEvent);
-        console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Processed error:", specificErrorMessage);
+        console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Details:", errorDetails, "Raw event:", errEvent);
         reject(new Error(`Failed to load base image for cropping. URL: ${imageDataUrl}. Error: ${specificErrorMessage}`));
       };
       img.src = imageDataUrl; 
@@ -333,3 +333,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
