@@ -110,3 +110,4 @@ const LandingPageUI = () => {
 };
 
 export default LandingPageUI;
+

@@ -169,7 +169,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           };
           console.log("FRC: Preparing to create roster document in Firestore with data:", rosterData);
 
-          if (!db) { // Redundant check, but for safety
+          if (!db) { 
             console.error("FRC: Firestore 'db' instance is null before addDoc.");
             throw new Error("Firestore database service is not available.");
           }
@@ -186,6 +186,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             errorDescription = `Firestore error: ${uploadError.message} (Code: ${uploadError.code}). Check Firestore rules and API status.`;
           } else if (uploadError.message) {
             errorDescription = uploadError.message;
+          } else if (uploadError.code && uploadError.code.startsWith('storage/')) {
+            errorDescription = `Storage error: ${uploadError.message} (Code: ${uploadError.code}). Check Storage rules.`;
           }
           toast({ title: "Operation Failed", description: errorDescription, variant: "destructive" });
           setImageDataUrl(localDataUrl); 
@@ -276,13 +278,21 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           specificErrorMessage = errEvent;
         } else if (errEvent instanceof Event) {
           specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
-          const target = errEvent.target as HTMLImageElement;
+          const target = errEvent.target as HTMLImageElement | null;
           errorDetails = { 
             type: errEvent.type,
             targetCurrentSrc: target?.currentSrc,
-            targetReadyState: target?.readyState, // If available
-            targetNaturalWidth: target?.naturalWidth, // If available
+            targetSrc: target?.src, // Adding target.src for more info
+            targetReadyState: (target as any)?.readyState, // If available
+            targetNaturalWidth: target?.naturalWidth, 
            };
+           // Log all properties of the event if it's an Event object
+           for (const key in errEvent) {
+             if (Object.prototype.hasOwnProperty.call(errEvent, key)) {
+               errorDetails[`event_${key}`] = (errEvent as any)[key];
+             }
+           }
+
         } else if (typeof errEvent === 'object' && errEvent !== null) {
           try {
             specificErrorMessage = `Image load failed with object error. Check details.`;
@@ -415,7 +425,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
         const personRef = doc(db, "people", personDocId);
         await updateDoc(personRef, {
-            ...(details.name !== undefined && { name: details.name }), // Check for undefined before spreading
+            ...(details.name !== undefined && { name: details.name }), 
             ...(details.notes !== undefined && { notes: details.notes }),
             updatedAt: serverTimestamp()
         });
@@ -485,3 +495,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
