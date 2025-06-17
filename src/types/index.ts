@@ -29,9 +29,9 @@ export interface Person {
   rosterIds: string[]; // Array of 'rosters' document IDs this person belongs to
   
   company?: string;
-  hobbies?: string[];
-  birthday?: string | Date | any; // Consider storing as ISO string or Firebase Timestamp
-  firstMet?: string | Date | any; // Consider storing as ISO string or Firebase Timestamp
+  hobbies?: string; // Changed to string for simple textarea input for now
+  birthday?: string; // Store as ISO string or formatted string, DatePicker later
+  firstMet?: string; // Store as ISO string or formatted string, DatePicker later
   firstMetContext?: string;
   knownAcquaintances?: string[]; // Array of other 'people' document IDs
   spouse?: string | null; // Document ID of another 'people' entry
@@ -50,6 +50,11 @@ export interface EditablePersonInContext {
   notes?: string;
   originalRegion: Region; // From the 'people' doc
   faceImageStoragePath: string; // From the 'people' doc, used to generate faceImageUrl
+  company?: string;
+  hobbies?: string;
+  birthday?: string;
+  firstMet?: string;
+  firstMetContext?: string;
 }
 
 

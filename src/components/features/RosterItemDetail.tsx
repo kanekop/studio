@@ -8,13 +8,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserCircle, Edit3, CheckSquare } from 'lucide-react';
+import { UserCircle, Edit3, CheckSquare, Building, Smile, CalendarDays, Info } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { EditablePersonInContext } from '@/types';
 
 const RosterItemDetail = () => {
   const { roster, selectedPersonId, updatePersonDetails, isProcessing: isGlobalProcessing } = useFaceRoster();
+  
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
+  const [company, setCompany] = useState('');
+  const [hobbies, setHobbies] = useState('');
+  const [birthday, setBirthday] = useState('');
+  const [firstMet, setFirstMet] = useState('');
+  const [firstMetContext, setFirstMetContext] = useState('');
+
   const [isEditing, setIsEditing] = useState(false);
 
   const selectedPerson = useMemo(() => {
@@ -25,13 +33,27 @@ const RosterItemDetail = () => {
     if (selectedPerson) {
       setName(selectedPerson.name);
       setNotes(selectedPerson.notes || '');
-      setIsEditing(false); // Reset editing state when person changes
+      setCompany(selectedPerson.company || '');
+      setHobbies(selectedPerson.hobbies || '');
+      setBirthday(selectedPerson.birthday || '');
+      setFirstMet(selectedPerson.firstMet || '');
+      setFirstMetContext(selectedPerson.firstMetContext || '');
+      setIsEditing(false); 
     }
   }, [selectedPerson]);
 
   const handleSave = () => {
     if (selectedPerson) {
-      updatePersonDetails(selectedPerson.id, { name, notes });
+      const updatedDetails: Partial<EditablePersonInContext> = { 
+        name, 
+        notes,
+        company,
+        hobbies,
+        birthday,
+        firstMet,
+        firstMetContext,
+      };
+      updatePersonDetails(selectedPerson.id, updatedDetails);
       setIsEditing(false);
     }
   };
@@ -48,7 +70,6 @@ const RosterItemDetail = () => {
   }
 
   if (!selectedPerson) {
-     // Should not happen if selectedPersonId is valid, but good for safety
     return (
       <Card className="h-full flex flex-col shadow-lg">
         <CardHeader>
@@ -68,6 +89,16 @@ const RosterItemDetail = () => {
   }
   
   const canEdit = !isGlobalProcessing;
+
+  const renderDetailField = (label: string, value: string | undefined, Icon?: React.ElementType) => (
+    <div className="flex items-start">
+      {Icon && <Icon className="h-4 w-4 text-muted-foreground mr-2 mt-1 flex-shrink-0" />}
+      <span className="text-sm text-muted-foreground w-28 flex-shrink-0">{label}:</span>
+      <span className="text-sm text-foreground break-words whitespace-pre-wrap">
+        {value || <span className="italic">Not set</span>}
+      </span>
+    </div>
+  );
 
   return (
     <Card className="h-full flex flex-col shadow-lg overflow-hidden">
@@ -98,40 +129,73 @@ const RosterItemDetail = () => {
         <div>
           <Label htmlFor="personName" className="text-sm font-medium">Name</Label>
           {isEditing && canEdit ? (
-            <Input
-              id="personName"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1"
-              aria-label="Person's name"
-            />
+            <Input id="personName" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" aria-label="Person's name"/>
           ) : (
             <p className="mt-1 text-lg font-semibold p-2 rounded-md bg-muted/50">{selectedPerson.name}</p>
           )}
         </div>
+        
+        <div>
+          <Label htmlFor="personCompany" className="text-sm font-medium">Company</Label>
+          {isEditing && canEdit ? (
+            <Input id="personCompany" value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1" placeholder="Company name" />
+          ) : (
+             renderDetailField("Company", selectedPerson.company, Building)
+          )}
+        </div>
+        
+        <div>
+          <Label htmlFor="personHobbies" className="text-sm font-medium">Hobbies</Label>
+          {isEditing && canEdit ? (
+            <Textarea id="personHobbies" value={hobbies} onChange={(e) => setHobbies(e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Reading, Hiking, Coding" />
+          ) : (
+            renderDetailField("Hobbies", selectedPerson.hobbies, Smile)
+          )}
+        </div>
 
         <div>
-          <Label htmlFor="aiName" className="text-sm font-medium">AI Detected Name (Placeholder)</Label>
-          <p className="mt-1 text-sm p-2 rounded-md bg-muted/50 text-muted-foreground italic">{selectedPerson.aiName || 'N/A'}</p>
+          <Label htmlFor="personBirthday" className="text-sm font-medium">Birthday</Label>
+          {isEditing && canEdit ? (
+            <Input id="personBirthday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="mt-1" placeholder="e.g., January 1st or 1990-01-01" />
+          ) : (
+            renderDetailField("Birthday", selectedPerson.birthday, CalendarDays)
+          )}
+        </div>
+
+        <div>
+          <Label htmlFor="personFirstMet" className="text-sm font-medium">First Met</Label>
+          {isEditing && canEdit ? (
+            <Input id="personFirstMet" value={firstMet} onChange={(e) => setFirstMet(e.target.value)} className="mt-1" placeholder="e.g., At a conference or 2023-05-15" />
+          ) : (
+            renderDetailField("First Met", selectedPerson.firstMet, CalendarDays)
+          )}
+        </div>
+
+        <div>
+          <Label htmlFor="personFirstMetContext" className="text-sm font-medium">First Met Context</Label>
+          {isEditing && canEdit ? (
+            <Textarea id="personFirstMetContext" value={firstMetContext} onChange={(e) => setFirstMetContext(e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Introduced by John at the tech meetup" />
+          ) : (
+             renderDetailField("Context", selectedPerson.firstMetContext, Info)
+          )}
         </div>
 
         <div>
           <Label htmlFor="personNotes" className="text-sm font-medium">Notes</Label>
           {isEditing && canEdit ? (
-            <Textarea
-              id="personNotes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add any relevant notes..."
-              className="mt-1 min-h-[100px]"
-              aria-label="Notes about the person"
-            />
+            <Textarea id="personNotes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add any relevant notes..." className="mt-1 min-h-[100px]" aria-label="Notes about the person"/>
           ) : (
             <p className="mt-1 text-sm p-2 rounded-md bg-muted/50 min-h-[60px] whitespace-pre-wrap">
               {selectedPerson.notes || <span className="italic text-muted-foreground">No notes added.</span>}
             </p>
           )}
         </div>
+
+        {/* Placeholder for AI Detected Name, can be removed or used if AI integration happens */}
+        {/* <div>
+          <Label htmlFor="aiName" className="text-sm font-medium">AI Detected Name (Placeholder)</Label>
+          <p className="mt-1 text-sm p-2 rounded-md bg-muted/50 text-muted-foreground italic">{selectedPerson.aiName || 'N/A'}</p>
+        </div> */}
       </CardContent>
       {isEditing && canEdit && (
         <CardFooter className="bg-muted/30 border-t pt-4">
