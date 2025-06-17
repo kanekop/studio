@@ -14,33 +14,46 @@ export interface DisplayRegion extends Region {
 }
 
 // Represents an individual person identified in an ImageSet.
+// This primarily reflects the structure stored in Firestore's 'people' collection.
 export interface Person {
-  id: string; // Unique identifier for this person entry
-  // faceImageUrl: string; // OLD: Data URL of the cropped face
-  faceImageStoragePath: string; // NEW: Path/URL to the cropped face image in cloud storage
+  id: string; // Firestore document ID for this person entry
   name: string; // User-defined or AI-suggested name
   aiName?: string; // Name suggested by AI, if applicable
   notes?: string; // User-added notes for this person
+  
+  faceImageStoragePath: string; // Path to the cropped face image in Cloud Storage
   originalRegion: Region; // The region in the original image coordinates used for cropping this face
+  
+  // Fields based on PRD's 'people' collection
+  addedBy: string; // UID of the user who added this person
+  rosterIds: string[]; // Array of 'rosters' document IDs this person belongs to
+  
+  company?: string;
+  hobbies?: string[];
+  birthday?: string | Date | null; // Consider storing as ISO string or Firebase Timestamp
+  firstMet?: string | Date | null; // Consider storing as ISO string or Firebase Timestamp
+  firstMetContext?: string;
+  knownAcquaintances?: string[]; // Array of other 'people' document IDs
+  spouse?: string | null; // Document ID of another 'people' entry
+
+  createdAt: any; // Firestore serverTimestamp for creation
+  updatedAt: any; // Firestore serverTimestamp for last update
 }
 
 // Represents a single image upload and its associated roster.
-// This would typically correspond to a document in a NoSQL database (e.g., Firestore)
-// or a row in a SQL table.
+// This corresponds to a document in Firestore's 'rosters' collection.
 export interface ImageSet {
-  id: string; // Unique identifier for this ImageSet (e.g., document ID)
-  userId?: string; // Identifier of the user who owns this ImageSet (for multi-user systems)
-  name: string; // User-defined name for this set (e.g., "Q1 Team Meeting")
+  id: string; // Firestore document ID for this roster
+  ownerId: string; // UID of the user who owns this ImageSet
+  rosterName: string; // User-defined name for this set (e.g., "Q1 Team Meeting")
   
-  // Information about the original uploaded image
-  originalImageStoragePath: string; // Path/URL to the original uploaded image in cloud storage
-  originalImageFilename?: string; // Optional: Original filename of the uploaded image for display
-  originalImageSize: { width: number; height: number }; // Dimensions of the original image
+  originalImageStoragePath: string; // Path to the original uploaded image in Cloud Storage
+  originalImageDimensions: { width: number; height: number }; // Dimensions of the original image
   
-  roster: Person[]; // Array of Person objects belonging to this ImageSet
+  peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
   
-  createdAt: Date | string; // Timestamp of creation (consider string for DB compatibility e.g., ISO format)
-  updatedAt: Date | string; // Timestamp of last update (consider string for DB compatibility)
+  createdAt: any; // Firestore serverTimestamp for creation
+  updatedAt: any; // Firestore serverTimestamp for last update
 }
 
 /*
@@ -49,6 +62,8 @@ export interface ImageSet {
 export interface StoredAppState {
   imageDataUrl?: string | null;
   originalImageSize?: { width: number; height: number } | null;
-  roster?: Person[] | null;
+  roster?: Person[] | null; // This would be an array of the Firestore-like Person objects if used
 }
 */
+
+    
