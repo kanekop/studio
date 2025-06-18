@@ -258,5 +258,3 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
-
-```
