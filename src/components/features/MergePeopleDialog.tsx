@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine } from 'lucide-react';
+import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine, Users } from 'lucide-react';
 
 interface MergePeopleDialogProps {
   isOpen: boolean;
@@ -50,16 +50,17 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 
   useEffect(() => {
     if (isOpen && person1 && person2) {
-      // Initialize choices: if person1 has a value, prefer it. Otherwise, if person2 has it, prefer that.
-      // This helps pre-select if one person has more complete data.
       const initialChoices: Partial<FieldMergeChoices> = {};
       (Object.keys(fieldChoices) as FieldChoiceKey[]).forEach(key => {
-        if (person1[key as keyof Person]) {
+        const p1Value = person1[key as keyof Person];
+        const p2Value = person2[key as keyof Person];
+
+        if (p1Value && typeof p1Value === 'string' && p1Value.trim() !== '') {
           initialChoices[key] = 'person1';
-        } else if (person2[key as keyof Person]) {
+        } else if (p2Value && typeof p2Value === 'string' && p2Value.trim() !== '') {
           initialChoices[key] = 'person2';
         } else {
-          initialChoices[key] = 'person1'; // Default if both are empty
+          initialChoices[key] = 'person1'; 
         }
       });
       setFieldChoices(initialChoices as FieldMergeChoices);
@@ -75,17 +76,17 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
     if (person1 && person2) {
       onConfirmMerge(person1.id, person2.id, fieldChoices);
     }
-    onOpenChange(false); // Close dialog after submit
+    onOpenChange(false); 
   };
 
   if (!person1 || !person2) {
-    return null; // Or some loading/error state if dialog is open without people
+    return null; 
   }
 
   const renderFieldChoice = (
     fieldKey: FieldChoiceKey, 
     label: string, 
-    Icon?: React.ElementType, 
+    IconComponent?: React.ElementType, 
     isTextArea: boolean = false
   ) => {
     const val1 = person1[fieldKey as keyof Person] as string || "";
@@ -95,15 +96,15 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
     return (
       <div className="space-y-2 py-3">
         <Label className="text-base font-semibold flex items-center">
-          {Icon && <Icon className="mr-2 h-5 w-5 text-primary" />}
+          {IconComponent && <IconComponent className="mr-2 h-5 w-5 text-primary" />}
           {label}
         </Label>
         <RadioGroup
           value={fieldChoices[fieldKey]}
           onValueChange={(value: 'person1' | 'person2') => handleChoiceChange(fieldKey, value)}
-          className="grid grid-cols-2 gap-x-4"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2"
         >
-          <div className="space-y-1 p-2 border rounded-md hover:border-primary/50 transition-colors data-[state=checked]:border-primary data-[state=checked]:ring-1 data-[state=checked]:ring-primary">
+          <div className={`space-y-1 p-3 border rounded-md hover:border-primary/50 transition-colors ${fieldChoices[fieldKey] === 'person1' ? 'border-primary ring-1 ring-primary bg-primary/5' : 'bg-card'}`}>
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="person1" id={`${fieldKey}-p1`} />
               <Label htmlFor={`${fieldKey}-p1`} className="font-normal cursor-pointer flex-grow">
@@ -114,7 +115,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
               {val1 || 'Not set'}
             </p>
           </div>
-          <div className="space-y-1 p-2 border rounded-md hover:border-primary/50 transition-colors data-[state=checked]:border-primary data-[state=checked]:ring-1 data-[state=checked]:ring-primary">
+          <div className={`space-y-1 p-3 border rounded-md hover:border-primary/50 transition-colors ${fieldChoices[fieldKey] === 'person2' ? 'border-accent ring-1 ring-accent bg-accent/5' : 'bg-card'}`}>
             <div className="flex items-center space-x-2">
               <RadioGroupItem value="person2" id={`${fieldKey}-p2`} />
               <Label htmlFor={`${fieldKey}-p2`} className="font-normal cursor-pointer flex-grow">
@@ -126,9 +127,9 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
             </p>
           </div>
         </RadioGroup>
-        <div className="mt-1 p-2 bg-muted/50 rounded-md">
+        <div className="mt-2 p-3 bg-muted/30 rounded-md">
             <p className="text-xs text-muted-foreground">Selected for merge:</p>
-            <p className={`text-sm font-medium ${chosenValue ? 'text-primary' : 'text-muted-foreground italic'}`}>
+            <p className={`text-sm font-medium ${chosenValue ? (fieldChoices[fieldKey] === 'person1' ? 'text-primary' : 'text-accent') : 'text-muted-foreground italic'}`}>
                 {chosenValue || 'Will be empty'}
             </p>
         </div>
@@ -137,12 +138,19 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
   };
 
   const mergedNotesPreview = useMemo(() => {
-    let notes = fieldChoices.name === 'person1' ? (person1.notes || "") : (person2.notes || "");
-    const otherPerson = fieldChoices.name === 'person1' ? person2 : person1;
-    const otherPersonsNotes = fieldChoices.name === 'person1' ? person2.notes : person1.notes;
+    let notes = "";
+    const p1Notes = person1.notes || "";
+    const p2Notes = person2.notes || "";
+    
+    const chosenNameForNotes = fieldChoices.name === 'person1' ? person1.name : person2.name;
+    const otherNameForNotes = fieldChoices.name === 'person1' ? person2.name : person1.name;
+    const otherIdForNotes = fieldChoices.name === 'person1' ? person2.id : person1.id;
+    
+    notes = fieldChoices.name === 'person1' ? p1Notes : p2Notes;
+    const otherPersonsNotes = fieldChoices.name === 'person1' ? p2Notes : p1Notes;
 
     if (otherPersonsNotes) {
-        notes += `${notes ? "\n\n" : ""}Merged from ${otherPerson.name} (ID: ${otherPerson.id}):\n${otherPersonsNotes}`;
+        notes += `${notes ? "\n\n" : ""}Merged from ${otherNameForNotes} (ID: ${otherIdForNotes}):\n${otherPersonsNotes}`;
     }
     return notes || "No notes will be set.";
   }, [person1, person2, fieldChoices.name]);
@@ -150,7 +158,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl font-headline flex items-center">
             <Combine className="mr-2 h-7 w-7 text-primary"/>
@@ -163,35 +171,36 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow pr-6 -mr-6">
-          <div className="space-y-4 py-4">
+        <ScrollArea className="flex-grow pr-6 -mr-6 mt-4 mb-4">
+          <div className="space-y-4 divide-y divide-border">
             {renderFieldChoice('name', 'Name', User)}
-            <Separator />
             {renderFieldChoice('company', 'Company', Building)}
-            <Separator />
             {renderFieldChoice('hobbies', 'Hobbies', Smile, true)}
-            <Separator />
             {renderFieldChoice('birthday', 'Birthday', CalendarDays)}
-            <Separator />
             {renderFieldChoice('firstMet', 'First Met Date', CalendarDays)}
-            <Separator />
             {renderFieldChoice('firstMetContext', 'First Met Context', Info, true)}
-            <Separator />
+            
             <div className="space-y-2 py-3">
               <Label className="text-base font-semibold flex items-center">
                 <Info className="mr-2 h-5 w-5 text-primary" />
                 Notes
               </Label>
-              <div className="p-3 bg-muted/50 rounded-md">
-                 <p className="text-xs text-muted-foreground mb-1">Current notes for {person1.name}:</p>
-                 <p className="text-sm whitespace-pre-wrap mb-2 p-2 border rounded bg-background">{person1.notes || <span className="italic">Not set</span>}</p>
-                 <p className="text-xs text-muted-foreground mb-1">Current notes for {person2.name}:</p>
-                 <p className="text-sm whitespace-pre-wrap mb-2 p-2 border rounded bg-background">{person2.notes || <span className="italic">Not set</span>}</p>
-                <p className="text-xs text-muted-foreground mt-2 mb-1">Notes after merge (will be saved to {fieldChoices.name === 'person1' ? person1.name : person2.name}):</p>
-                <p className="text-sm font-medium whitespace-pre-wrap p-2 border border-primary/30 rounded bg-background/70">{mergedNotesPreview}</p>
+              <div className="p-3 bg-muted/30 rounded-md space-y-3">
+                 <div>
+                    <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-primary">{person1.name}</strong>:</p>
+                    <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person1.notes || <span className="italic">Not set</span>}</p>
+                 </div>
+                 <div>
+                    <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-accent">{person2.name}</strong>:</p>
+                    <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person2.notes || <span className="italic">Not set</span>}</p>
+                 </div>
+                <div>
+                    <p className="text-xs text-muted-foreground mt-2 mb-1">Notes after merge (will be saved to {fieldChoices.name === 'person1' ? person1.name : person2.name}):</p>
+                    <p className="text-sm font-medium whitespace-pre-wrap p-2 border border-primary/30 rounded bg-card/70 min-h-[60px]">{mergedNotesPreview}</p>
+                </div>
               </div>
             </div>
-             <Separator />
+            
             <div className="py-3 space-y-1">
                 <Label className="text-base font-semibold flex items-center">
                     <Users className="mr-2 h-5 w-5 text-primary" />
@@ -200,19 +209,17 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
                 <p className="text-sm text-muted-foreground">
                     All unique face appearances and roster associations from both individuals will be combined and saved to the merged profile.
                 </p>
-                <p className="text-xs text-muted-foreground">
-                    Total appearances for {person1.name}: {person1.faceAppearances?.length || 0}.
-                    Total appearances for {person2.name}: {person2.faceAppearances?.length || 0}.
-                </p>
-                 <p className="text-xs text-muted-foreground">
-                    {person1.name} is in {person1.rosterIds?.length || 0} roster(s).
-                    {person2.name} is in {person2.rosterIds?.length || 0} roster(s).
-                </p>
+                <ul className="text-xs text-muted-foreground list-disc list-inside pl-2">
+                    <li>Appearances for {person1.name}: {person1.faceAppearances?.length || 0}.</li>
+                    <li>Appearances for {person2.name}: {person2.faceAppearances?.length || 0}.</li>
+                    <li>{person1.name} is in {person1.rosterIds?.length || 0} roster(s).</li>
+                    <li>{person2.name} is in {person2.rosterIds?.length || 0} roster(s).</li>
+                </ul>
             </div>
           </div>
         </ScrollArea>
         
-        <DialogFooter className="pt-4 border-t">
+        <DialogFooter className="pt-4 border-t mt-auto">
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
