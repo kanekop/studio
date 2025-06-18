@@ -9,7 +9,7 @@ import { Users, Combine, XCircle, CheckCircle } from 'lucide-react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 
 const RosterPanel = () => {
-  const { selectedPeopleForMerge, performMergeOfSelectedPeople, clearMergeSelection, isProcessing } = useFaceRoster();
+  const { roster, selectedPeopleForMerge, performMergeOfSelectedPeople, clearMergeSelection, isProcessing } = useFaceRoster();
   const [isMergeModeActive, setIsMergeModeActive] = useState(false);
 
   const handleToggleMergeMode = () => {
@@ -42,6 +42,7 @@ const RosterPanel = () => {
               size="sm" 
               onClick={handleToggleMergeMode}
               className="transition-all"
+              disabled={isProcessing} // Disable toggle if global processing is happening
             >
               {isMergeModeActive ? <XCircle className="mr-2 h-4 w-4" /> : <Combine className="mr-2 h-4 w-4" />}
               {isMergeModeActive ? "Cancel Merge" : "Merge People"}
@@ -79,3 +80,4 @@ const RosterPanel = () => {
 };
 
 export default RosterPanel;
+
