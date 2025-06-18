@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
@@ -40,9 +40,10 @@ export default function ManagePeoplePage() {
     toggleGlobalPersonSelectionForMerge,
     clearGlobalMergeSelection,
     performGlobalPeopleMerge,
-    isProcessing, // This is the global isProcessing from context
+    isProcessing, 
     fetchMergeSuggestions,
     mergeSuggestions,
+    clearMergeSuggestions, // New context function
     isLoadingMergeSuggestions,
     peopleSortOption,
     setPeopleSortOption,
@@ -50,7 +51,7 @@ export default function ManagePeoplePage() {
     togglePersonSelectionForDeletion,
     clearPeopleSelectionForDeletion,
     deleteSelectedPeople,
-    updateGlobalPersonDetails, // New context function
+    updateGlobalPersonDetails, 
   } = useFaceRoster();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
@@ -60,7 +61,7 @@ export default function ManagePeoplePage() {
 
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [isEditPersonDialogOpen, setIsEditPersonDialogOpen] = useState(false);
-  const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false); // Local processing state for edit dialog
+  const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false); 
 
 
   useEffect(() => {
@@ -86,13 +87,13 @@ export default function ManagePeoplePage() {
   const handleToggleMergeMode = () => {
     setIsMergeSelectionMode(!isMergeSelectionMode);
     if (!isMergeSelectionMode) setIsDeleteSelectionMode(false); 
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false); // Close edit dialog if open
+    setPersonToEdit(null); setIsEditPersonDialogOpen(false); 
   };
 
   const handleToggleDeleteMode = () => {
     setIsDeleteSelectionMode(!isDeleteSelectionMode);
     if (!isDeleteSelectionMode) setIsMergeSelectionMode(false); 
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false); // Close edit dialog if open
+    setPersonToEdit(null); setIsEditPersonDialogOpen(false); 
   };
 
   const handleInitiateMergeFromSelection = () => {
@@ -280,8 +281,8 @@ export default function ManagePeoplePage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={generalActionDisabled}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleConfirmDelete} disabled={generalActionDisabled} className="bg-destructive hover:bg-destructive/90">
+                  <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleConfirmDelete} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90">
                     {isProcessing ? "Deleting..." : "Yes, Delete"}
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -293,13 +294,25 @@ export default function ManagePeoplePage() {
       
       {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
         <Card className="mb-6 shadow-md">
-          <CardHeader>
-            <CardTitle className="font-headline text-xl flex items-center">
-              <SearchCheck className="mr-2 h-5 w-5 text-primary" /> AI Merge Suggestions
-            </CardTitle>
-            <CardDescription>
-              The AI has found these potential duplicates. Review and merge if appropriate.
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="font-headline text-xl flex items-center">
+                <SearchCheck className="mr-2 h-5 w-5 text-primary" /> AI Merge Suggestions
+              </CardTitle>
+              <CardDescription>
+                The AI has found these potential duplicates. Review and merge if appropriate.
+              </CardDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearMergeSuggestions}
+              className="text-muted-foreground hover:text-destructive"
+              title="Dismiss suggestions"
+            >
+              <X className="h-5 w-5" />
+              <span className="sr-only">Dismiss suggestions</span>
+            </Button>
           </CardHeader>
           <CardContent>
             <ScrollArea className="max-h-[300px] pr-3">
@@ -379,7 +392,7 @@ export default function ManagePeoplePage() {
           isDeleteSelectionMode={isDeleteSelectionMode}
           selectedPeopleForDelete={selectedPeopleIdsForDeletion}
           onToggleDeleteSelection={togglePersonSelectionForDeletion}
-          onEditPerson={handleOpenEditPersonDialog} // Pass edit handler
+          onEditPerson={handleOpenEditPersonDialog} 
           generalActionDisabled={generalActionDisabled}
         />
       )}
@@ -406,3 +419,4 @@ export default function ManagePeoplePage() {
     </div>
   );
 }
+
