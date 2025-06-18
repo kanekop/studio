@@ -1,5 +1,4 @@
 
-
 // Describes a rectangular region within an image, using original image coordinates.
 export interface Region {
   x: number;
@@ -103,17 +102,6 @@ export interface FieldMergeChoices {
   // Notes are typically concatenated or handled with a specific strategy, not a simple choice.
 }
 
-// Input type for the AI merge suggestion flow (array of people with relevant details)
-// This is now inferred from the Zod schema in the flow file.
-// export interface SuggestMergeInputItem {
-//   id: string;
-//   name: string;
-//   company?: string;
-//   hobbies?: string;
-// }
-// export type SuggestMergeInput = SuggestMergeInputItem[];
-
-
 // Represents a pair of people suggested for merging by the AI.
 export interface SuggestedMergePair {
   person1Id: string;
@@ -122,4 +110,18 @@ export interface SuggestedMergePair {
   person2Name: string; // For display purposes
   reason: string; // Why this pair is suggested
   confidence?: 'high' | 'medium' | 'low'; // Optional confidence level
+}
+
+// Represents a connection between two people.
+// Corresponds to a document in Firestore's 'connections' collection.
+export interface Connection {
+  id: string; // Firestore document ID for this connection
+  fromPersonId: string; // Document ID of the person initiating or viewed as the source
+  toPersonId: string; // Document ID of the person connected to
+  types: string[]; // e.g., ["colleague", "friend", "manager"]
+  reasons: string[]; // e.g., ["Worked at Globex Corp", "University hiking club"]
+  strength?: number; // Optional, e.g., 1-5
+  notes?: string; // Optional, private notes about this connection
+  createdAt: any; // Firestore serverTimestamp
+  updatedAt: any; // Firestore serverTimestamp
 }

@@ -7,7 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRefStandard, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair } from '@/types';
+import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
 import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
@@ -40,6 +40,8 @@ interface FaceRosterContextType {
   isLoadingMergeSuggestions: boolean;
   peopleSortOption: PeopleSortOptionValue;
   selectedPeopleIdsForDeletion: string[];
+  personConnections: Connection[];
+  isLoadingPersonConnections: boolean;
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -61,12 +63,17 @@ interface FaceRosterContextType {
     fieldChoices: FieldMergeChoices
   ) => Promise<void>;
   fetchMergeSuggestions: () => Promise<void>;
-  clearMergeSuggestions: () => void; // New function
+  clearMergeSuggestions: () => void;
   setPeopleSortOption: (option: PeopleSortOptionValue) => void;
   togglePersonSelectionForDeletion: (personId: string) => void;
   clearPeopleSelectionForDeletion: () => void;
   deleteSelectedPeople: () => Promise<void>;
   updateGlobalPersonDetails: (personId: string, details: EditPersonFormData) => Promise<boolean>;
+  
+  addConnection: (fromPersonId: string, toPersonId: string, types: string[], reasons: string[], strength?: number, notes?: string) => Promise<string | null>;
+  fetchConnectionsForPerson: (personId: string) => Promise<void>;
+  updateConnection: (connectionId: string, updates: Partial<Omit<Connection, 'id' | 'fromPersonId' | 'toPersonId' | 'createdAt'>>) => Promise<boolean>;
+  deleteConnection: (connectionId: string) => Promise<boolean>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -108,7 +115,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [roster, setRoster] = useState<EditablePersonInContext[]>([]); 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true); 
-  const [isProcessing, setIsProcessingState] = useState<boolean>(false); // Renamed to avoid conflict
+  const [isProcessing, setIsProcessingState] = useState<boolean>(false);
   const [currentRosterDocId, setCurrentRosterDocId] = useState<string | null>(null);
   const [userRosters, setUserRosters] = useState<ImageSet[]>([]); 
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
@@ -119,6 +126,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isLoadingMergeSuggestions, setIsLoadingMergeSuggestions] = useState<boolean>(false);
   const [peopleSortOption, setPeopleSortOptionState] = useState<PeopleSortOptionValue>('createdAt_desc');
   const [selectedPeopleIdsForDeletion, setSelectedPeopleIdsForDeletion] = useState<string[]>([]);
+  const [personConnections, setPersonConnections] = useState<Connection[]>([]);
+  const [isLoadingPersonConnections, setIsLoadingPersonConnections] = useState<boolean>(false);
   
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -228,6 +237,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setGloballySelectedPeopleForMerge([]);
         setMergeSuggestions([]);
         setSelectedPeopleIdsForDeletion([]);
+        setPersonConnections([]);
         setPeopleSortOptionState('createdAt_desc');
       }
     });
@@ -388,13 +398,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toast({ title: "Error", description: "User not authenticated or Firebase services unavailable.", variant: "destructive" });
       return;
     }
-    
+  
     setIsProcessingState(true);
     const img = new Image();
+    // Only set crossOrigin for HTTP/HTTPS URLs, not for data URIs
     if (imageDataUrl.startsWith('http://') || imageDataUrl.startsWith('https://')) {
-        img.crossOrigin = "anonymous";
+      img.crossOrigin = "anonymous";
     }
-
+  
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
       img.onerror = (errEventOrMsg) => {
@@ -407,7 +418,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
       img.src = imageDataUrl;
     });
-
+  
     type UploadedFaceInfo = {
       personId: string;
       defaultName: string;
@@ -415,16 +426,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       faceImageUrlForUI: string;
       originalRegion: Region;
     };
-
+  
     try {
       await imageLoadPromise;
-      let personCounter = roster.length; 
-
+      let personCounter = roster.length;
+  
+      const faceUploadInfos: UploadedFaceInfo[] = [];
+  
+      // Step 1: Process images and collect data (upload to storage)
       const faceProcessingPromises = drawnRegions.map(async (region, index) => {
         personCounter++;
         const defaultName = `Person ${personCounter}`;
-        const newPersonId = doc(collection(db!, "people")).id;
-
+        const newPersonId = doc(collection(db!, "people")).id; // Generate ID upfront
+  
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.max(1, Math.floor(region.width));
         tempCanvas.height = Math.max(1, Math.floor(region.height));
@@ -435,11 +449,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
         ctx.drawImage(img, Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 0, 0, tempCanvas.width, tempCanvas.height);
         const faceImageDataURI = tempCanvas.toDataURL('image/png');
-
+  
         const croppedFaceFileName = `${currentRosterDocId}_${newPersonId}_${Date.now()}.png`;
         const faceImageStoragePath = `users/${currentUser!.uid}/cropped_faces/${croppedFaceFileName}`;
         const croppedFaceRef = storageRefStandard(appFirebaseStorage!, faceImageStoragePath);
-
+  
         try {
           const uploadResult = await uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL);
           const downloadURL = await getDownloadURL(uploadResult.ref);
@@ -449,30 +463,31 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             faceImageStoragePath,
             faceImageUrlForUI: downloadURL,
             originalRegion: region
-          };
+          } as UploadedFaceInfo;
         } catch (uploadError) {
           console.error(`FRC: Error uploading face image for new person (ID: ${newPersonId}) or getting URL:`, uploadError);
           toast({ title: "Image Upload Failed", description: `Could not save image for ${defaultName}.`, variant: "destructive" });
           return null;
         }
       });
-      
+  
       const successfullyUploadedFaces = (await Promise.all(faceProcessingPromises)).filter(res => res !== null) as UploadedFaceInfo[];
-
+  
       if (successfullyUploadedFaces.length === 0 && drawnRegions.length > 0) {
-          toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive" });
-          setIsProcessingState(false);
-          return;
+        toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive" });
+        setIsProcessingState(false);
+        return;
       }
       if (successfullyUploadedFaces.length === 0) {
-          setIsProcessingState(false);
-          return;
+        setIsProcessingState(false);
+        return;
       }
-
+  
+      // Step 2: Prepare and commit Firestore batch
       const batch = writeBatch(db!);
       const newPersonIdsForRosterUpdate: string[] = [];
       const newPeopleForUI: EditablePersonInContext[] = [];
-
+  
       successfullyUploadedFaces.forEach(faceInfo => {
         const newAppearance: FaceAppearance = {
           rosterId: currentRosterDocId!,
@@ -492,7 +507,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const personDocRef = doc(db!, "people", faceInfo.personId);
         batch.set(personDocRef, newPersonDataForDb);
         newPersonIdsForRosterUpdate.push(faceInfo.personId);
-
+  
         newPeopleForUI.push({
           id: faceInfo.personId,
           isNew: false,
@@ -508,18 +523,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           currentRosterAppearance: newAppearance,
         });
       });
-
+  
       const rosterRef = doc(db!, "rosters", currentRosterDocId!);
       batch.update(rosterRef, {
         peopleIds: arrayUnion(...newPersonIdsForRosterUpdate),
         updatedAt: serverTimestamp()
       });
-
+  
       await batch.commit();
-
+  
+      // Step 3: Update UI
       setRoster(prev => [...prev, ...newPeopleForUI]);
       setDrawnRegions([]);
-
+  
       if (newPeopleForUI.length > 0) {
         setSelectedPersonId(newPeopleForUI[0].id);
         await fetchUserRosters();
@@ -528,7 +544,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } else if (drawnRegions.length > 0) {
         toast({ title: "Save Incomplete", description: "Some new people could not be saved due to image processing or upload errors.", variant: "destructive" });
       }
-
+  
     } catch (error: any) {
       console.error("FRC: Error during batch roster creation:", error);
       toast({ title: "Roster Creation Failed", description: `Could not save new people: ${error.message}`, variant: "destructive" });
@@ -1149,6 +1165,133 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast, fetchAllUserPeople]);
 
+  // --- Connection Management Functions ---
+
+  const addConnection = useCallback(async (
+    fromPersonId: string, 
+    toPersonId: string, 
+    types: string[], 
+    reasons: string[], 
+    strength?: number, 
+    notes?: string
+  ): Promise<string | null> => {
+    if (!db || !currentUser) {
+      toast({ title: "Error", description: "User not authenticated or database service unavailable.", variant: "destructive" });
+      return null;
+    }
+    setIsProcessingState(true);
+    try {
+      const connectionData: Omit<Connection, 'id'> = {
+        fromPersonId,
+        toPersonId,
+        types,
+        reasons,
+        strength: strength ?? null, // Ensure optional fields are handled
+        notes: notes ?? "",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      const docRef = await addDoc(collection(db, "connections"), connectionData);
+      toast({ title: "Connection Added", description: "The new connection has been saved." });
+      // Optionally, refetch connections for the relevant person if UI is showing them
+      // await fetchConnectionsForPerson(fromPersonId); 
+      return docRef.id;
+    } catch (error: any) {
+      console.error("FRC: Error adding connection:", error);
+      toast({ title: "Connection Failed", description: `Could not save the connection: ${error.message}`, variant: "destructive" });
+      return null;
+    } finally {
+      setIsProcessingState(false);
+    }
+  }, [db, currentUser, toast]);
+
+  const fetchConnectionsForPerson = useCallback(async (personId: string) => {
+    if (!db || !currentUser) {
+      setPersonConnections([]);
+      return;
+    }
+    setIsLoadingPersonConnections(true);
+    try {
+      const fromQuery = query(collection(db, "connections"), where("fromPersonId", "==", personId));
+      const toQuery = query(collection(db, "connections"), where("toPersonId", "==", personId));
+
+      const [fromSnapshot, toSnapshot] = await Promise.all([
+        getDocs(fromQuery),
+        getDocs(toQuery)
+      ]);
+
+      const connectionsMap = new Map<string, Connection>();
+      fromSnapshot.forEach(doc => connectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection));
+      toSnapshot.forEach(doc => {
+        if (!connectionsMap.has(doc.id)) { // Avoid duplicates if a connection somehow matches both
+          connectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection);
+        }
+      });
+      
+      setPersonConnections(Array.from(connectionsMap.values()).sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0) ));
+
+    } catch (error: any) {
+      console.error(`FRC: Error fetching connections for person ${personId}:`, error);
+      toast({ title: "Error Loading Connections", description: `Could not fetch connections: ${error.message}`, variant: "destructive" });
+      setPersonConnections([]);
+    } finally {
+      setIsLoadingPersonConnections(false);
+    }
+  }, [db, currentUser, toast]);
+
+  const updateConnection = useCallback(async (
+    connectionId: string, 
+    updates: Partial<Omit<Connection, 'id' | 'fromPersonId' | 'toPersonId' | 'createdAt'>>
+  ): Promise<boolean> => {
+    if (!db || !currentUser) {
+      toast({ title: "Error", description: "User not authenticated or database service unavailable.", variant: "destructive" });
+      return false;
+    }
+    setIsProcessingState(true);
+    try {
+      const connectionRef = doc(db, "connections", connectionId);
+      // Ensure owner check if necessary for security rules, though connections are between two people
+      // For now, assuming if user can access the people involved, they can manage the connection.
+      
+      const updateData = { ...updates, updatedAt: serverTimestamp() };
+      await updateDoc(connectionRef, updateData);
+      toast({ title: "Connection Updated", description: "The connection details have been saved." });
+      // Re-fetch connections if they are currently displayed for someone involved in this connection
+      // This might need to check selectedPersonId or a specific person whose connections are being viewed.
+      // For simplicity, if selectedPersonId exists, refetch for them.
+      if(selectedPersonId) await fetchConnectionsForPerson(selectedPersonId);
+      return true;
+    } catch (error: any) {
+      console.error(`FRC: Error updating connection ${connectionId}:`, error);
+      toast({ title: "Update Failed", description: `Could not update connection: ${error.message}`, variant: "destructive" });
+      return false;
+    } finally {
+      setIsProcessingState(false);
+    }
+  }, [db, currentUser, toast, selectedPersonId, fetchConnectionsForPerson]);
+
+  const deleteConnection = useCallback(async (connectionId: string): Promise<boolean> => {
+    if (!db || !currentUser) {
+      toast({ title: "Error", description: "User not authenticated or database service unavailable.", variant: "destructive" });
+      return false;
+    }
+    setIsProcessingState(true);
+    try {
+      const connectionRef = doc(db, "connections", connectionId);
+      // Add ownership/permission check if needed, similar to updateConnection
+      await deleteDoc(connectionRef);
+      toast({ title: "Connection Deleted", description: "The connection has been removed." });
+      setPersonConnections(prev => prev.filter(conn => conn.id !== connectionId));
+      return true;
+    } catch (error: any) {
+      console.error(`FRC: Error deleting connection ${connectionId}:`, error);
+      toast({ title: "Delete Failed", description: `Could not delete connection: ${error.message}`, variant: "destructive" });
+      return false;
+    } finally {
+      setIsProcessingState(false);
+    }
+  }, [db, currentUser, toast]);
+
 
   return (
     <FaceRosterContext.Provider value={{
@@ -1160,7 +1303,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       roster, 
       selectedPersonId, 
       isLoading, 
-      isProcessing: isProcessing, // Ensure this matches the destructured name
+      isProcessing,
       currentRosterDocId,
       userRosters,
       isLoadingUserRosters,
@@ -1171,6 +1314,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       isLoadingMergeSuggestions,
       peopleSortOption,
       selectedPeopleIdsForDeletion,
+      personConnections,
+      isLoadingPersonConnections,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -1193,6 +1338,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       clearPeopleSelectionForDeletion,
       deleteSelectedPeople,
       updateGlobalPersonDetails,
+      addConnection,
+      fetchConnectionsForPerson,
+      updateConnection,
+      deleteConnection,
     }}>
       {children}
     </FaceRosterContext.Provider>
