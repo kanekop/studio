@@ -47,15 +47,15 @@ export interface Person {
 
 // Represents an individual person for display and editing within the context of a specific, currently loaded roster.
 export interface EditablePersonInContext {
-  id: string; // Firestore document ID of the person
-  faceImageUrl: string; // Cloud Storage Download URL for the cropped face specific to the current roster
+  id: string; // Firestore document ID of the person, OR a temporary ID for new, unsaved persons
+  faceImageUrl: string; // Cloud Storage Download URL or local data URI for the cropped face specific to the current roster/state
   name: string;
   aiName?: string;
   notes?: string;
   
   // These fields are specific to the person's appearance in the *current* roster
   currentRosterAppearance?: {
-    rosterId: string;
+    rosterId: string; // Will be the currentRosterDocId when saved
     faceImageStoragePath: string; 
     originalRegion: Region; 
   };
@@ -65,6 +65,11 @@ export interface EditablePersonInContext {
   birthday?: string;
   firstMet?: string;
   firstMetContext?: string;
+
+  // Fields for temporary, unsaved persons
+  isNew?: boolean; // Flag to indicate if this person is new and not yet saved to Firestore
+  tempFaceImageDataUri?: string; // To store the raw data URI before upload for new persons
+  tempOriginalRegion?: Region; // To store the original region for new persons before they are linked to a FaceAppearance
 }
 
 
