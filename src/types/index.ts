@@ -13,7 +13,14 @@ export interface DisplayRegion extends Region {
   // id?: string; // Potentially, if display regions need temporary unique IDs before becoming Persons
 }
 
-// Represents an individual person identified in an ImageSet.
+// Represents a single appearance of a person's face in a specific roster (original image).
+export interface FaceAppearance {
+  rosterId: string; // ID of the roster (original image) this face was cropped from
+  faceImageStoragePath: string; // Path to the cropped face image in Cloud Storage for this appearance
+  originalRegion: Region; // The region in the original image (identified by rosterId) coordinates
+}
+
+// Represents an individual person identified in the app.
 // This primarily reflects the structure stored in Firestore's 'people' collection.
 export interface Person {
   id: string; // Firestore document ID for this person entry
@@ -21,35 +28,38 @@ export interface Person {
   aiName?: string; // Name suggested by AI, if applicable
   notes?: string; // User-added notes for this person
   
-  faceImageStoragePath: string; // Path to the cropped face image in Cloud Storage
-  originalRegion: Region; // The region in the original image coordinates used for cropping this face
+  faceAppearances: FaceAppearance[]; // Array of all instances where this person's face was identified
   
-  // Fields based on PRD's 'people' collection
   addedBy: string; // UID of the user who added this person
-  rosterIds: string[]; // Array of 'rosters' document IDs this person belongs to
+  rosterIds: string[]; // Array of 'rosters' document IDs this person belongs to (for quick querying)
   
   company?: string;
-  hobbies?: string; // Changed to string for simple textarea input for now
-  birthday?: string; // Store as ISO string or formatted string, DatePicker later
-  firstMet?: string; // Store as ISO string or formatted string, DatePicker later
+  hobbies?: string; 
+  birthday?: string; 
+  firstMet?: string; 
   firstMetContext?: string;
-  knownAcquaintances?: string[]; // Array of other 'people' document IDs
-  spouse?: string | null; // Document ID of another 'people' entry
+  knownAcquaintances?: string[]; 
+  spouse?: string | null; 
 
   createdAt: any; // Firestore serverTimestamp for creation
   updatedAt: any; // Firestore serverTimestamp for last update
 }
 
-// Represents an individual person for display and editing within the context.
-// Derived from the Person type, but faceImageUrl will be a live GCS URL.
+// Represents an individual person for display and editing within the context of a specific, currently loaded roster.
 export interface EditablePersonInContext {
-  id: string; // Firestore document ID
-  faceImageUrl: string; // Cloud Storage Download URL for the cropped face
+  id: string; // Firestore document ID of the person
+  faceImageUrl: string; // Cloud Storage Download URL for the cropped face specific to the current roster
   name: string;
   aiName?: string;
   notes?: string;
-  originalRegion: Region; // From the 'people' doc
-  faceImageStoragePath: string; // From the 'people' doc, used to generate faceImageUrl
+  
+  // These fields are specific to the person's appearance in the *current* roster
+  currentRosterAppearance?: {
+    rosterId: string;
+    faceImageStoragePath: string; 
+    originalRegion: Region; 
+  };
+
   company?: string;
   hobbies?: string;
   birthday?: string;
@@ -73,3 +83,4 @@ export interface ImageSet {
   createdAt: any; // Firestore serverTimestamp for creation (can be Timestamp object or Date for display)
   updatedAt: any; // Firestore serverTimestamp for last update
 }
+

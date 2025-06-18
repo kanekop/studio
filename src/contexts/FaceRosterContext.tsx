@@ -5,9 +5,9 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { auth, db, storage as appFirebaseStorage } from '@/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
-import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, FirestoreError } from 'firebase/firestore';
+import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError } from 'firebase/firestore';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext } from '@/types';
+import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const MAX_FILE_SIZE_MB = 10;
@@ -50,12 +50,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [originalImageStoragePath, setOriginalImageStoragePath] = useState<string | null>(null);
   const [originalImageSize, setOriginalImageSize] = useState<{ width: number; height: number } | null>(null);
   const [drawnRegions, setDrawnRegions] = useState<Region[]>([]);
-  const [roster, setRoster] = useState<EditablePersonInContext[]>([]);
+  const [roster, setRoster] = useState<EditablePersonInContext[]>([]); // This is the UI roster for the current active image
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true); 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [currentRosterDocId, setCurrentRosterDocId] = useState<string | null>(null);
-  const [userRosters, setUserRosters] = useState<ImageSet[]>([]);
+  const [userRosters, setUserRosters] = useState<ImageSet[]>([]); // List of all roster documents for the user
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
   const { toast } = useToast();
 
@@ -80,9 +80,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error) {
       console.error("FRC: Error fetching user rosters:", error);
       if (error instanceof FirestoreError && error.code === 'failed-precondition' && error.message.includes('query requires an index')) {
-        toast({ title: "Database Index Required", description: `A database index is needed for fetching rosters. Firestore error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000});
+        toast({ title: "Database Index Required", description: `A database index is needed. Error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000});
       } else if (error instanceof FirestoreError) {
-         toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Firestore error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
+         toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
       } else {
         toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Error: ${(error as Error).message}`, variant: "destructive" });
       }
@@ -172,19 +172,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setOriginalImageStoragePath(cloudStoragePath);
           setImageDataUrl(downloadURL); 
           
-          const rosterData = {
+          const rosterDocData = {
             ownerId: currentUser.uid,
             rosterName: `Roster - ${file.name.split('.')[0]} - ${new Date().toLocaleDateString()}`, 
             originalImageStoragePath: cloudStoragePath,
             originalImageDimensions: currentImgSize,
-            peopleIds: [],
+            peopleIds: [], // Will be populated as people are added
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           };
 
           if (!db) throw new Error("Firestore database service is not available.");
 
-          const rosterDocRef = await addDoc(collection(db, "rosters"), rosterData);
+          const rosterDocRef = await addDoc(collection(db, "rosters"), rosterDocData);
           setCurrentRosterDocId(rosterDocRef.id);
           await fetchUserRosters();
 
@@ -192,8 +192,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         } catch (uploadError: any) {
           console.error("FRC: Cloud upload or Firestore roster creation error:", uploadError);
           let errorDescription = "Could not save image or create roster.";
-          if (uploadError instanceof FirestoreError) {
-            errorDescription = `Firestore error: ${uploadError.message} (Code: ${uploadError.code}). Check Firestore rules and API status.`;
+           if (uploadError instanceof FirestoreError) {
+            errorDescription = `Firestore error: ${uploadError.message} (Code: ${uploadError.code}). Check Firestore rules and API status. Data: ${JSON.stringify(uploadError.customData || {})}`;
           } else if (uploadError.message) {
             errorDescription = uploadError.message;
           } else if (uploadError.code && uploadError.code.startsWith('storage/')) {
@@ -254,120 +254,123 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const createRosterFromRegions = useCallback(async () => {
-    if (!imageDataUrl || drawnRegions.length === 0) {
-      toast({ title: "No Regions", description: "Please draw regions on the image first.", variant: "destructive" });
+    if (!imageDataUrl || drawnRegions.length === 0 || !currentRosterDocId) {
+      toast({ title: "Error", description: "No image, regions, or active roster. Please draw regions first.", variant: "destructive" });
       return;
     }
-    if (!currentUser?.uid || !currentRosterDocId || !db || !appFirebaseStorage) {
-      toast({ title: "Error", description: "User not authenticated, roster not initialized, or Firebase services unavailable. Check console.", variant: "destructive" });
+    if (!currentUser?.uid || !db || !appFirebaseStorage) {
+      toast({ title: "Error", description: "User not authenticated or Firebase services unavailable.", variant: "destructive" });
       return;
     }
     
     setIsProcessing(true);
-    const newEditablePeople: EditablePersonInContext[] = [];
-    const newPersonDocIds: string[] = [];
+    const newEditablePeopleForUI: EditablePersonInContext[] = [];
+    const peopleIdsForRosterDoc: string[] = [];
     
     const img = new Image();
     img.crossOrigin = "anonymous"; 
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
-      img.onerror = (errEvent) => {
+      img.onerror = (errEventOrMsg) => {
         let specificErrorMessage = 'Image load failed.';
-        let errorDetails: any = {};
-        if (typeof errEvent === 'string') specificErrorMessage = errEvent;
-        else if (errEvent instanceof Event) specificErrorMessage = `Image load failed. Event type: ${errEvent.type}.`;
-        console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Details:", errorDetails, "Raw event:", errEvent);
-        reject(new Error(`Failed to load base image for cropping. URL: ${imageDataUrl}. Error: ${specificErrorMessage}`));
+        if (typeof errEventOrMsg === 'string') specificErrorMessage = errEventOrMsg;
+        else if (errEventOrMsg instanceof Event) specificErrorMessage = `Image load failed. Event type: ${errEventOrMsg.type}.`;
+        else if (errEventOrMsg && typeof errEventOrMsg === 'object' && 'message' in errEventOrMsg) specificErrorMessage = (errEventOrMsg as Error).message;
+        
+        console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Raw event:", errEventOrMsg);
+        reject(new Error(`Failed to load base image for cropping. Error: ${specificErrorMessage}`));
       };
       try {
         img.src = imageDataUrl; 
       } catch (srcError: any) {
-        reject(new Error(`Failed to set image source for cropping. URL: ${imageDataUrl}. Error: ${srcError.message || 'Unknown src assignment error'}`));
+        reject(new Error(`Failed to set image source for cropping. Error: ${srcError.message || 'Unknown src assignment error'}`));
       }
     });
 
     try {
       await imageLoadPromise;
+
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.max(1, Math.floor(region.width)); 
         tempCanvas.height = Math.max(1, Math.floor(region.height));
         const ctx = tempCanvas.getContext('2d');
-
         if (!ctx) continue; 
-        
-        ctx.drawImage(
-          img, 
-          Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 
-          0, 0, tempCanvas.width, tempCanvas.height 
-        );
-        
+        ctx.drawImage(img, Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 0, 0, tempCanvas.width, tempCanvas.height);
         const faceImageDataURI = tempCanvas.toDataURL('image/png'); 
         
-        const croppedFaceFileName = `${currentRosterDocId}_${Date.now()}_${i}.png`;
+        const croppedFaceFileName = `${currentRosterDocId}_person_${Date.now()}_${i}.png`;
         const croppedFaceStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
         const croppedFaceRef = storageRef(appFirebaseStorage, croppedFaceStoragePath);
         
         const uploadResult = await uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL);
         const faceImageDownloadUrl = await getDownloadURL(uploadResult.ref);
         
+        const personBaseName = `Person ${roster.length + newEditablePeopleForUI.length + 1}`;
+        const newFaceAppearance: FaceAppearance = {
+          rosterId: currentRosterDocId,
+          faceImageStoragePath: croppedFaceStoragePath,
+          originalRegion: region,
+        };
+
+        // For simplicity in this step, we'll create a new person document for each region.
+        // A more advanced implementation would search for existing people to link.
         const personData: Omit<Person, 'id'> = { 
-          name: `Person ${roster.length + newEditablePeople.length + 1}`,
-          aiName: `Person ${roster.length + newEditablePeople.length + 1}`, 
+          name: personBaseName,
+          aiName: personBaseName,
           notes: '',
           company: '',
           hobbies: '',
           birthday: '',
           firstMet: '',
           firstMetContext: '',
-          faceImageStoragePath: croppedFaceStoragePath, 
-          originalRegion: region,
+          faceAppearances: [newFaceAppearance],
           addedBy: currentUser.uid,
           rosterIds: [currentRosterDocId],
           createdAt: serverTimestamp(), 
           updatedAt: serverTimestamp(), 
         };
         const personDocRef = await addDoc(collection(db, "people"), personData);
-        newPersonDocIds.push(personDocRef.id);
+        peopleIdsForRosterDoc.push(personDocRef.id);
 
-        newEditablePeople.push({
+        newEditablePeopleForUI.push({
           id: personDocRef.id, 
           faceImageUrl: faceImageDownloadUrl, 
           name: personData.name,
-          aiName: personData.aiName, 
+          aiName: personData.aiName,
           notes: personData.notes,
           company: personData.company,
           hobbies: personData.hobbies,
           birthday: personData.birthday,
           firstMet: personData.firstMet,
           firstMetContext: personData.firstMetContext,
-          originalRegion: region,
-          faceImageStoragePath: croppedFaceStoragePath, 
+          currentRosterAppearance: {
+             rosterId: currentRosterDocId,
+             faceImageStoragePath: croppedFaceStoragePath,
+             originalRegion: region,
+          }
         });
       }
 
-      if (newPersonDocIds.length > 0 && currentRosterDocId) {
+      if (peopleIdsForRosterDoc.length > 0) {
         const rosterDocToUpdateRef = doc(db, "rosters", currentRosterDocId);
         await updateDoc(rosterDocToUpdateRef, {
-          peopleIds: arrayUnion(...newPersonDocIds),
+          peopleIds: arrayUnion(...peopleIdsForRosterDoc),
           updatedAt: serverTimestamp()
         });
+        // Update userRosters list locally if this roster was new or changed
+        setUserRosters(prev => prev.map(r => r.id === currentRosterDocId ? {...r, peopleIds: Array.from(new Set([...(r.peopleIds || []), ...peopleIdsForRosterDoc])) } : r));
+
       }
 
-      setRoster(prev => [...prev, ...newEditablePeople]); 
+      setRoster(prev => [...prev, ...newEditablePeopleForUI]); 
       setDrawnRegions([]); 
-      toast({ title: "Roster Updated", description: `${newEditablePeople.length} person(s) added, cropped images uploaded, and data saved to cloud.` });
+      toast({ title: "Roster Updated", description: `${newEditablePeopleForUI.length} person(s) added to the current roster.` });
     } catch (error: any) {
-      console.error("FRC: Error during roster creation process (after image load attempt):", error.message, error.stack, error);
-      let errorDescription = "Could not process regions due to an internal error.";
-      if (error instanceof FirestoreError) {
-            errorDescription = `Firestore error: ${error.message} (Code: ${error.code}).`;
-      } else if (error.message) {
-        errorDescription = error.message;
-      }
-      toast({ title: "Roster Creation Failed", description: errorDescription, variant: "destructive" });
+      console.error("FRC: Error during roster creation (cropping/saving people):", error.message, error.stack, error);
+      toast({ title: "Roster Creation Failed", description: `Could not process regions: ${error.message}`, variant: "destructive" });
     } finally {
       setIsProcessing(false);
     }
@@ -379,18 +382,18 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updatePersonDetails = useCallback(async (personDocId: string, details: Partial<EditablePersonInContext>) => {
     if (!db || !currentUser?.uid) {
-        toast({ title: "Error", description: "User not authenticated or database service unavailable. Check console.", variant: "destructive" });
+        toast({ title: "Error", description: "User not authenticated or database service unavailable.", variant: "destructive" });
         return;
     }
     
+    // Optimistically update UI
     setRoster(prevRoster =>
       prevRoster.map(person =>
         person.id === personDocId ? { ...person, ...details } : person
       )
     );
-
-    // Prepare data for Firestore, removing undefined values if any field is optional and not provided
-    const firestoreUpdateData: { [key: string]: any } = {};
+    
+    const firestoreUpdateData: { [key: string]: any } = { updatedAt: serverTimestamp() };
     if (details.name !== undefined) firestoreUpdateData.name = details.name;
     if (details.notes !== undefined) firestoreUpdateData.notes = details.notes;
     if (details.company !== undefined) firestoreUpdateData.company = details.company;
@@ -398,13 +401,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (details.birthday !== undefined) firestoreUpdateData.birthday = details.birthday;
     if (details.firstMet !== undefined) firestoreUpdateData.firstMet = details.firstMet;
     if (details.firstMetContext !== undefined) firestoreUpdateData.firstMetContext = details.firstMetContext;
-    
-    if (Object.keys(firestoreUpdateData).length === 0) {
-      // No actual data fields to update besides timestamp
-      firestoreUpdateData.updatedAt = serverTimestamp(); // Still update timestamp if only that
-    } else {
-      firestoreUpdateData.updatedAt = serverTimestamp();
-    }
+    // Note: `faceAppearances` are managed in `createRosterFromRegions`
     
     try {
         const personRef = doc(db, "people", personDocId);
@@ -412,13 +409,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         toast({ title: "Details Updated", description: "Person's information saved to cloud." });
     } catch (error: any) {
         console.error(`FRC: Error updating person details (ID: ${personDocId}) in Firestore:`, error);
-        let errorDescription = `Could not save changes to cloud.`;
-        if (error instanceof FirestoreError) {
-            errorDescription = `Firestore error: ${error.message} (Code: ${error.code}).`;
-        } else if (error.message) {
-          errorDescription = error.message;
-        }
-        toast({ title: "Update Failed", description: errorDescription, variant: "destructive" });
+        toast({ title: "Update Failed", description: `Could not save changes for ${details.name || 'person'} to cloud: ${error.message}`, variant: "destructive" });
+        // Potentially revert optimistic update here if needed
     }
   }, [currentUser, toast]);
 
@@ -473,50 +465,63 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const mainImageUrl = await getDownloadURL(mainImageRef);
       setImageDataUrl(mainImageUrl);
 
-      const peopleForRoster: EditablePersonInContext[] = [];
+      const peopleForRosterUI: EditablePersonInContext[] = [];
       if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
-        // Firestore 'in' query limit is 30. If more people, need pagination or multiple queries.
         const peopleChunks = [];
-        for (let i = 0; i < rosterData.peopleIds.length; i += 30) {
+        for (let i = 0; i < rosterData.peopleIds.length; i += 30) { // Firestore 'in' query max 30
             peopleChunks.push(rosterData.peopleIds.slice(i, i + 30));
         }
 
         for (const chunk of peopleChunks) {
+            if (chunk.length === 0) continue;
             const peopleQuery = query(collection(db, "people"), where("__name__", "in", chunk));
             const peopleSnapshots = await getDocs(peopleQuery);
             
             for (const personDoc of peopleSnapshots.docs) {
-            const personData = personDoc.data() as Person;
-            let faceImgUrl = "https://placehold.co/100x100.png"; 
-            if (personData.faceImageStoragePath) {
-                try {
-                const faceRef = storageRef(appFirebaseStorage, personData.faceImageStoragePath);
-                faceImgUrl = await getDownloadURL(faceRef);
-                } catch (storageError) {
-                console.error(`FRC: Error getting download URL for face image ${personData.faceImageStoragePath}:`, storageError);
-                toast({title: "Image Load Error", description: `Could not load face for ${personData.name}.`, variant: "destructive"});
-                }
-            }
-            peopleForRoster.push({
-                id: personDoc.id,
-                name: personData.name,
-                aiName: personData.aiName,
-                notes: personData.notes,
-                company: personData.company,
-                hobbies: personData.hobbies,
-                birthday: personData.birthday,
-                firstMet: personData.firstMet,
-                firstMetContext: personData.firstMetContext,
-                originalRegion: personData.originalRegion,
-                faceImageUrl: faceImgUrl,
-                faceImageStoragePath: personData.faceImageStoragePath,
-            });
+              const personData = personDoc.data() as Person;
+              
+              // Find the specific face appearance for the current roster
+              const appearanceForThisRoster = personData.faceAppearances?.find(app => app.rosterId === rosterId);
+              
+              let faceImgUrl = "https://placehold.co/100x100.png"; 
+              let currentAppearanceDetails: EditablePersonInContext['currentRosterAppearance'] = undefined;
+
+              if (appearanceForThisRoster && appearanceForThisRoster.faceImageStoragePath) {
+                  try {
+                    const faceRef = storageRef(appFirebaseStorage, appearanceForThisRoster.faceImageStoragePath);
+                    faceImgUrl = await getDownloadURL(faceRef);
+                    currentAppearanceDetails = {
+                        rosterId: rosterId,
+                        faceImageStoragePath: appearanceForThisRoster.faceImageStoragePath,
+                        originalRegion: appearanceForThisRoster.originalRegion,
+                    };
+                  } catch (storageError) {
+                    console.error(`FRC: Error getting download URL for face image ${appearanceForThisRoster.faceImageStoragePath}:`, storageError);
+                    toast({title: "Image Load Error", description: `Could not load face for ${personData.name}.`, variant: "destructive"});
+                  }
+              } else {
+                  console.warn(`FRC: No matching face appearance found for person ${personData.id} in roster ${rosterId}, or path missing.`);
+              }
+
+              peopleForRosterUI.push({
+                  id: personDoc.id,
+                  name: personData.name,
+                  aiName: personData.aiName,
+                  notes: personData.notes,
+                  company: personData.company,
+                  hobbies: personData.hobbies,
+                  birthday: personData.birthday,
+                  firstMet: personData.firstMet,
+                  firstMetContext: personData.firstMetContext,
+                  faceImageUrl: faceImgUrl,
+                  currentRosterAppearance: currentAppearanceDetails,
+              });
             }
         }
       }
-      setRoster(peopleForRoster);
-      if (peopleForRoster.length > 0) {
-        setSelectedPersonId(peopleForRoster[0].id); 
+      setRoster(peopleForRosterUI);
+      if (peopleForRosterUI.length > 0) {
+        setSelectedPersonId(peopleForRosterUI[0].id); 
       } else {
         setSelectedPersonId(null);
       }
@@ -555,41 +560,58 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setIsProcessing(false);
             return;
         }
-
+        
         const batch = writeBatch(db);
+        const peopleToDeleteFullData: Person[] = [];
 
+        // Fetch full person docs to get all their faceImageStoragePaths if they only belong to this roster
         if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
-            for (const personId of rosterData.peopleIds) {
-                const personDocRef = doc(db, "people", personId);
-                const personSnap = await getDoc(personDocRef);
-                if (personSnap.exists()) {
-                    const personToDelete = personSnap.data() as Person;
-                    if (personToDelete.faceImageStoragePath) {
-                        const faceImageFileRef = storageRef(appFirebaseStorage, personToDelete.faceImageStoragePath);
-                        try {
-                            await deleteObject(faceImageFileRef);
-                        } catch (e:any) {
-                             console.warn("FRC: Failed to delete face image from Storage (may not exist or permissions):", personToDelete.faceImageStoragePath, e.code, e.message);
-                        }
+            const peopleQuery = query(collection(db, "people"), where("__name__", "in", rosterData.peopleIds));
+            const peopleSnapshots = await getDocs(peopleQuery);
+            peopleSnapshots.forEach(personDoc => {
+                peopleToDeleteFullData.push({ id: personDoc.id, ...personDoc.data() } as Person);
+            });
+        }
+        
+        for (const person of peopleToDeleteFullData) {
+            // Option 1: Delete person if only in this roster
+            // Option 2: Remove this roster's appearance from person, then delete person if no appearances left
+            // For now, let's implement: if a person is only in this roster, delete them. Otherwise, just remove this roster's appearance.
+            const updatedAppearances = person.faceAppearances?.filter(app => app.rosterId !== rosterId);
+            const updatedRosterIds = person.rosterIds?.filter(id => id !== rosterId);
+
+            const appearanceToDelete = person.faceAppearances?.find(app => app.rosterId === rosterId);
+            if (appearanceToDelete?.faceImageStoragePath) {
+                 const faceImageFileRef = storageRef(appFirebaseStorage, appearanceToDelete.faceImageStoragePath);
+                 try { await deleteObject(faceImageFileRef); } catch (e:any) { console.warn("FRC: Failed to delete a face image from Storage:", appearanceToDelete.faceImageStoragePath, e.message); }
+            }
+
+            if (updatedRosterIds && updatedRosterIds.length > 0) { // Person exists in other rosters
+                batch.update(doc(db, "people", person.id), {
+                    faceAppearances: updatedAppearances,
+                    rosterIds: updatedRosterIds,
+                    updatedAt: serverTimestamp()
+                });
+            } else { // Person only existed in this roster, or something is wrong
+                batch.delete(doc(db, "people", person.id));
+                 // Also delete all other face images if this person doc is deleted (though ideally they should be gone if appearances are managed correctly)
+                person.faceAppearances?.forEach(async app => {
+                    if (app.rosterId !== rosterId && app.faceImageStoragePath) { // Don't re-delete the one we might have just deleted
+                         const otherFaceRef = storageRef(appFirebaseStorage, app.faceImageStoragePath);
+                         try { await deleteObject(otherFaceRef); } catch (e:any) { console.warn("FRC: Clean-up: Failed to delete another face image:", app.faceImageStoragePath, e.message); }
                     }
-                }
-                batch.delete(personDocRef);
+                });
             }
         }
         
         if (rosterData.originalImageStoragePath) {
             const originalImageFileRef = storageRef(appFirebaseStorage, rosterData.originalImageStoragePath);
-             try {
-                await deleteObject(originalImageFileRef);
-            } catch (e:any) {
-                console.warn("FRC: Failed to delete original image from Storage (may not exist or permissions):", rosterData.originalImageStoragePath, e.code, e.message);
-            }
+             try { await deleteObject(originalImageFileRef); } catch (e:any) { console.warn("FRC: Failed to delete original image from Storage:", rosterData.originalImageStoragePath, e.message); }
         }
         
         batch.delete(rosterDocRef);
-
         await batch.commit();
-        toast({ title: "Roster Deleted", description: `${rosterData.rosterName} and its contents have been removed.` });
+        toast({ title: "Roster Deleted", description: `${rosterData.rosterName} and associated people/images specific to it removed.` });
 
         if (currentRosterDocId === rosterId) {
             clearAllData(false);
