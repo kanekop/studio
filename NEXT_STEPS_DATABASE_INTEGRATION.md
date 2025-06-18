@@ -117,8 +117,8 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 *   フィールド:
     *   `fromPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の起点となる人物。)
     *   `toPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の対象となる人物。)
-    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member"]`)
-    *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生"]`)
+    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member", "manager", "subordinate", "mentor", "mentee"]`。階層関係（例：上司・部下）も表現可能。その場合、`fromPersonId` と `toPersonId` の向きと `type` の組み合わせで関係性を定義します。)
+    *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生", "直属の上司として指導", "プロジェクトチームのメンバー"]`)
     *   `strength`: `number` (任意。関係の強さや親密さを示す数値。例: 1-5のスケール)
     *   `notes`: `string` (任意。この関係性に関するメモ。)
     *   `createdAt`: `Timestamp` (関係性が記録された日時)
