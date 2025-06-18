@@ -12,8 +12,9 @@ interface PeopleListProps {
   isDeleteSelectionMode?: boolean;
   selectedPeopleForDelete?: string[];
   onToggleDeleteSelection?: (personId: string) => void;
-  onEditPerson: (person: Person) => void; // New prop for editing
-  generalActionDisabled?: boolean; // To disable edit button if other actions are in progress
+  onEditPerson: (person: Person) => void; 
+  generalActionDisabled?: boolean;
+  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void; // For D&D
 }
 
 const PeopleList: React.FC<PeopleListProps> = ({ 
@@ -26,6 +27,7 @@ const PeopleList: React.FC<PeopleListProps> = ({
   onToggleDeleteSelection = () => {},
   onEditPerson,
   generalActionDisabled = false,
+  onInitiateConnection,
 }) => {
   if (people.length === 0) {
     return (
@@ -48,8 +50,9 @@ const PeopleList: React.FC<PeopleListProps> = ({
           isDeleteSelectionMode={isDeleteSelectionMode}
           isSelectedForDelete={selectedPeopleForDelete.includes(person.id)}
           onToggleDeleteSelection={onToggleDeleteSelection}
-          onEdit={() => onEditPerson(person)} // Pass person to edit handler
+          onEdit={() => onEditPerson(person)} 
           disableActions={generalActionDisabled || (isMergeSelectionMode && selectedPeopleForMerge.length >=2 && !selectedPeopleForMerge.includes(person.id))}
+          onInitiateConnection={onInitiateConnection}
         />
       ))}
     </div>

@@ -31,7 +31,7 @@ export interface Person {
   faceAppearances: FaceAppearance[]; // Array of all instances where this person's face was identified
   
   addedBy: string; // UID of the user who added this person
-  rosterIds: string[]; // Array of 'rosters' document IDs this person belongs to (for quick querying)
+  rosterIds: string[]; // Array of 'people' document IDs belonging to this roster
   
   company?: string;
   hobbies?: string; 
@@ -120,8 +120,16 @@ export interface Connection {
   toPersonId: string; // Document ID of the person connected to
   types: string[]; // e.g., ["colleague", "friend", "manager"]
   reasons: string[]; // e.g., ["Worked at Globex Corp", "University hiking club"]
-  strength?: number; // Optional, e.g., 1-5
+  strength?: number | null; // Optional, e.g., 1-5. Use null for Firestore if not set.
   notes?: string; // Optional, private notes about this connection
   createdAt: any; // Firestore serverTimestamp
   updatedAt: any; // Firestore serverTimestamp
+}
+
+// Form data for creating a new connection.
+export interface CreateConnectionFormData {
+  types: string; // Comma-separated string
+  reasons: string; // Comma-separated string
+  strength?: string; // String to be parsed to number or null
+  notes?: string;
 }

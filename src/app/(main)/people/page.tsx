@@ -3,12 +3,13 @@
 import React, { useEffect, useState } from 'react';
 import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2 } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
-import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types';
+import CreateConnectionDialog from '@/components/features/CreateConnectionDialog'; // New Dialog
+import type { Person, FieldMergeChoices, SuggestedMergePair, CreateConnectionFormData } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -29,6 +30,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function ManagePeoplePage() {
@@ -43,7 +45,7 @@ export default function ManagePeoplePage() {
     isProcessing, 
     fetchMergeSuggestions,
     mergeSuggestions,
-    clearMergeSuggestions, // New context function
+    clearMergeSuggestions,
     isLoadingMergeSuggestions,
     peopleSortOption,
     setPeopleSortOption,
@@ -51,8 +53,10 @@ export default function ManagePeoplePage() {
     togglePersonSelectionForDeletion,
     clearPeopleSelectionForDeletion,
     deleteSelectedPeople,
-    updateGlobalPersonDetails, 
+    updateGlobalPersonDetails,
+    addConnection, // New context function
   } = useFaceRoster();
+  const { toast } = useToast();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
   const [isDeleteSelectionMode, setIsDeleteSelectionMode] = useState(false);
@@ -62,6 +66,12 @@ export default function ManagePeoplePage() {
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [isEditPersonDialogOpen, setIsEditPersonDialogOpen] = useState(false);
   const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false); 
+
+  // State for CreateConnectionDialog
+  const [isCreateConnectionDialogOpen, setIsCreateConnectionDialogOpen] = useState(false);
+  const [sourcePersonForConnection, setSourcePersonForConnection] = useState<Person | null>(null);
+  const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
+  const [isSavingConnection, setIsSavingConnection] = useState(false);
 
 
   useEffect(() => {
@@ -125,9 +135,11 @@ export default function ManagePeoplePage() {
   };
 
   const handleConfirmDelete = async () => {
+    setIsProcessing(true); // Manually set processing for the AlertDialog
     await deleteSelectedPeople();
     setIsDeleteSelectionMode(false); 
     setIsDeleteDialogOpen(false);
+    setIsProcessing(false); // Manually clear processing
   };
 
   const handleOpenEditPersonDialog = (person: Person) => {
@@ -146,10 +158,59 @@ export default function ManagePeoplePage() {
       setPersonToEdit(null);
     }
   };
+
+  // Handlers for Connection Dialog
+  const handleInitiateConnection = (sourcePersonId: string, targetPersonId: string) => {
+    if (sourcePersonId === targetPersonId) {
+        toast({title: "Cannot connect person to themself", variant: "default"});
+        return;
+    }
+    const source = allUserPeople.find(p => p.id === sourcePersonId);
+    const target = allUserPeople.find(p => p.id === targetPersonId);
+
+    if (source && target) {
+      setSourcePersonForConnection(source);
+      setTargetPersonForConnection(target);
+      setIsCreateConnectionDialogOpen(true);
+    } else {
+      toast({title: "Error", description: "Could not find persons to connect.", variant: "destructive"});
+    }
+  };
+
+  const handleSaveConnection = async (data: CreateConnectionFormData) => {
+    if (!sourcePersonForConnection || !targetPersonForConnection) return;
+    setIsSavingConnection(true);
+
+    const typesArray = data.types.split(',').map(t => t.trim()).filter(t => t);
+    const reasonsArray = data.reasons.split(',').map(r => r.trim()).filter(r => r);
+    const strengthNum = data.strength ? parseInt(data.strength, 10) : undefined;
+    
+    if (data.strength && (isNaN(strengthNum) || strengthNum < 1 || strengthNum > 5)) {
+        toast({ title: "Invalid Strength", description: "Strength must be a number between 1 and 5, or empty.", variant: "destructive"});
+        setIsSavingConnection(false);
+        return;
+    }
+
+    const connectionId = await addConnection(
+      sourcePersonForConnection.id,
+      targetPersonForConnection.id,
+      typesArray,
+      reasonsArray,
+      strengthNum,
+      data.notes
+    );
+    setIsSavingConnection(false);
+    if (connectionId) {
+      setIsCreateConnectionDialogOpen(false);
+      setSourcePersonForConnection(null);
+      setTargetPersonForConnection(null);
+      // Optionally, refetch connections or update UI to show new connection
+    }
+  };
   
-  const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails;
-  const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails;
-  const generalActionDisabled = isProcessing || isSavingPersonDetails;
+  const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
+  const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
+  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection;
 
 
   const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
@@ -292,6 +353,15 @@ export default function ManagePeoplePage() {
         </div>
       )}
       
+      {!isMergeSelectionMode && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
+        <div className="mb-4 p-3 bg-green-500/5 border border-green-500/20 rounded-md text-center">
+          <p className="text-sm text-green-700 dark:text-green-300 flex items-center justify-center">
+            <Link2 className="mr-2 h-4 w-4" />
+            To create a connection, drag one person's card and drop it onto another person's card.
+          </p>
+        </div>
+      )}
+
       {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
         <Card className="mb-6 shadow-md">
           <CardHeader className="flex flex-row items-center justify-between">
@@ -394,6 +464,7 @@ export default function ManagePeoplePage() {
           onToggleDeleteSelection={togglePersonSelectionForDeletion}
           onEditPerson={handleOpenEditPersonDialog} 
           generalActionDisabled={generalActionDisabled}
+          onInitiateConnection={handleInitiateConnection}
         />
       )}
 
@@ -416,7 +487,17 @@ export default function ManagePeoplePage() {
           isProcessing={isSavingPersonDetails}
         />
       )}
+
+      {sourcePersonForConnection && targetPersonForConnection && (
+        <CreateConnectionDialog
+          isOpen={isCreateConnectionDialogOpen}
+          onOpenChange={setIsCreateConnectionDialogOpen}
+          sourcePerson={sourcePersonForConnection}
+          targetPerson={targetPersonForConnection}
+          onSave={handleSaveConnection}
+          isProcessing={isSavingConnection}
+        />
+      )}
     </div>
   );
 }
-

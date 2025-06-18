@@ -21,8 +21,9 @@ interface PeopleListItemProps {
   isDeleteSelectionMode?: boolean;
   isSelectedForDelete?: boolean;
   onToggleDeleteSelection?: (personId: string) => void;
-  onEdit: () => void; // New prop for edit action
-  disableActions?: boolean; // To disable edit/selection
+  onEdit: () => void; 
+  disableActions?: boolean;
+  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void; // For D&D
 }
 
 const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
@@ -36,9 +37,12 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   onToggleDeleteSelection = () => {},
   onEdit,
   disableActions = false,
+  onInitiateConnection,
 }) => {
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
+  const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
+  const [isBeingDragged, setIsBeingDragged] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -76,18 +80,16 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const rosterCount = person.rosterIds?.length || 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Prevent card click from toggling selection if an action button inside was clicked
     if ((e.target as HTMLElement).closest('button')) {
       return;
     }
-    if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return; // If actions disabled and not in selection mode, do nothing
+    if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
 
     if (isDeleteSelectionMode && onToggleDeleteSelection) {
       onToggleDeleteSelection(person.id);
     } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
       onToggleMergeSelection(person.id);
     } else if (!isDeleteSelectionMode && !isMergeSelectionMode && !disableActions) {
-      // Default action if not in selection mode and not disabled: open edit
       onEdit();
     }
   };
@@ -105,15 +107,77 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const isChecked = isDeleteSelectionMode ? isSelectedForDelete : (isMergeSelectionMode ? isSelectedForMerge : false);
   const effectiveDisabledForMergeSelection = isMergeSelectionMode && isDisabledForMergeSelection;
 
+  // Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData("sourcePersonId", person.id);
+    e.dataTransfer.effectAllowed = "move";
+    setIsBeingDragged(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); // Necessary to allow dropping
+    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
+      e.dataTransfer.dropEffect = "none";
+      return;
+    }
+    e.dataTransfer.dropEffect = "move";
+    setIsBeingDraggedOver(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
+    setIsBeingDraggedOver(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+     // Check if the mouse is leaving the element for a child or outside entirely
+    if (e.relatedTarget && (e.currentTarget as Node).contains(e.relatedTarget as Node)) {
+      return; // Still inside the card or one of its children
+    }
+    setIsBeingDraggedOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsBeingDraggedOver(false);
+    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
+
+    const sourcePersonId = e.dataTransfer.getData("sourcePersonId");
+    const targetPersonId = person.id;
+
+    if (sourcePersonId && targetPersonId && sourcePersonId !== targetPersonId) {
+      onInitiateConnection(sourcePersonId, targetPersonId);
+    }
+  };
+  
+  const handleDragEnd = () => {
+    setIsBeingDragged(false);
+    // Note: isBeingDraggedOver should be reset by onDragLeave or onDrop on the target
+  };
+
+
   return (
     <Card 
+      draggable={!disableActions && !isDeleteSelectionMode && !isMergeSelectionMode}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onDragEnd={handleDragEnd}
       className={cn(
-        "flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden relative group",
+        "flex flex-col h-full shadow-md hover:shadow-lg transition-all duration-200 rounded-lg overflow-hidden relative group",
         ((isMergeSelectionMode || isDeleteSelectionMode) && !disableActions) && "cursor-pointer",
         (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-blue-500 border-blue-500",
         (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-destructive border-destructive",
-        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70", // General disable visual
-        (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed" // Specific for merge mode selection limit
+        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70", 
+        (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed",
+        isBeingDraggedOver && !disableActions && !isDeleteSelectionMode && !isMergeSelectionMode && "ring-2 ring-green-500 border-green-500 scale-105",
+        isBeingDragged && "opacity-50 border-dashed border-primary"
       )}
       onClick={handleCardClick}
       role={showCheckbox ? "button" : "listitem"}
@@ -121,7 +185,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       tabIndex={0}
       onKeyDown={(e) => { 
         if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button')) ) {
-          e.preventDefault(); // Prevent space bar scrolling
+          e.preventDefault(); 
           handleCardClick(e as any); 
         }
       }}
@@ -140,7 +204,6 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           />
         </div>
       )}
-      { /* Edit button shown when not in any selection mode */ }
       {!isMergeSelectionMode && !isDeleteSelectionMode && (
         <Button
             variant="ghost"
