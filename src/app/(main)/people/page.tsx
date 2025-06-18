@@ -122,7 +122,8 @@ export default function ManagePeoplePage() {
   };
 
   const handleConfirmDelete = async () => {
-    setIsProcessing(true); // Context isProcessing should cover this too
+    // The setIsProcessing(true) call was here and caused the error.
+    // The deleteSelectedPeople function in the context already handles setting isProcessing.
     await deleteSelectedPeople();
     setIsDeleteSelectionMode(false); // Exit delete mode after deletion
     setIsDeleteDialogOpen(false);
@@ -375,4 +376,3 @@ export default function ManagePeoplePage() {
     </div>
   );
 }
-
