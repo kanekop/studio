@@ -172,7 +172,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
         </DialogHeader>
         
         <div className="flex-1 min-h-0"> {/* Wrapper div for ScrollArea */}
- <ScrollArea className="h-full"> {/* ScrollArea takes full height of parent */}
+ <ScrollArea className="h-full overflow-y-auto"> {/* ScrollArea takes full height of parent and allows vertical scrolling */}
  <div className="space-y-4 divide-y divide-border p-4 pr-2"> {/* Content padding (pr-2 to avoid scrollbar overlap) */}
               {renderFieldChoice('name', 'Name', User)}
               {renderFieldChoice('company', 'Company', Building)}
