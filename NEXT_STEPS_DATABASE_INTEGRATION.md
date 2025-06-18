@@ -117,26 +117,40 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 *   フィールド:
     *   `fromPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の起点となる人物。)
     *   `toPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の対象となる人物。)
-    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member", "manager", "subordinate", "mentor", "mentee"]`。階層関係（例：上司・部下）も表現可能。その場合、`fromPersonId` と `toPersonId` の向きと `type` の組み合わせで関係性を定義します。)
-    *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生", "直属の上司として指導", "プロジェクトチームのメンバー"]`)
+    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member", "manager", "subordinate", "mentor", "mentee", "parent", "child", "father", "mother", "spouse"]`。階層関係（例：上司・部下、親子）も表現可能。その場合、`fromPersonId` と `toPersonId` の向きと `type` の組み合わせで関係性を定義します。例えば、親子関係の場合、`fromPersonId` を親、`toPersonId` を子とし、`types` に `["parent"]` や `["father"]`, `["mother"]` を設定します。)
+    *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生", "直属の上司として指導", "プロジェクトチームのメンバー", "〇〇クラブのメンバー"]`)
     *   `strength`: `number` (任意。関係の強さや親密さを示す数値。例: 1-5のスケール)
     *   `notes`: `string` (任意。この関係性に関するメモ。)
     *   `createdAt`: `Timestamp` (関係性が記録された日時)
     *   `updatedAt`: `Timestamp` (関係性が最後に更新された日時)
 *   **サンプルドキュメント:**
-    ```json
-    // Document ID: (e.g., conn_randomId123)
-    {
-      "fromPersonId": "people_doc_id_A",
-      "toPersonId": "people_doc_id_B",
-      "types": ["colleague", "mentor"],
-      "reasons": ["Globex Corporation - Marketing Dept.", "Provided career advice in 2022"],
-      "strength": 4,
-      "notes": "Reliable contact for marketing strategies.",
-      "createdAt": "Timestamp(seconds=1679700000, nanoseconds=0)",
-      "updatedAt": "Timestamp(seconds=1679700300, nanoseconds=0)"
-    }
-    ```
+    *   **同僚・メンター関係:**
+        ```json
+        // Document ID: (e.g., conn_randomId123)
+        {
+          "fromPersonId": "people_doc_id_A",
+          "toPersonId": "people_doc_id_B",
+          "types": ["colleague", "mentor"],
+          "reasons": ["Globex Corporation - Marketing Dept.", "Provided career advice in 2022"],
+          "strength": 4,
+          "notes": "Reliable contact for marketing strategies.",
+          "createdAt": "Timestamp(seconds=1679700000, nanoseconds=0)",
+          "updatedAt": "Timestamp(seconds=1679700300, nanoseconds=0)"
+        }
+        ```
+    *   **親子関係 (父 -> 子):**
+        ```json
+        // Document ID: (e.g., conn_randomId456)
+        {
+          "fromPersonId": "people_doc_id_Father", // 父のID
+          "toPersonId": "people_doc_id_Child",   // 子供のID
+          "types": ["father", "parent"],
+          "reasons": [], // 親子関係に特定の理由は不要な場合が多い
+          "notes": "長男。",
+          "createdAt": "Timestamp(seconds=1679800000, nanoseconds=0)",
+          "updatedAt": "Timestamp(seconds=1679800000, nanoseconds=0)"
+        }
+        ```
 *   **双方向検索に関する注意点:**
     特定の人物（例：`person_A_id`）の全ての関係性を取得するには、アプリケーション側で以下の2つのクエリを実行し、結果をマージする必要があります。
     1.  `connections` コレクションで `fromPersonId == "person_A_id"` となるドキュメントを検索。
@@ -224,3 +238,5 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 
 この仕様書は、アプリケーションの成長に合わせて継続的に更新されるものです。
 
+
+    
