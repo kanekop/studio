@@ -1,10 +1,10 @@
 
 "use client";
-import React, { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useEffect, useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person, CreateConnectionFormData } from '@/types';
+import type { Person, CreateConnectionFormData as DialogFormData } from '@/types'; // Renamed to avoid conflict
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -19,23 +19,61 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Link2, Users, Info, Hash, FileText, Save, Sparkles } from 'lucide-react';
+import { Slider } from "@/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
-const createConnectionSchema = z.object({
-  types: z.string().min(1, "At least one type is required (e.g., friend, colleague). Comma-separate multiple."),
+import { 
+    Link2, Users, FileText, Save, Sparkles, ArrowRightLeft, ArrowRight,
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle, Building
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+
+// Zod schema for internal form validation
+const createConnectionFormSchema = z.object({
+  customTypes: z.string().optional(),
   reasons: z.string().optional(),
-  strength: z.string().optional(), // Will be parsed to number or null
+  strength: z.string().optional(),
   notes: z.string().optional(),
 });
+
+// This is the type the onSave prop expects, after processing in this dialog
+export interface ProcessedConnectionFormData {
+    types: string[];
+    reasons: string[];
+    strength?: number;
+    notes?: string;
+}
 
 interface CreateConnectionDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   sourcePerson: Person | null;
   targetPerson: Person | null;
-  onSave: (data: CreateConnectionFormData) => Promise<void>;
+  onSave: (data: ProcessedConnectionFormData) => Promise<void>; // Expects processed data
   isProcessing: boolean;
 }
+
+const commonRelations = [
+  { key: 'colleague', label: 'Colleague', icon: Briefcase },
+  { key: 'friend', label: 'Friend', icon: Smile },
+  { key: 'acquaintance', label: 'Acquaintance', icon: Handshake },
+];
+
+const hierarchicalRelations = [
+  { key: 'parent', label: 'Parent (of Target)', icon: Home }, // Source is Parent of Target
+  { key: 'child', label: 'Child (of Target)', icon: UserCircle }, // Source is Child of Target
+  { key: 'manager', label: 'Manager (of Target)', icon: Users }, // Source manages Target
+  { key: 'reports_to', label: 'Reports to (Target)', icon: Users }, // Source reports to Target
+  { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap },
+  { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap },
+];
+
+const specialRelations = [
+  { key: 'spouse', label: 'Spouse', icon: Heart },
+  { key: 'partner', label: 'Partner', icon: Gem },
+];
+
 
 const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   isOpen,
@@ -45,15 +83,19 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   onSave,
   isProcessing,
 }) => {
+  const [selectedPredefinedTypes, setSelectedPredefinedTypes] = useState<string[]>([]);
+  const [currentStrength, setCurrentStrength] = useState<number | undefined>(undefined);
+
   const {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isDirty },
-  } = useForm<CreateConnectionFormData>({
-    resolver: zodResolver(createConnectionSchema),
+    control,
+    formState: { errors, isDirty: formIsDirty }, // isDirty from react-hook-form
+  } = useForm<z.infer<typeof createConnectionFormSchema>>({ // Use the zod schema for RHF
+    resolver: zodResolver(createConnectionFormSchema),
     defaultValues: {
-        types: "",
+        customTypes: "",
         reasons: "",
         strength: "",
         notes: "",
@@ -61,94 +103,180 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   });
 
   useEffect(() => {
-    if (!isOpen) {
-      reset(); 
+    if (isOpen) {
+      reset({ customTypes: "", reasons: "", strength: "", notes: "" });
+      setSelectedPredefinedTypes([]);
+      setCurrentStrength(undefined);
     }
   }, [isOpen, reset]);
 
-  const onSubmit = async (data: CreateConnectionFormData) => {
-    await onSave(data);
+  const handleTogglePredefinedType = (typeKey: string) => {
+    setSelectedPredefinedTypes(prev => 
+      prev.includes(typeKey) ? prev.filter(t => t !== typeKey) : [...prev, typeKey]
+    );
+  };
+  
+  const processAndSubmit = async (formData: z.infer<typeof createConnectionFormSchema>) => {
+    const customTypesArray = formData.customTypes?.split(',')
+        .map(t => t.trim())
+        .filter(t => t) || [];
+    
+    const finalTypes = Array.from(new Set([...selectedPredefinedTypes, ...customTypesArray]));
+
+    if (finalTypes.length === 0) {
+        // Consider adding a toast or error message here if types are mandatory
+        // For now, let's assume it's okay to have no types if the user intends so.
+    }
+
+    const reasonsArray = formData.reasons?.split('\n') // Split by newline for multiple reasons
+        .map(r => r.trim())
+        .filter(r => r) || [];
+
+    const strengthNum = currentStrength;
+
+    const processedData: ProcessedConnectionFormData = {
+        types: finalTypes,
+        reasons: reasonsArray,
+        strength: strengthNum,
+        notes: formData.notes || "",
+    };
+    await onSave(processedData);
   };
 
   if (!sourcePerson || !targetPerson) return null;
+  
+  const isFormActuallyDirty = formIsDirty || selectedPredefinedTypes.length > 0 || currentStrength !== undefined;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg md:max-w-xl !max-h-[90vh] !flex !flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="font-headline text-xl flex items-center">
+      <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl !max-h-[90vh] !flex !flex-col">
+        <DialogHeader className="shrink-0 text-center sm:text-left">
+          <DialogTitle className="font-headline text-xl flex items-center justify-center sm:justify-start">
             <Link2 className="mr-2 h-6 w-6 text-primary" />
             Create Connection
           </DialogTitle>
-          <DialogDescription>
-            Define the relationship between <strong className="text-accent">{sourcePerson.name}</strong> and <strong className="text-accent">{targetPerson.name}</strong>.
+          <DialogDescription className="text-center sm:text-left">
+            Define the relationship from <strong className="text-accent">{sourcePerson.name}</strong> to <strong className="text-accent">{targetPerson.name}</strong>.
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
-          <form onSubmit={handleSubmit(onSubmit)} id="create-connection-form" className="space-y-4">
-            
-            <div className="p-3 rounded-md bg-muted/50 border">
-                <p className="text-sm font-medium text-foreground">Connecting:</p>
-                <div className="flex items-center justify-between text-sm mt-1">
-                    <span className="flex items-center"><Users className="mr-1.5 h-4 w-4 text-muted-foreground"/>From: <strong className="ml-1 text-primary">{sourcePerson.name}</strong></span>
-                    <Link2 className="h-4 w-4 text-muted-foreground mx-2"/>
-                    <span className="flex items-center">To: <strong className="ml-1 text-primary">{targetPerson.name}</strong><Users className="ml-1.5 h-4 w-4 text-muted-foreground"/></span>
-                </div>
+        <div className="p-3 my-2 rounded-md bg-muted/50 border text-sm">
+            <div className="flex items-center justify-center text-foreground">
+                <span className="flex items-center"><Users className="mr-1.5 h-4 w-4 text-primary"/>{sourcePerson.name}</span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground mx-2"/>
+                <span className="flex items-center">{targetPerson.name}<Users className="ml-1.5 h-4 w-4 text-primary"/></span>
             </div>
+             <p className="text-xs text-muted-foreground text-center mt-1">You are defining the relationship of {sourcePerson.name} towards {targetPerson.name}.</p>
+        </div>
 
+        <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
+          <form onSubmit={handleSubmit(processAndSubmit)} id="create-connection-form" className="space-y-6">
+            
+            {/* Predefined Relationship Types */}
+            <section>
+              <h3 className="text-md font-semibold mb-2 flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary/80" />Relationship Categories</h3>
+              
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Common</Label>
+                  <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
+                    {commonRelations.map(rel => (
+                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
+                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Hierarchical (Source Person's role to Target Person)</Label>
+                   <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
+                    {hierarchicalRelations.map(rel => (
+                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
+                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+                
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Special</Label>
+                   <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
+                    {specialRelations.map(rel => (
+                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
+                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </div>
+              </div>
+            </section>
+            
             <div>
-              <Label htmlFor="types" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Sparkles className="mr-1.5 h-4 w-4" />Relationship Types*
+              <Label htmlFor="customTypes" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                <Sparkles className="mr-1.5 h-4 w-4" />Custom Relationship Types
               </Label>
-              <Textarea 
-                id="types" 
-                {...register('types')} 
-                placeholder="e.g., colleague, friend, mentor (comma-separated)" 
-                className="min-h-[60px]" 
+              <Input 
+                id="customTypes" 
+                {...register('customTypes')} 
+                placeholder="e.g., project_lead, teammate (comma-separated)" 
                 disabled={isProcessing} 
               />
-              {errors.types && <p className="text-xs text-destructive mt-1">{errors.types.message}</p>}
+              {errors.customTypes && <p className="text-xs text-destructive mt-1">{errors.customTypes.message}</p>}
             </div>
+            
+            <hr className="my-4 border-border"/>
 
+            <h3 className="text-md font-semibold mb-1 flex items-center"><FileText className="mr-2 h-5 w-5 text-primary/80" />Optional Details</h3>
+            
             <div>
               <Label htmlFor="reasons" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Info className="mr-1.5 h-4 w-4" />Reasons
+                Context / Reasons
               </Label>
               <Textarea 
                 id="reasons" 
                 {...register('reasons')} 
-                placeholder="e.g., Worked at Globex, University alumni (comma-separated)" 
-                className="min-h-[60px]" 
+                placeholder="e.g., Worked at Globex Corp (Project Alpha).&#10;University alumni - Class of 2010. (Separate reasons with new lines)" 
+                className="min-h-[80px]" 
                 disabled={isProcessing} 
               />
                {errors.reasons && <p className="text-xs text-destructive mt-1">{errors.reasons.message}</p>}
             </div>
 
             <div>
-              <Label htmlFor="strength" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Hash className="mr-1.5 h-4 w-4" />Strength (1-5, optional)
-              </Label>
-              <Input 
-                id="strength" 
-                type="number"
-                min="1"
-                max="5"
-                {...register('strength')} 
-                placeholder="e.g., 4" 
-                disabled={isProcessing} 
-              />
-              {errors.strength && <p className="text-xs text-destructive mt-1">{errors.strength.message}</p>}
+                <Label htmlFor="strength" className="flex items-center text-sm font-medium text-muted-foreground mb-2">
+                    Strength of Connection (1-5): {currentStrength !== undefined ? currentStrength : "Not set"}
+                </Label>
+                <Controller
+                    name="strength"
+                    control={control}
+                    render={({ field }) => (
+                        <Slider
+                            id="strength"
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={currentStrength !== undefined ? [currentStrength] : []}
+                            onValueChange={(value) => {
+                                setCurrentStrength(value[0]);
+                                field.onChange(value[0]?.toString() || ""); // Update RHF form value if needed
+                            }}
+                            disabled={isProcessing}
+                            className="my-3"
+                        />
+                    )}
+                />
+                {errors.strength && <p className="text-xs text-destructive mt-1">{errors.strength.message}</p>}
             </div>
             
             <div>
               <Label htmlFor="notes" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <FileText className="mr-1.5 h-4 w-4" />Notes
+                Private Notes
               </Label>
               <Textarea 
                 id="notes" 
                 {...register('notes')} 
-                placeholder="Any additional notes about this connection" 
+                placeholder="Any additional private notes about this connection" 
                 className="min-h-[80px]" 
                 disabled={isProcessing} 
               />
@@ -163,7 +291,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form="create-connection-form" disabled={isProcessing || !isDirty} className="min-w-[100px]">
+          <Button type="submit" form="create-connection-form" disabled={isProcessing || !isFormActuallyDirty} className="min-w-[100px]">
             {isProcessing ? (
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -186,3 +314,5 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
 };
 
 export default CreateConnectionDialog;
+
+```

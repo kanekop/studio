@@ -126,10 +126,13 @@ export interface Connection {
   updatedAt: any; // Firestore serverTimestamp
 }
 
-// Form data for creating a new connection.
+// Form data for creating a new connection, processed by the CreateConnectionDialog.
 export interface CreateConnectionFormData {
-  types: string; // Comma-separated string
-  reasons: string; // Comma-separated string
+  predefinedTypes: string[]; // Array of selected predefined type keys (e.g., "colleague", "parent")
+  customTypes: string; // Comma-separated string from the custom types input field
+  reasons: string; // Raw string from the reasons textarea (to be split into an array later)
   strength?: string; // String to be parsed to number or null
   notes?: string;
 }
+
+```

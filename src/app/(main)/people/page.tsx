@@ -8,8 +8,8 @@ import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
-import CreateConnectionDialog from '@/components/features/CreateConnectionDialog'; // New Dialog
-import type { Person, FieldMergeChoices, SuggestedMergePair, CreateConnectionFormData } from '@/types';
+import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog'; // Updated Import
+import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types'; // CreateConnectionFormData removed
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -54,7 +54,7 @@ export default function ManagePeoplePage() {
     clearPeopleSelectionForDeletion,
     deleteSelectedPeople,
     updateGlobalPersonDetails,
-    addConnection, // New context function
+    addConnection, // Context function
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -135,11 +135,10 @@ export default function ManagePeoplePage() {
   };
 
   const handleConfirmDelete = async () => {
-    setIsProcessing(true); // Manually set processing for the AlertDialog
+    // isProcessing is handled by deleteSelectedPeople in context
     await deleteSelectedPeople();
     setIsDeleteSelectionMode(false); 
     setIsDeleteDialogOpen(false);
-    setIsProcessing(false); // Manually clear processing
   };
 
   const handleOpenEditPersonDialog = (person: Person) => {
@@ -177,26 +176,17 @@ export default function ManagePeoplePage() {
     }
   };
 
-  const handleSaveConnection = async (data: CreateConnectionFormData) => {
+  const handleSaveConnection = async (data: ProcessedConnectionFormData) => { // Updated data type
     if (!sourcePersonForConnection || !targetPersonForConnection) return;
     setIsSavingConnection(true);
-
-    const typesArray = data.types.split(',').map(t => t.trim()).filter(t => t);
-    const reasonsArray = data.reasons.split(',').map(r => r.trim()).filter(r => r);
-    const strengthNum = data.strength ? parseInt(data.strength, 10) : undefined;
     
-    if (data.strength && (isNaN(strengthNum) || strengthNum < 1 || strengthNum > 5)) {
-        toast({ title: "Invalid Strength", description: "Strength must be a number between 1 and 5, or empty.", variant: "destructive"});
-        setIsSavingConnection(false);
-        return;
-    }
-
+    // Types and Reasons are now expected as string[] from the dialog
     const connectionId = await addConnection(
       sourcePersonForConnection.id,
       targetPersonForConnection.id,
-      typesArray,
-      reasonsArray,
-      strengthNum,
+      data.types, 
+      data.reasons,
+      data.strength, // Already a number or undefined from dialog
       data.notes
     );
     setIsSavingConnection(false);
@@ -501,3 +491,5 @@ export default function ManagePeoplePage() {
     </div>
   );
 }
+
+```

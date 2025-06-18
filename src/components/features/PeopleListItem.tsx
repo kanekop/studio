@@ -116,10 +116,12 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     e.dataTransfer.setData("sourcePersonId", person.id);
     e.dataTransfer.effectAllowed = "move";
     setIsBeingDragged(true);
+    // Add a class to the document body to indicate dragging is happening
+    document.body.classList.add('dragging-person-card');
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); // Necessary to allow dropping
+    e.preventDefault(); 
     if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
       e.dataTransfer.dropEffect = "none";
       return;
@@ -130,15 +132,16 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
-    setIsBeingDraggedOver(true);
+    const sourcePersonId = e.dataTransfer.types.includes("sourcepersonid") ? e.dataTransfer.getData("sourcePersonId") : null;
+    if (sourcePersonId && sourcePersonId !== person.id) {
+        setIsBeingDraggedOver(true);
+    }
   };
   
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-     // Check if the mouse is leaving the element for a child or outside entirely
-    if (e.relatedTarget && (e.currentTarget as Node).contains(e.relatedTarget as Node)) {
-      return; // Still inside the card or one of its children
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setIsBeingDraggedOver(false);
     }
-    setIsBeingDraggedOver(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -156,7 +159,8 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   
   const handleDragEnd = () => {
     setIsBeingDragged(false);
-    // Note: isBeingDraggedOver should be reset by onDragLeave or onDrop on the target
+    setIsBeingDraggedOver(false); // Ensure this is reset
+    document.body.classList.remove('dragging-person-card');
   };
 
 
@@ -172,12 +176,12 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       className={cn(
         "flex flex-col h-full shadow-md hover:shadow-lg transition-all duration-200 rounded-lg overflow-hidden relative group",
         ((isMergeSelectionMode || isDeleteSelectionMode) && !disableActions) && "cursor-pointer",
-        (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-blue-500 border-blue-500",
-        (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-destructive border-destructive",
+        (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-offset-2 ring-blue-500 border-blue-500",
+        (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-offset-2 ring-destructive border-destructive",
         (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70", 
         (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed",
-        isBeingDraggedOver && !disableActions && !isDeleteSelectionMode && !isMergeSelectionMode && "ring-2 ring-green-500 border-green-500 scale-105",
-        isBeingDragged && "opacity-50 border-dashed border-primary"
+        isBeingDragged && "opacity-60 border-dashed border-primary scale-95 shadow-xl z-50",
+        isBeingDraggedOver && !isBeingDragged && "ring-2 ring-offset-2 ring-green-500 border-green-500 scale-105 bg-green-500/10"
       )}
       onClick={handleCardClick}
       role={showCheckbox ? "button" : "listitem"}
@@ -222,7 +226,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         {isLoadingImage ? (
           <Skeleton className="w-full aspect-square bg-muted" />
         ) : (
-          <div className="aspect-square w-full relative bg-muted">
+          <div className="aspect-square w-full relative bg-muted pointer-events-none"> {/* Prevent image itself from being draggable */}
             <Image
               src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
               alt={`Face of ${person.name}`}
@@ -230,11 +234,12 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
               sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover"
               data-ai-hint="person portrait"
+              draggable="false" 
             />
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-3 flex-grow">
+      <CardContent className="p-3 flex-grow pointer-events-none"> {/* Prevent content from interfering with drag */}
         <CardTitle className="text-lg font-semibold truncate" title={person.name}>
           {person.name}
         </CardTitle>
@@ -242,7 +247,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           <p className="text-xs text-muted-foreground truncate" title={person.company}>{person.company}</p>
         )}
       </CardContent>
-      <CardFooter className="p-3 border-t bg-muted/30">
+      <CardFooter className="p-3 border-t bg-muted/30 pointer-events-none"> {/* Prevent content from interfering with drag */}
         <div className="flex items-center text-xs text-muted-foreground">
           <Layers className="h-3.5 w-3.5 mr-1.5" />
           Appears in {rosterCount} roster{rosterCount === 1 ? '' : 's'}
@@ -253,3 +258,5 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
+
+```
