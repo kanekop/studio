@@ -58,7 +58,9 @@ Given the following list of people, each with an ID, name, and optionally compan
 {{/each}}
 
 Your task is to identify pairs of people from this list who are likely to be the same individual.
-Consider variations in names (e.g., nicknames, full names, misspellings), and use company and hobbies as supporting evidence if available.
+Consider variations in names (e.g., nicknames like 'Bob' for 'Robert', full names vs. initials like 'J. Smith' vs. 'John Smith', common misspellings, or order of first/last names if applicable).
+Use company and hobbies as supporting evidence. Small variations in company names (e.g., 'Corp' vs 'Corporation') or hobby descriptions (e.g., 'hiking' vs 'mountain hiking') should still be considered matches if other information aligns.
+
 For each potential duplicate pair you identify, provide:
 - person1Id: The ID of the first person.
 - person1Name: The name of the first person.
@@ -70,9 +72,11 @@ For each potential duplicate pair you identify, provide:
 Ensure person1Id and person2Id are different.
 If no potential duplicates are found, return an empty list.
 Present your findings as a list of objects matching the output schema.
-Focus on high-quality suggestions. It's better to miss a few than to suggest many incorrect pairs.
-Example of a good reason: "Similar names ('Mike' and 'Michael') and both work at 'Google'."
-Example of another reason: "Name 'Jane Doe' and 'J. Doe' with overlapping hobbies like 'Reading'."
+Prioritize identifying likely duplicates. If unsure but there's reasonable similarity, lean towards suggesting a merge with a 'medium' or 'low' confidence, clearly stating the reason for the uncertainty.
+
+Example of a good reason (high confidence): "Similar names ('Mike K.' and 'Michael Kane') and both work at 'Tech Solutions Inc.'."
+Example of another reason (medium confidence): "Name 'Jennifer Doe' and 'Jen Doe' with overlapping hobbies like 'Reading fiction' and 'Book club', and similar company 'Innovate Ltd' vs 'Innovate Limited'."
+Example of another reason (low confidence): "Names 'Alex Chen' and 'A. Chen' are similar; no other overlapping info to increase confidence."
 `,
 });
 
