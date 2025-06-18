@@ -234,3 +234,4 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 };
 
 export default MergePeopleDialog;
+
