@@ -7,8 +7,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices } from '@/types';
+import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair } from '@/types';
 import { useToast } from "@/hooks/use-toast";
+import { suggestPeopleMerges, type SuggestMergeInput } from '@/ai/flows/suggest-people-merges-flow';
+
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -31,6 +33,8 @@ interface FaceRosterContextType {
   allUserPeople: Person[];
   isLoadingAllUserPeople: boolean;
   globallySelectedPeopleForMerge: string[];
+  mergeSuggestions: SuggestedMergePair[];
+  isLoadingMergeSuggestions: boolean;
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -51,6 +55,7 @@ interface FaceRosterContextType {
     sourcePersonId: string, 
     fieldChoices: FieldMergeChoices
   ) => Promise<void>;
+  fetchMergeSuggestions: () => Promise<void>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -72,6 +77,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [allUserPeople, setAllUserPeople] = useState<Person[]>([]);
   const [isLoadingAllUserPeople, setIsLoadingAllUserPeople] = useState<boolean>(false);
   const [globallySelectedPeopleForMerge, setGloballySelectedPeopleForMerge] = useState<string[]>([]);
+  const [mergeSuggestions, setMergeSuggestions] = useState<SuggestedMergePair[]>([]);
+  const [isLoadingMergeSuggestions, setIsLoadingMergeSuggestions] = useState<boolean>(false);
   
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -81,6 +88,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setRoster([]);
     setSelectedPersonId(null);
     setCurrentRosterDocId(null); 
+    // Do not clear merge suggestions here as they are global
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
     }
@@ -162,6 +170,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setUserRosters([]);
         setAllUserPeople([]);
         setGloballySelectedPeopleForMerge([]);
+        setMergeSuggestions([]);
       } else {
         fetchUserRosters();
         fetchAllUserPeople(); 
@@ -777,11 +786,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } else {
         if (prevSelected.length < 2) {
           return [...prevSelected, personId];
+        } else { // If already 2 selected, replace the second one (or first, depending on strategy)
+          // This strategy replaces the last selected if trying to add a third.
+          // A more sophisticated UX might involve highlighting which to replace or disallowing.
+          // For now, let's replace the second element.
+          // Or even better,toast a message "Only two people can be selected for merge."
+           toast({title: "Selection Limit", description: "You can only select two people to merge at a time.", variant: "default"});
+           return prevSelected;
         }
-        return prevSelected; 
       }
     });
-  }, []);
+  }, [toast]);
 
   const clearGlobalMergeSelection = useCallback(() => {
     setGloballySelectedPeopleForMerge([]);
@@ -814,30 +829,37 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const sourceData = sourceDoc.data() as Person;
         
         const getValue = (fieldKey: keyof FieldMergeChoices, tVal: string | undefined, sVal: string | undefined): string | undefined => {
-            if (fieldChoices[fieldKey] === 'person1') return tVal;
-            if (fieldChoices[fieldKey] === 'person2') return sVal;
-            return tVal || sVal; // Default fallback, should ideally not happen if choices are enforced
+            const choice = fieldChoices[fieldKey];
+            if (choice === 'person1') return tVal;
+            if (choice === 'person2') return sVal;
+            return tVal; // Default to target if choice is somehow not set, though UI should enforce it.
         };
 
-        const mergedName = getValue('name', targetData.name, sourceData.name) || targetData.name; // Name is crucial
+        const mergedName = getValue('name', targetData.name, sourceData.name) || targetData.name;
         const mergedCompany = getValue('company', targetData.company, sourceData.company);
         const mergedHobbies = getValue('hobbies', targetData.hobbies, sourceData.hobbies);
         const mergedBirthday = getValue('birthday', targetData.birthday, sourceData.birthday);
         const mergedFirstMet = getValue('firstMet', targetData.firstMet, sourceData.firstMet);
         const mergedFirstMetContext = getValue('firstMetContext', targetData.firstMetContext, sourceData.firstMetContext);
         
-        let mergedNotes = targetData.notes || "";
-        if (sourceData.notes) {
-          mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${sourceData.name} (ID: ${sourcePersonId}):\n${sourceData.notes}`;
+        let mergedNotes = fieldChoices.name === 'person1' ? (targetData.notes || "") : (sourceData.notes || "");
+        const otherPersonsNotes = fieldChoices.name === 'person1' ? (sourceData.notes || "") : (targetData.notes || "");
+        const otherPersonsName = fieldChoices.name === 'person1' ? sourceData.name : targetData.name;
+        const otherPersonsId = fieldChoices.name === 'person1' ? sourceData.id : targetData.id;
+
+
+        if (otherPersonsNotes) {
+            mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${otherPersonsName} (ID: ${otherPersonsId}):\n${otherPersonsNotes}`;
         }
         
-        const mergedFaceAppearances: FaceAppearance[] = [...(targetData.faceAppearances || [])];
-        (sourceData.faceAppearances || []).forEach(sourceAppearance => {
-          if (!mergedFaceAppearances.some(targetAppearance => targetAppearance.faceImageStoragePath === sourceAppearance.faceImageStoragePath)) {
-            mergedFaceAppearances.push(sourceAppearance);
-          }
+        const mergedFaceAppearancesSet = new Map<string, FaceAppearance>();
+        (targetData.faceAppearances || []).forEach(app => mergedFaceAppearancesSet.set(app.faceImageStoragePath, app));
+        (sourceData.faceAppearances || []).forEach(app => {
+            if (!mergedFaceAppearancesSet.has(app.faceImageStoragePath)) {
+                mergedFaceAppearancesSet.set(app.faceImageStoragePath, app);
+            }
         });
-
+        const mergedFaceAppearances = Array.from(mergedFaceAppearancesSet.values());
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
 
         transaction.update(targetPersonRef, {
@@ -854,27 +876,47 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
 
         transaction.delete(sourcePersonRef);
+
+        // Update rosters to replace sourcePersonId with targetPersonId in peopleIds
+        const allInvolvedRosterIds = mergedRosterIds; // Rosters that might contain sourcePersonId
+        for (const rosterId of allInvolvedRosterIds) {
+          const rosterRef = doc(db, "rosters", rosterId);
+          // We can't read inside a transaction after a write to a different doc usually, 
+          // so we'll do this in a subsequent batch or separate updates if needed.
+          // For now, we assume rosterIds on targetPerson is now the superset.
+          // We need to ensure sourcePersonId is removed from rosters it was in.
+          // And targetPersonId is added (which arrayUnion in the merge already handles for targetData).
+          // The main thing is removing sourcePersonId.
+          // This part might be better handled outside the transaction or in a more complex way.
+          // Simplified: The transaction will update the person. Roster updates will be separate.
+        }
       });
 
-      const sourceRosterIds = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
+      // Post-transaction: Update roster documents
       const batch = writeBatch(db);
-      for (const rosterId of sourceRosterIds) {
+      const sourceRosterIdsFromDataSource = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
+      
+      for (const rosterId of sourceRosterIdsFromDataSource) {
         const rosterRef = doc(db, "rosters", rosterId);
         batch.update(rosterRef, {
-          peopleIds: arrayRemove(sourcePersonId) 
+          peopleIds: arrayRemove(sourcePersonId)
         });
+        // Ensure target is in, though the person.rosterIds update should make this somewhat redundant
+        // if other flows correctly update roster.peopleIds from person.rosterIds.
+        // To be safe, ensure target ID is present.
         batch.update(rosterRef, {
-          peopleIds: arrayUnion(targetPersonId)
+           peopleIds: arrayUnion(targetPersonId) 
         });
       }
       await batch.commit();
 
+
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetName = allUserPeople.find(p => p.id === targetPersonId)?.name || "Target Person";
+      const targetName = allUserPeople.find(p => p.id === targetPersonId)?.name || "Target Person"; // Name might have changed by merge
 
       toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetName}.` });
       
-      await fetchAllUserPeople();
+      await fetchAllUserPeople(); // Refresh lists
       await fetchUserRosters();
       clearGlobalMergeSelection();
 
@@ -885,6 +927,33 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsProcessing(false);
     }
   }, [db, currentUser, toast, fetchAllUserPeople, fetchUserRosters, clearGlobalMergeSelection, allUserPeople]);
+
+  const fetchMergeSuggestions = useCallback(async () => {
+    if (!currentUser || allUserPeople.length < 2) {
+      setMergeSuggestions([]);
+      if (allUserPeople.length < 2 && currentUser) {
+        toast({ title: "Not Enough People", description: "Need at least two people registered to suggest merges.", variant: "default"});
+      }
+      return;
+    }
+    setIsLoadingMergeSuggestions(true);
+    try {
+      const flowInput: SuggestMergeInput = allUserPeople.map(p => ({ id: p.id, name: p.name }));
+      const suggestions = await suggestPeopleMerges(flowInput);
+      setMergeSuggestions(suggestions);
+      if (suggestions.length === 0) {
+        toast({ title: "No Merge Suggestions", description: "The AI (placeholder) found no potential duplicates based on current criteria." });
+      } else {
+        toast({ title: "Merge Suggestions Found", description: `Found ${suggestions.length} potential merge(s). Review them below.` });
+      }
+    } catch (error: any) {
+      console.error("FRC: Error fetching merge suggestions:", error);
+      toast({ title: "Suggestion Error", description: `Could not fetch merge suggestions: ${error.message}`, variant: "destructive" });
+      setMergeSuggestions([]);
+    } finally {
+      setIsLoadingMergeSuggestions(false);
+    }
+  }, [currentUser, allUserPeople, toast]);
 
 
   return (
@@ -904,6 +973,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       allUserPeople,
       isLoadingAllUserPeople,
       globallySelectedPeopleForMerge,
+      mergeSuggestions,
+      isLoadingMergeSuggestions,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -919,6 +990,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       toggleGlobalPersonSelectionForMerge,
       clearGlobalMergeSelection,
       performGlobalPeopleMerge,
+      fetchMergeSuggestions,
     }}>
       {children}
     </FaceRosterContext.Provider>

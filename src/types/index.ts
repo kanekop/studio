@@ -101,3 +101,13 @@ export interface FieldMergeChoices {
   firstMetContext: 'person1' | 'person2';
   // Notes are typically concatenated or handled with a specific strategy, not a simple choice.
 }
+
+// Represents a pair of people suggested for merging by the AI (or placeholder logic).
+export interface SuggestedMergePair {
+  person1Id: string;
+  person1Name: string; // For display purposes
+  person2Id: string;
+  person2Name: string; // For display purposes
+  reason: string; // Why this pair is suggested
+  confidence?: 'high' | 'medium' | 'low'; // Optional confidence level
+}

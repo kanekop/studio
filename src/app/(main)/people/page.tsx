@@ -3,11 +3,14 @@
 import React, { useEffect, useState } from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
-import type { Person, FieldMergeChoices } from '@/types';
+import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+
 
 export default function ManagePeoplePage() {
   const { 
@@ -20,6 +23,9 @@ export default function ManagePeoplePage() {
     clearGlobalMergeSelection,
     performGlobalPeopleMerge,
     isProcessing,
+    fetchMergeSuggestions,
+    mergeSuggestions,
+    isLoadingMergeSuggestions,
   } = useFaceRoster();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
@@ -39,12 +45,25 @@ export default function ManagePeoplePage() {
 
   const handleToggleMergeMode = () => {
     setIsMergeSelectionMode(!isMergeSelectionMode);
+    // If exiting merge mode, ensure suggestions are cleared or handled if needed
+    // For now, merge suggestions persist until explicitly re-fetched or page reloads
   };
 
-  const handleInitiateMerge = () => {
+  const handleInitiateMergeFromSelection = () => {
     if (globallySelectedPeopleForMerge.length === 2) {
       setIsMergeDialogOpen(true);
     }
+  };
+
+  const handleInitiateMergeFromSuggestion = (suggestion: SuggestedMergePair) => {
+    clearGlobalMergeSelection(); // Clear any manual selections
+    toggleGlobalPersonSelectionForMerge(suggestion.person1Id);
+    toggleGlobalPersonSelectionForMerge(suggestion.person2Id);
+    setIsMergeSelectionMode(true); // Enter merge selection mode
+    // Timeout to allow state to update before opening dialog
+    setTimeout(() => {
+        setIsMergeDialogOpen(true);
+    }, 0);
   };
   
   const handleConfirmMergeFromDialog = async (
@@ -54,10 +73,10 @@ export default function ManagePeoplePage() {
   ) => {
     await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices);
     setIsMergeDialogOpen(false);
-    setIsMergeSelectionMode(false); // Exit merge selection mode after merge
+    setIsMergeSelectionMode(false); 
   };
   
-  const canMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing;
+  const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing;
 
   const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
   const person2ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[1]) || null;
@@ -70,8 +89,24 @@ export default function ManagePeoplePage() {
           Manage People
         </h1>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled>
-            <Brain className="mr-2 h-4 w-4" /> AI Merge Suggestions (Soon)
+          <Button 
+            variant="outline" 
+            onClick={fetchMergeSuggestions} 
+            disabled={isProcessing || isLoadingMergeSuggestions || allUserPeople.length < 2}
+          >
+            {isLoadingMergeSuggestions ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Finding...
+              </>
+            ) : (
+              <>
+                <Brain className="mr-2 h-4 w-4" /> AI Merge Suggestions
+              </>
+            )}
           </Button>
           <Button 
             variant={isMergeSelectionMode ? "destructive" : "outline"} 
@@ -84,23 +119,85 @@ export default function ManagePeoplePage() {
               </>
             ) : (
               <>
-                <UserCheck className="mr-2 h-4 w-4" /> Select to Merge
+                <UserCheck className="mr-2 h-4 w-4" /> Select to Merge Manually
               </>
             )}
           </Button>
           {isMergeSelectionMode && (
             <Button 
-              onClick={handleInitiateMerge}
-              disabled={!canMerge}
+              onClick={handleInitiateMergeFromSelection}
+              disabled={!canManuallyMerge}
               size="default"
               className="bg-green-600 hover:bg-green-700 text-white"
             >
-              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge.length})
+              <Merge className="mr-2 h-4 w-4" /> Merge Manually Selected ({globallySelectedPeopleForMerge.length})
             </Button>
           )}
         </div>
       </div>
       
+      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && (
+        <Card className="mb-6 shadow-md">
+          <CardHeader>
+            <CardTitle className="font-headline text-xl flex items-center">
+              <SearchCheck className="mr-2 h-5 w-5 text-primary" /> Merge Suggestions
+            </CardTitle>
+            <CardDescription>
+              The AI (placeholder) has found these potential duplicates. Review and merge if appropriate.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="max-h-[300px] pr-3">
+              <div className="space-y-3">
+                {mergeSuggestions.map((suggestion, index) => (
+                  <div key={`${suggestion.person1Id}-${suggestion.person2Id}-${index}`} className="p-3 border rounded-md bg-card/80 hover:shadow-sm">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <div>
+                        <p className="font-medium text-sm">
+                          Merge <strong className="text-accent">{suggestion.person1Name}</strong> (ID: ...{suggestion.person1Id.slice(-4)})
+                          <br/>with <strong className="text-accent">{suggestion.person2Name}</strong> (ID: ...{suggestion.person2Id.slice(-4)})?
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">Reason: {suggestion.reason}</p>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => handleInitiateMergeFromSuggestion(suggestion)}
+                        disabled={isProcessing}
+                        className="mt-2 sm:mt-0 shrink-0"
+                      >
+                        <Merge className="mr-2 h-4 w-4" /> Review & Merge Pair
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && (
+         <div className="mb-6 p-4 text-center text-muted-foreground">
+            <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Looking for merge suggestions...
+        </div>
+      )}
+       {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 0 && (
+         <Card className="mb-6 shadow-sm border-dashed">
+            <CardContent className="p-6 text-center">
+                <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3"/>
+                <p className="text-sm text-muted-foreground">
+                    No merge suggestions found by the current (placeholder) AI. <br/>
+                    You can still select people manually from the list below to merge them.
+                </p>
+            </CardContent>
+         </Card>
+      )}
+
+
       {isMergeSelectionMode && (
         <div className="mb-4 p-3 bg-accent/20 border border-accent rounded-md text-center">
           <p className="text-sm text-accent-foreground">
@@ -133,7 +230,7 @@ export default function ManagePeoplePage() {
         />
       )}
 
-      {person1ForDialog && person2ForDialog && (
+      {person1ForDialog && person2ForDialog && isMergeDialogOpen && (
         <MergePeopleDialog
           isOpen={isMergeDialogOpen}
           onOpenChange={setIsMergeDialogOpen}
