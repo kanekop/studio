@@ -12,6 +12,8 @@ interface PeopleListProps {
   isDeleteSelectionMode?: boolean;
   selectedPeopleForDelete?: string[];
   onToggleDeleteSelection?: (personId: string) => void;
+  onEditPerson: (person: Person) => void; // New prop for editing
+  generalActionDisabled?: boolean; // To disable edit button if other actions are in progress
 }
 
 const PeopleList: React.FC<PeopleListProps> = ({ 
@@ -22,6 +24,8 @@ const PeopleList: React.FC<PeopleListProps> = ({
   isDeleteSelectionMode = false,
   selectedPeopleForDelete = [],
   onToggleDeleteSelection = () => {},
+  onEditPerson,
+  generalActionDisabled = false,
 }) => {
   if (people.length === 0) {
     return (
@@ -44,6 +48,8 @@ const PeopleList: React.FC<PeopleListProps> = ({
           isDeleteSelectionMode={isDeleteSelectionMode}
           isSelectedForDelete={selectedPeopleForDelete.includes(person.id)}
           onToggleDeleteSelection={onToggleDeleteSelection}
+          onEdit={() => onEditPerson(person)} // Pass person to edit handler
+          disableActions={generalActionDisabled || (isMergeSelectionMode && selectedPeopleForMerge.length >=2 && !selectedPeopleForMerge.includes(person.id))}
         />
       ))}
     </div>
@@ -51,4 +57,3 @@ const PeopleList: React.FC<PeopleListProps> = ({
 };
 
 export default PeopleList;
-

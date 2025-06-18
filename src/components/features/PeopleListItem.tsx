@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import type { Person } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Layers } from 'lucide-react';
+import { Layers, Pencil } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 import { storage } from '@/lib/firebase'; 
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +21,8 @@ interface PeopleListItemProps {
   isDeleteSelectionMode?: boolean;
   isSelectedForDelete?: boolean;
   onToggleDeleteSelection?: (personId: string) => void;
+  onEdit: () => void; // New prop for edit action
+  disableActions?: boolean; // To disable edit/selection
 }
 
 const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
@@ -31,6 +34,8 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   isDeleteSelectionMode = false,
   isSelectedForDelete = false,
   onToggleDeleteSelection = () => {},
+  onEdit,
+  disableActions = false,
 }) => {
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
@@ -70,16 +75,25 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 
   const rosterCount = person.rosterIds?.length || 0;
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Prevent card click from toggling selection if an action button inside was clicked
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return; // If actions disabled and not in selection mode, do nothing
+
     if (isDeleteSelectionMode && onToggleDeleteSelection) {
       onToggleDeleteSelection(person.id);
     } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
       onToggleMergeSelection(person.id);
+    } else if (!isDeleteSelectionMode && !isMergeSelectionMode && !disableActions) {
+      // Default action if not in selection mode and not disabled: open edit
+      onEdit();
     }
-    // Future: if not in any selection mode, navigate to a person detail page
   };
 
   const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
+    if (disableActions) return;
     if (isDeleteSelectionMode && onToggleDeleteSelection) {
       onToggleDeleteSelection(person.id);
     } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
@@ -87,31 +101,37 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     }
   };
   
-  const showCheckbox = isDeleteSelectionMode || isMergeSelectionMode;
+  const showCheckbox = (isDeleteSelectionMode || isMergeSelectionMode) && !disableActions;
   const isChecked = isDeleteSelectionMode ? isSelectedForDelete : (isMergeSelectionMode ? isSelectedForMerge : false);
-  const isDisabled = isMergeSelectionMode && isDisabledForMergeSelection;
+  const effectiveDisabledForMergeSelection = isMergeSelectionMode && isDisabledForMergeSelection;
 
   return (
     <Card 
       className={cn(
-        "flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden relative",
-        (isMergeSelectionMode || isDeleteSelectionMode) && "cursor-pointer",
+        "flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden relative group",
+        ((isMergeSelectionMode || isDeleteSelectionMode) && !disableActions) && "cursor-pointer",
         (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-blue-500 border-blue-500",
         (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-destructive border-destructive",
-        isDisabled && "opacity-60 cursor-not-allowed"
+        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70", // General disable visual
+        (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed" // Specific for merge mode selection limit
       )}
       onClick={handleCardClick}
-      role={showCheckbox ? "button" : undefined}
+      role={showCheckbox ? "button" : "listitem"}
       aria-pressed={showCheckbox ? isChecked : undefined}
-      tabIndex={showCheckbox ? 0 : -1}
-      onKeyDown={showCheckbox ? (e) => { if (e.key === ' ' || e.key === 'Enter') handleCardClick(); } : undefined}
+      tabIndex={0}
+      onKeyDown={(e) => { 
+        if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button')) ) {
+          e.preventDefault(); // Prevent space bar scrolling
+          handleCardClick(e as any); 
+        }
+      }}
     >
       {showCheckbox && (
         <div className="absolute top-2 right-2 z-10 bg-background/80 p-1 rounded-full">
           <Checkbox
             checked={isChecked}
             onCheckedChange={handleCheckboxChange}
-            disabled={isDisabled}
+            disabled={effectiveDisabledForMergeSelection && !isChecked}
             aria-label={`Select ${person.name}`}
             className={cn("h-5 w-5", 
                 isDeleteSelectionMode && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
@@ -120,6 +140,21 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           />
         </div>
       )}
+      { /* Edit button shown when not in any selection mode */ }
+      {!isMergeSelectionMode && !isDeleteSelectionMode && (
+        <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-1 right-1 z-10 h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            disabled={disableActions}
+            aria-label={`Edit ${person.name}`}
+            title={`Edit ${person.name}`}
+          >
+            <Pencil className="h-4 w-4" />
+        </Button>
+      )}
+
       <CardHeader className="p-0">
         {isLoadingImage ? (
           <Skeleton className="w-full aspect-square bg-muted" />
@@ -155,4 +190,3 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
-

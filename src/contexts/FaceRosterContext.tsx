@@ -10,6 +10,7 @@ import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion
 import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
+import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
 
 
 const MAX_FILE_SIZE_MB = 10;
@@ -64,6 +65,7 @@ interface FaceRosterContextType {
   togglePersonSelectionForDeletion: (personId: string) => void;
   clearPeopleSelectionForDeletion: () => void;
   deleteSelectedPeople: () => Promise<void>;
+  updateGlobalPersonDetails: (personId: string, details: EditPersonFormData) => Promise<boolean>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -73,8 +75,6 @@ async function imageStoragePathToDataURI(path: string): Promise<string | undefin
   try {
     const fileRef = storageRefStandard(appFirebaseStorage, path);
     const url = await getDownloadURL(fileRef);
-    // For fetching from storage, we need to ensure the request can succeed (CORS on bucket, or proxy)
-    // For simplicity here, assuming public access or proper CORS for getDownloadURL
     const response = await fetch(url); 
     if (!response.ok) {
       console.error(`Failed to fetch image from URL ${url}: ${response.status} ${response.statusText}`);
@@ -175,7 +175,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const q = query(
         collection(db, "people"),
         where("addedBy", "==", currentUser.uid)
-        // Removed orderBy from here, will sort client-side
       );
       const querySnapshot = await getDocs(q);
       const fetchedPeopleDocs: Person[] = [];
@@ -210,12 +209,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setAllUserPeople(fetchedPeopleDocs);
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
-      // Avoid toast spamming if indexes are missing during sort changes
-      // if (error instanceof FirestoreError) {
-      //   // toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
-      // } else {
-      //   toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${(error as Error).message}`, variant: "destructive" });
-      // }
       setAllUserPeople([]);
     } finally {
       setIsLoadingAllUserPeople(false);
@@ -387,170 +380,161 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const createRosterFromRegions = useCallback(async () => {
     if (!imageDataUrl || drawnRegions.length === 0 || !currentRosterDocId) {
-      toast({ title: "Error", description: "No image, regions, or active roster. Please draw regions first.", variant: "destructive" });
-      return;
+        toast({ title: "Error", description: "No image, regions, or active roster. Please draw regions first.", variant: "destructive" });
+        return;
     }
     if (!currentUser?.uid || !db || !appFirebaseStorage) {
-      toast({ title: "Error", description: "User not authenticated or Firebase services unavailable.", variant: "destructive" });
-      return;
+        toast({ title: "Error", description: "User not authenticated or Firebase services unavailable.", variant: "destructive" });
+        return;
     }
-    
+
     setIsProcessing(true);
-    
     const img = new Image();
-    if (imageDataUrl && (imageDataUrl.startsWith('http://') || imageDataUrl.startsWith('https://'))) {
-      img.crossOrigin = "anonymous";
+    if (imageDataUrl.startsWith('http://') || imageDataUrl.startsWith('https://')) {
+        img.crossOrigin = "anonymous";
     }
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = (errEventOrMsg) => {
-        let specificErrorMessage = 'Image load failed for cropping.';
-        if (typeof errEventOrMsg === 'string') specificErrorMessage = errEventOrMsg;
-        else if (errEventOrMsg instanceof Event) specificErrorMessage = `Image load failed. Event type: ${errEventOrMsg.type}.`;
-        else if (errEventOrMsg && typeof errEventOrMsg === 'object' && 'message' in errEventOrMsg) specificErrorMessage = (errEventOrMsg as Error).message;
-        console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Raw event:", errEventOrMsg);
-        reject(new Error(`Failed to load base image for cropping. Error: ${specificErrorMessage}`));
-      };
-      img.src = imageDataUrl; 
+        img.onload = () => resolve();
+        img.onerror = (errEventOrMsg) => {
+            let specificErrorMessage = 'Image load failed for cropping.';
+            if (typeof errEventOrMsg === 'string') specificErrorMessage = errEventOrMsg;
+            else if (errEventOrMsg instanceof Event) specificErrorMessage = `Image load failed. Event type: ${errEventOrMsg.type}.`;
+            else if (errEventOrMsg && typeof errEventOrMsg === 'object' && 'message' in errEventOrMsg) specificErrorMessage = (errEventOrMsg as Error).message;
+            console.error("FRC: Error loading image for cropping. URL:", imageDataUrl, "Specific error:", specificErrorMessage, "Raw event:", errEventOrMsg);
+            reject(new Error(`Failed to load base image for cropping. Error: ${specificErrorMessage}`));
+        };
+        img.src = imageDataUrl;
     });
 
-    type PreparedPersonData = {
-      id: string;
-      data: Omit<Person, 'id'>;
-      faceImageUrlForUI: string; // Download URL for UI
+    type UploadedFaceInfo = {
+      personId: string;
+      defaultName: string;
+      faceImageStoragePath: string;
+      faceImageUrlForUI: string;
       originalRegion: Region;
     };
 
     try {
-      await imageLoadPromise;
+        await imageLoadPromise;
+        let personCounter = roster.length;
+        const uploadPromises: Promise<UploadedFaceInfo | null>[] = drawnRegions.map(async (region, index) => {
+            personCounter++;
+            const defaultName = `Person ${personCounter}`;
+            const newPersonId = doc(collection(db!, "people")).id;
 
-      let personCounter = roster.length; 
-      const preparedPeoplePromises: Promise<PreparedPersonData | null>[] = [];
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = Math.max(1, Math.floor(region.width));
+            tempCanvas.height = Math.max(1, Math.floor(region.height));
+            const ctx = tempCanvas.getContext('2d');
+            if (!ctx) {
+                console.warn(`FRC: Could not get 2D context for canvas for region ${index}, skipping.`);
+                return null;
+            }
+            ctx.drawImage(img, Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 0, 0, tempCanvas.width, tempCanvas.height);
+            const faceImageDataURI = tempCanvas.toDataURL('image/png');
 
-      for (let i = 0; i < drawnRegions.length; i++) {
-        const region = drawnRegions[i];
-        personCounter++;
-        const defaultName = `Person ${personCounter}`;
-        const newPersonId = doc(collection(db, "people")).id; // Generate ID upfront
+            const croppedFaceFileName = `${currentRosterDocId}_${newPersonId}_${Date.now()}.png`;
+            const faceImageStoragePath = `users/${currentUser!.uid}/cropped_faces/${croppedFaceFileName}`;
+            const croppedFaceRef = storageRefStandard(appFirebaseStorage!, faceImageStoragePath);
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.max(1, Math.floor(region.width)); 
-        tempCanvas.height = Math.max(1, Math.floor(region.height));
-        const ctx = tempCanvas.getContext('2d');
-        if (!ctx) {
-            console.warn(`FRC: Could not get 2D context for canvas for region ${i}, skipping.`);
-            preparedPeoplePromises.push(Promise.resolve(null)); // Keep promise array length consistent
-            continue; 
+            try {
+                const uploadResult = await uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL);
+                const downloadURL = await getDownloadURL(uploadResult.ref);
+                return {
+                    personId: newPersonId,
+                    defaultName,
+                    faceImageStoragePath,
+                    faceImageUrlForUI: downloadURL,
+                    originalRegion: region
+                };
+            } catch (uploadError) {
+                console.error(`FRC: Error uploading face image for new person (ID: ${newPersonId}) or getting URL:`, uploadError);
+                toast({ title: "Image Upload Failed", description: `Could not save image for a new person.`, variant: "destructive" });
+                return null;
+            }
+        });
+
+        const uploadedFacesResults = await Promise.all(uploadPromises);
+        const successfullyUploadedFaces = uploadedFacesResults.filter(res => res !== null) as UploadedFaceInfo[];
+
+        if (successfullyUploadedFaces.length === 0 && drawnRegions.length > 0) {
+            toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive" });
+            setIsProcessing(false);
+            return;
         }
-        ctx.drawImage(img, Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 0, 0, tempCanvas.width, tempCanvas.height);
-        const faceImageDataURI = tempCanvas.toDataURL('image/png'); 
-        
-        const croppedFaceFileName = `${currentRosterDocId}_${newPersonId}_${Date.now()}.png`;
-        const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
-        const croppedFaceRef = storageRefStandard(appFirebaseStorage, faceImageStoragePath);
-        
-        const uploadPromise = uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL)
-          .then(uploadResult => getDownloadURL(uploadResult.ref))
-          .then(downloadURL => {
+        if (successfullyUploadedFaces.length === 0) {
+            setIsProcessing(false);
+            return;
+        }
+
+        const batch = writeBatch(db!);
+        const newPersonIdsForRosterUpdate: string[] = [];
+        const newPeopleForUI: EditablePersonInContext[] = [];
+
+        successfullyUploadedFaces.forEach(faceInfo => {
             const newAppearance: FaceAppearance = {
-                rosterId: currentRosterDocId,
-                faceImageStoragePath: faceImageStoragePath,
-                originalRegion: region,
+                rosterId: currentRosterDocId!,
+                faceImageStoragePath: faceInfo.faceImageStoragePath,
+                originalRegion: faceInfo.originalRegion,
             };
             const newPersonDataForDb: Omit<Person, 'id'> = {
-                name: defaultName,
-                aiName: defaultName, 
+                name: faceInfo.defaultName,
+                aiName: faceInfo.defaultName,
                 notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
                 faceAppearances: [newAppearance],
-                addedBy: currentUser.uid,
-                rosterIds: [currentRosterDocId],
+                addedBy: currentUser!.uid,
+                rosterIds: [currentRosterDocId!],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
-            return { 
-              id: newPersonId, 
-              data: newPersonDataForDb, 
-              faceImageUrlForUI: downloadURL,
-              originalRegion: region
-            } as PreparedPersonData;
-          })
-          .catch(uploadError => {
-            console.error(`FRC: Error uploading face image for Person (ID: ${newPersonId}) or getting URL:`, uploadError);
-            toast({ title: "Image Upload Failed", description: `Could not save image for a new person.`, variant: "destructive"});
-            return null; 
-          });
-        preparedPeoplePromises.push(uploadPromise);
-      }
+            const personDocRef = doc(db!, "people", faceInfo.personId);
+            batch.set(personDocRef, newPersonDataForDb);
+            newPersonIdsForRosterUpdate.push(faceInfo.personId);
 
-      const successfullyPreparedPeople = (await Promise.all(preparedPeoplePromises)).filter(p => p !== null) as PreparedPersonData[];
-      
-      if (successfullyPreparedPeople.length === 0 && drawnRegions.length > 0) {
-        toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive"});
-        setIsProcessing(false);
-        return;
-      }
-      if (successfullyPreparedPeople.length === 0) {
-        setIsProcessing(false);
-        return;
-      }
-
-      const batch = writeBatch(db);
-      const newPersonIdsForRosterUpdate: string[] = [];
-      const newPeopleForUI: EditablePersonInContext[] = [];
-
-      successfullyPreparedPeople.forEach(prepData => {
-        const personDocRef = doc(db, "people", prepData.id);
-        batch.set(personDocRef, prepData.data);
-        newPersonIdsForRosterUpdate.push(prepData.id);
-        
-        newPeopleForUI.push({
-          id: prepData.id,
-          isNew: false,
-          name: prepData.data.name,
-          aiName: prepData.data.aiName,
-          notes: prepData.data.notes,
-          company: prepData.data.company,
-          hobbies: prepData.data.hobbies,
-          birthday: prepData.data.birthday,
-          firstMet: prepData.data.firstMet,
-          firstMetContext: prepData.data.firstMetContext,
-          faceImageUrl: prepData.faceImageUrlForUI,
-          currentRosterAppearance: {
-            rosterId: currentRosterDocId,
-            faceImageStoragePath: (prepData.data.faceAppearances && prepData.data.faceAppearances[0]?.faceImageStoragePath) || '',
-            originalRegion: prepData.originalRegion,
-          },
+            newPeopleForUI.push({
+                id: faceInfo.personId,
+                isNew: false,
+                name: faceInfo.defaultName,
+                aiName: faceInfo.defaultName,
+                notes: '',
+                company: '',
+                hobbies: '',
+                birthday: '',
+                firstMet: '',
+                firstMetContext: '',
+                faceImageUrl: faceInfo.faceImageUrlForUI,
+                currentRosterAppearance: newAppearance,
+            });
         });
-      });
-      
-      const rosterRef = doc(db, "rosters", currentRosterDocId);
-      batch.update(rosterRef, {
-          peopleIds: arrayUnion(...newPersonIdsForRosterUpdate), 
-          updatedAt: serverTimestamp()
-      });
-      
-      await batch.commit();
-      
-      setRoster(prev => [...prev, ...newPeopleForUI]); 
-      setDrawnRegions([]); 
-      
-      if (newPeopleForUI.length > 0) {
-        setSelectedPersonId(newPeopleForUI[0].id); 
-        await fetchUserRosters(); 
-        await fetchAllUserPeople(); 
-        toast({ title: "Roster Updated", description: `${newPeopleForUI.length} new person/people saved to the roster.` });
-      } else if (drawnRegions.length > 0) { 
-         toast({ title: "Save Incomplete", description: "Some or all new people could not be saved due to image processing or upload errors.", variant: "destructive"});
-      }
+
+        const rosterRef = doc(db!, "rosters", currentRosterDocId!);
+        batch.update(rosterRef, {
+            peopleIds: arrayUnion(...newPersonIdsForRosterUpdate),
+            updatedAt: serverTimestamp()
+        });
+
+        await batch.commit();
+
+        setRoster(prev => [...prev, ...newPeopleForUI]);
+        setDrawnRegions([]);
+
+        if (newPeopleForUI.length > 0) {
+            setSelectedPersonId(newPeopleForUI[0].id);
+            await fetchUserRosters();
+            await fetchAllUserPeople();
+            toast({ title: "Roster Updated", description: `${newPeopleForUI.length} new person/people saved to the roster.` });
+        } else if (drawnRegions.length > 0) {
+            toast({ title: "Save Incomplete", description: "Some or all new people could not be saved due to image processing or upload errors.", variant: "destructive" });
+        }
 
     } catch (error: any) {
-      console.error("FRC: Error during batch roster creation:", error.message, error.stack, error);
-      toast({ title: "Roster Creation Failed", description: `Could not save new people: ${error.message}`, variant: "destructive" });
+        console.error("FRC: Error during batch roster creation:", error.message, error.stack, error);
+        toast({ title: "Roster Creation Failed", description: `Could not save new people: ${error.message}`, variant: "destructive" });
     } finally {
-      setIsProcessing(false);
+        setIsProcessing(false);
     }
-  }, [imageDataUrl, drawnRegions, roster.length, toast, currentUser, currentRosterDocId, fetchAllUserPeople, fetchUserRosters]);
+}, [imageDataUrl, drawnRegions, roster.length, toast, currentUser, currentRosterDocId, fetchAllUserPeople, fetchUserRosters]);
 
 
   const selectPerson = useCallback((id: string | null) => {
@@ -1127,6 +1111,40 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [db, appFirebaseStorage, currentUser, selectedPeopleIdsForDeletion, toast, clearPeopleSelectionForDeletion, fetchAllUserPeople, fetchUserRosters]);
 
 
+  const updateGlobalPersonDetails = useCallback(async (personId: string, details: EditPersonFormData): Promise<boolean> => {
+    if (!db || !currentUser) {
+      toast({ title: "Error", description: "User not authenticated or database service unavailable.", variant: "destructive" });
+      return false;
+    }
+    
+    setIsProcessing(true);
+    try {
+      const personDocRef = doc(db, "people", personId);
+      const updateData: Partial<Person> & { updatedAt: any } = {
+        name: details.name,
+        company: details.company || "",
+        hobbies: details.hobbies || "",
+        birthday: details.birthday || "",
+        firstMet: details.firstMet || "",
+        firstMetContext: details.firstMetContext || "",
+        notes: details.notes || "",
+        updatedAt: serverTimestamp()
+      };
+      
+      await updateDoc(personDocRef, updateData);
+      toast({ title: "Details Updated", description: `${details.name}'s information has been saved.` });
+      await fetchAllUserPeople(); // Refresh the list
+      return true;
+    } catch (error: any) {
+      console.error(`FRC: Error updating global person details (ID: ${personId}):`, error);
+      toast({ title: "Save Failed", description: `Could not save changes for ${details.name}: ${error.message}`, variant: "destructive" });
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [currentUser, toast, fetchAllUserPeople]);
+
+
   return (
     <FaceRosterContext.Provider value={{
       currentUser, 
@@ -1168,6 +1186,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       togglePersonSelectionForDeletion,
       clearPeopleSelectionForDeletion,
       deleteSelectedPeople,
+      updateGlobalPersonDetails,
     }}>
       {children}
     </FaceRosterContext.Provider>
