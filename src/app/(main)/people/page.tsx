@@ -1,20 +1,52 @@
 
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function ManagePeoplePage() {
-  const { allUserPeople, isLoadingAllUserPeople, fetchAllUserPeople, currentUser } = useFaceRoster();
+  const { 
+    allUserPeople, 
+    isLoadingAllUserPeople, 
+    fetchAllUserPeople, 
+    currentUser,
+    globallySelectedPeopleForMerge,
+    toggleGlobalPersonSelectionForMerge,
+    clearGlobalMergeSelection,
+    performGlobalPeopleMerge,
+    isProcessing,
+  } = useFaceRoster();
+
+  const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
 
   useEffect(() => {
     if (currentUser && !allUserPeople.length && !isLoadingAllUserPeople) {
       fetchAllUserPeople();
     }
   }, [currentUser, fetchAllUserPeople, allUserPeople, isLoadingAllUserPeople]);
+
+  useEffect(() => {
+    // If exiting merge mode, clear selections
+    if (!isMergeSelectionMode) {
+      clearGlobalMergeSelection();
+    }
+  }, [isMergeSelectionMode, clearGlobalMergeSelection]);
+
+  const handleToggleMergeMode = () => {
+    setIsMergeSelectionMode(!isMergeSelectionMode);
+  };
+
+  const handlePerformMerge = async () => {
+    if (globallySelectedPeopleForMerge.length === 2) {
+      await performGlobalPeopleMerge();
+      setIsMergeSelectionMode(false); // Exit merge mode after attempting merge
+    }
+  };
+  
+  const canMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -27,11 +59,42 @@ export default function ManagePeoplePage() {
           <Button variant="outline" disabled>
             <Brain className="mr-2 h-4 w-4" /> AI Merge Suggestions (Soon)
           </Button>
-          <Button variant="outline" disabled>
-            <UserCheck className="mr-2 h-4 w-4" /> Select to Merge (Soon)
+          <Button 
+            variant={isMergeSelectionMode ? "destructive" : "outline"} 
+            onClick={handleToggleMergeMode}
+            disabled={isProcessing || (!isMergeSelectionMode && allUserPeople.length < 2)}
+          >
+            {isMergeSelectionMode ? (
+              <>
+                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge
+              </>
+            ) : (
+              <>
+                <UserCheck className="mr-2 h-4 w-4" /> Select to Merge
+              </>
+            )}
           </Button>
+          {isMergeSelectionMode && (
+            <Button 
+              onClick={handlePerformMerge}
+              disabled={!canMerge}
+              size="default"
+              className="bg-green-600 hover:bg-green-700 text-white"
+            >
+              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge.length})
+            </Button>
+          )}
         </div>
       </div>
+      
+      {isMergeSelectionMode && (
+        <div className="mb-4 p-3 bg-accent/20 border border-accent rounded-md text-center">
+          <p className="text-sm text-accent-foreground">
+            Select exactly two people from the list below to merge their information. 
+            The first person selected will be the primary record.
+          </p>
+        </div>
+      )}
 
       {isLoadingAllUserPeople ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -48,7 +111,12 @@ export default function ManagePeoplePage() {
           No people registered yet. Upload images and create rosters to add people.
         </p>
       ) : (
-        <PeopleList people={allUserPeople} />
+        <PeopleList 
+          people={allUserPeople} 
+          isMergeSelectionMode={isMergeSelectionMode}
+          selectedPeopleForMerge={globallySelectedPeopleForMerge}
+          onToggleSelection={toggleGlobalPersonSelectionForMerge}
+        />
       )}
     </div>
   );

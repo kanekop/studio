@@ -6,10 +6,17 @@ import PeopleListItem from './PeopleListItem';
 
 interface PeopleListProps {
   people: Person[];
-  // Add other props as needed, e.g., for selection in future merge functionality
+  isMergeSelectionMode?: boolean;
+  selectedPeopleForMerge?: string[];
+  onToggleSelection?: (personId: string) => void;
 }
 
-const PeopleList: React.FC<PeopleListProps> = ({ people }) => {
+const PeopleList: React.FC<PeopleListProps> = ({ 
+  people,
+  isMergeSelectionMode = false,
+  selectedPeopleForMerge = [],
+  onToggleSelection = () => {}
+}) => {
   if (people.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md h-full flex items-center justify-center">
@@ -21,7 +28,14 @@ const PeopleList: React.FC<PeopleListProps> = ({ people }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
       {people.map((person) => (
-        <PeopleListItem key={person.id} person={person} />
+        <PeopleListItem 
+          key={person.id} 
+          person={person}
+          isMergeSelectionMode={isMergeSelectionMode}
+          isSelectedForMerge={selectedPeopleForMerge.includes(person.id)}
+          onToggleSelection={onToggleSelection}
+          isDisabledForSelection={isMergeSelectionMode && selectedPeopleForMerge.length >= 2 && !selectedPeopleForMerge.includes(person.id)}
+        />
       ))}
     </div>
   );

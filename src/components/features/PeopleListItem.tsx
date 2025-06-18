@@ -6,16 +6,27 @@ import type { Person } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, Layers } from 'lucide-react';
-import { storage } from '@/lib/firebase'; // Direct import for storage
+import { Checkbox } from '@/components/ui/checkbox';
+import { storage } from '@/lib/firebase'; 
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 
 interface PeopleListItemProps {
   person: Person;
-  // Add props for selection/actions in the future
+  isMergeSelectionMode?: boolean;
+  isSelectedForMerge?: boolean;
+  onToggleSelection?: (personId: string) => void;
+  isDisabledForSelection?: boolean;
 }
 
-const PeopleListItem: React.FC<PeopleListItemProps> = ({ person }) => {
+const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
+  person, 
+  isMergeSelectionMode = false,
+  isSelectedForMerge = false,
+  onToggleSelection = () => {},
+  isDisabledForSelection = false,
+}) => {
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
 
@@ -24,7 +35,6 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({ person }) => {
     setIsLoadingImage(true);
 
     const fetchImage = async () => {
-      // Use the first face appearance as the representative image for the list
       const firstAppearance = person.faceAppearances?.[0];
       if (firstAppearance?.faceImageStoragePath && storage) {
         try {
@@ -40,7 +50,6 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({ person }) => {
           }
         }
       } else {
-        // Fallback if no image path or storage not initialized
         if (isMounted) {
           setDisplayImageUrl("https://placehold.co/150x150.png?text=No+Image");
         }
@@ -56,8 +65,38 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({ person }) => {
 
   const rosterCount = person.rosterIds?.length || 0;
 
+  const handleCardClick = () => {
+    if (isMergeSelectionMode && onToggleSelection && !isDisabledForSelection) {
+      onToggleSelection(person.id);
+    }
+    // Potentially navigate to a person detail page in the future if not in merge mode
+  };
+
   return (
-    <Card className="flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden">
+    <Card 
+      className={cn(
+        "flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden relative",
+        isMergeSelectionMode && "cursor-pointer",
+        isSelectedForMerge && "ring-2 ring-primary border-primary",
+        isDisabledForSelection && "opacity-60 cursor-not-allowed"
+      )}
+      onClick={handleCardClick}
+    >
+      {isMergeSelectionMode && (
+        <div className="absolute top-2 right-2 z-10 bg-background/80 p-1 rounded-full">
+          <Checkbox
+            checked={isSelectedForMerge}
+            onCheckedChange={() => {
+              if (onToggleSelection && !isDisabledForSelection) {
+                onToggleSelection(person.id);
+              }
+            }}
+            disabled={isDisabledForSelection}
+            aria-label={`Select ${person.name} for merge`}
+            className="h-5 w-5"
+          />
+        </div>
+      )}
       <CardHeader className="p-0">
         {isLoadingImage ? (
           <Skeleton className="w-full aspect-square bg-muted" />
@@ -87,7 +126,6 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({ person }) => {
           <Layers className="h-3.5 w-3.5 mr-1.5" />
           Appears in {rosterCount} roster{rosterCount === 1 ? '' : 's'}
         </div>
-        {/* Placeholder for future action buttons */}
       </CardFooter>
     </Card>
   );

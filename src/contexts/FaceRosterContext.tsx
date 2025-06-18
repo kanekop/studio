@@ -30,19 +30,23 @@ interface FaceRosterContextType {
   isLoadingUserRosters: boolean;
   allUserPeople: Person[];
   isLoadingAllUserPeople: boolean;
+  globallySelectedPeopleForMerge: string[];
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
   clearDrawnRegions: () => void;
   createRosterFromRegions: () => Promise<void>;
   selectPerson: (id: string | null) => void;
-  updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl'>>, isNewPersonSaveOperation?: boolean) => Promise<void>;
+  updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>) => Promise<void>;
   clearAllData: (showToast?: boolean) => void; 
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
   fetchUserRosters: () => Promise<void>;
   loadRosterForEditing: (rosterId: string) => Promise<void>;
   deleteRoster: (rosterId: string) => Promise<void>;
   fetchAllUserPeople: () => Promise<void>;
+  toggleGlobalPersonSelectionForMerge: (personId: string) => void;
+  clearGlobalMergeSelection: () => void;
+  performGlobalPeopleMerge: () => Promise<void>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -62,8 +66,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
   const [allUserPeople, setAllUserPeople] = useState<Person[]>([]);
   const [isLoadingAllUserPeople, setIsLoadingAllUserPeople] = useState<boolean>(false);
+  const [globallySelectedPeopleForMerge, setGloballySelectedPeopleForMerge] = useState<string[]>([]);
   const { toast } = useToast();
-
+  
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
     setOriginalImageStoragePath(null);
@@ -152,6 +157,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         clearAllData(false); 
         setUserRosters([]);
         setAllUserPeople([]);
+        setGloballySelectedPeopleForMerge([]);
       } else {
         fetchUserRosters();
         fetchAllUserPeople(); 
@@ -383,8 +389,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updatePersonDetails = useCallback(async (
     personIdToUpdate: string, 
-    details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl'>>,
-    isNewPersonSaveOperation: boolean = false // Kept for consistency but logic for isNew is primarily from localPersonEntry.isNew
+    details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>
   ) => {
     if (!db || !currentUser?.uid || !currentRosterDocId) {
         toast({ title: "Error", description: "User not authenticated, no active roster, or database service unavailable.", variant: "destructive" });
@@ -446,8 +451,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (existingPersonDocData && existingPersonDocId) { // Update existing person
                 const personRef = doc(db, "people", existingPersonDocId);
                 batch.update(personRef, {
-                    ...details, // Apply new details
-                    name: finalName, // Ensure name is updated if changed
+                    name: finalName,
+                    notes: details.notes !== undefined ? details.notes : existingPersonDocData.notes || '',
+                    company: details.company !== undefined ? details.company : existingPersonDocData.company || '',
+                    hobbies: details.hobbies !== undefined ? details.hobbies : existingPersonDocData.hobbies || '',
+                    birthday: details.birthday !== undefined ? details.birthday : existingPersonDocData.birthday || '',
+                    firstMet: details.firstMet !== undefined ? details.firstMet : existingPersonDocData.firstMet || '',
+                    firstMetContext: details.firstMetContext !== undefined ? details.firstMetContext : existingPersonDocData.firstMetContext || '',
                     faceAppearances: arrayUnion(newAppearance),
                     rosterIds: arrayUnion(currentRosterDocId),
                     updatedAt: serverTimestamp()
@@ -475,23 +485,31 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             
             const rosterRef = doc(db, "rosters", currentRosterDocId);
             batch.update(rosterRef, {
-                peopleIds: arrayUnion(targetPersonId), // Use the correct targetPersonId
+                peopleIds: arrayUnion(targetPersonId), 
                 updatedAt: serverTimestamp()
             });
             
             await batch.commit();
-            await fetchUserRosters(); // Update list of rosters (might have new people counts)
-            await fetchAllUserPeople(); // Update master list of people
+            await fetchUserRosters();
+            await fetchAllUserPeople(); 
 
-        } else if (!localPersonEntry.isNew) { // Existing person being edited (not first save from temp)
+        } else if (!localPersonEntry.isNew) { 
             const personDocRef = doc(db, "people", personIdToUpdate); 
             const firestoreUpdateData: { [key: string]: any } = { 
-                ...details,
-                name: finalName, 
+                name: finalName,
+                notes: details.notes,
+                company: details.company,
+                hobbies: details.hobbies,
+                birthday: details.birthday,
+                firstMet: details.firstMet,
+                firstMetContext: details.firstMetContext,
                 updatedAt: serverTimestamp() 
             };
+             // Filter out undefined values to avoid overwriting with undefined
+            Object.keys(firestoreUpdateData).forEach(key => firestoreUpdateData[key] === undefined && delete firestoreUpdateData[key]);
+
             await updateDoc(personDocRef, firestoreUpdateData);
-            await fetchAllUserPeople(); // Update master list of people
+            await fetchAllUserPeople(); 
         } else {
           throw new Error("updatePersonDetails called for a local 'new' person without temp data, or for a non-new person in an unexpected way.");
         }
@@ -501,9 +519,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             p.id === personIdToUpdate 
               ? { 
                   ...p, 
-                  ...details,
                   name: finalName, 
-                  id: targetPersonId, // Crucial: update ID if it changed from temp to permanent or linked to existing
+                  notes: details.notes ?? p.notes,
+                  company: details.company ?? p.company,
+                  hobbies: details.hobbies ?? p.hobbies,
+                  birthday: details.birthday ?? p.birthday,
+                  firstMet: details.firstMet ?? p.firstMet,
+                  firstMetContext: details.firstMetContext ?? p.firstMetContext,
+                  id: targetPersonId, 
                   isNew: false, 
                   tempFaceImageDataUri: undefined,
                   tempOriginalRegion: undefined,
@@ -744,6 +767,122 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast, fetchUserRosters, currentRosterDocId, clearAllData, fetchAllUserPeople]);
 
+  const toggleGlobalPersonSelectionForMerge = useCallback((personId: string) => {
+    setGloballySelectedPeopleForMerge(prevSelected => {
+      if (prevSelected.includes(personId)) {
+        return prevSelected.filter(id => id !== personId);
+      } else {
+        if (prevSelected.length < 2) {
+          return [...prevSelected, personId];
+        }
+        // If already 2 selected, replace the first one with the new one, or just don't add.
+        // For simplicity, let's just allow toggling off or adding if less than 2.
+        // UI should prevent selecting more than 2 by disabling checkboxes.
+        return prevSelected; 
+      }
+    });
+  }, []);
+
+  const clearGlobalMergeSelection = useCallback(() => {
+    setGloballySelectedPeopleForMerge([]);
+  }, []);
+
+  const performGlobalPeopleMerge = useCallback(async () => {
+    if (!db || !currentUser || globallySelectedPeopleForMerge.length !== 2) {
+      toast({ title: "Merge Error", description: "Please select exactly two people to merge.", variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+
+    const [targetId, sourceId] = globallySelectedPeopleForMerge;
+    const targetPersonRef = doc(db, "people", targetId);
+    const sourcePersonRef = doc(db, "people", sourceId);
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const targetDoc = await transaction.get(targetPersonRef);
+        const sourceDoc = await transaction.get(sourcePersonRef);
+
+        if (!targetDoc.exists() || !sourceDoc.exists()) {
+          throw new Error("One or both selected people could not be found for merging.");
+        }
+
+        const targetData = targetDoc.data() as Person;
+        const sourceData = sourceDoc.data() as Person;
+
+        // 1. Consolidate data
+        const mergedName = targetData.name; // Target's name takes precedence
+        let mergedNotes = targetData.notes || "";
+        if (sourceData.notes) {
+          mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${sourceData.name}:\n${sourceData.notes}`;
+        }
+        const mergedCompany = targetData.company || sourceData.company || "";
+        const mergedHobbies = targetData.hobbies || sourceData.hobbies || "";
+        const mergedBirthday = targetData.birthday || sourceData.birthday || "";
+        const mergedFirstMet = targetData.firstMet || sourceData.firstMet || "";
+        const mergedFirstMetContext = targetData.firstMetContext || sourceData.firstMetContext || "";
+        
+        const mergedFaceAppearances = [...(targetData.faceAppearances || [])];
+        (sourceData.faceAppearances || []).forEach(sourceAppearance => {
+          if (!mergedFaceAppearances.some(targetAppearance => targetAppearance.faceImageStoragePath === sourceAppearance.faceImageStoragePath)) {
+            mergedFaceAppearances.push(sourceAppearance);
+          }
+        });
+
+        const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
+
+        // 2. Update target person document
+        transaction.update(targetPersonRef, {
+          name: mergedName,
+          notes: mergedNotes,
+          company: mergedCompany,
+          hobbies: mergedHobbies,
+          birthday: mergedBirthday,
+          firstMet: mergedFirstMet,
+          firstMetContext: mergedFirstMetContext,
+          faceAppearances: mergedFaceAppearances,
+          rosterIds: mergedRosterIds,
+          updatedAt: serverTimestamp()
+        });
+
+        // 3. Delete source person document
+        transaction.delete(sourcePersonRef);
+
+        // 4. Update affected rosters (peopleIds array)
+        // This needs to be done outside the transaction for reads after writes, or in a separate step.
+        // For now, we'll collect roster IDs that need update and do it after transaction.
+      });
+
+      // Post-transaction: Update rosters
+      const rostersToUpdate = new Set([...(sourceData.rosterIds || [])]);
+      const batch = writeBatch(db);
+      for (const rosterId of rostersToUpdate) {
+        const rosterRef = doc(db, "rosters", rosterId);
+        // We need to check if the roster still exists, though less likely to be an issue here.
+        batch.update(rosterRef, {
+          peopleIds: arrayRemove(sourceId)
+        });
+        batch.update(rosterRef, {
+          peopleIds: arrayUnion(targetId) 
+        });
+      }
+      await batch.commit();
+
+
+      toast({ title: "Merge Successful", description: `${sourceData.name} has been merged into ${targetData.name}.` });
+      await fetchAllUserPeople();
+      await fetchUserRosters(); // Roster people counts might have changed
+      clearGlobalMergeSelection();
+
+    } catch (error: any) {
+      console.error("FRC: Error merging people:", error);
+      toast({ title: "Merge Failed", description: `Could not merge people: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [db, currentUser, globallySelectedPeopleForMerge, toast, fetchAllUserPeople, fetchUserRosters, clearGlobalMergeSelection]);
+
+
   return (
     <FaceRosterContext.Provider value={{
       currentUser, 
@@ -760,6 +899,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       isLoadingUserRosters,
       allUserPeople,
       isLoadingAllUserPeople,
+      globallySelectedPeopleForMerge,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -772,6 +912,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       loadRosterForEditing,
       deleteRoster,
       fetchAllUserPeople,
+      toggleGlobalPersonSelectionForMerge,
+      clearGlobalMergeSelection,
+      performGlobalPeopleMerge,
     }}>
       {children}
     </FaceRosterContext.Provider>
