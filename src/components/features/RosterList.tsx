@@ -7,8 +7,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import RosterItem from './RosterItem';
 
-const RosterList = () => {
-  const { roster, selectedPersonId, selectPerson } = useFaceRoster();
+interface RosterListProps {
+  isMergeModeActive: boolean;
+}
+
+const RosterList: React.FC<RosterListProps> = ({ isMergeModeActive }) => {
+  const { roster, selectedPersonId, selectPerson, selectedPeopleForMerge, togglePersonInMergeSelection } = useFaceRoster();
 
   if (roster.length === 0) {
     return (
@@ -20,13 +24,16 @@ const RosterList = () => {
 
   return (
     <ScrollArea className="h-full max-h-[300px] md:max-h-none md:flex-grow pr-3 -mr-3"> {/* Negative margin to hide internal scrollbar if parent has padding */}
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         {roster.map((person) => (
           <RosterItem
             key={person.id}
             person={person}
             isSelected={person.id === selectedPersonId}
             onSelect={() => selectPerson(person.id)}
+            isMergeModeActive={isMergeModeActive}
+            isSelectedForMerge={selectedPeopleForMerge.includes(person.id)}
+            onToggleSelectionForMerge={togglePersonInMergeSelection}
           />
         ))}
       </div>

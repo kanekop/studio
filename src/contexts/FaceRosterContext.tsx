@@ -28,6 +28,7 @@ interface FaceRosterContextType {
   currentRosterDocId: string | null;
   userRosters: ImageSet[];
   isLoadingUserRosters: boolean;
+  selectedPeopleForMerge: string[];
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -40,6 +41,9 @@ interface FaceRosterContextType {
   fetchUserRosters: () => Promise<void>;
   loadRosterForEditing: (rosterId: string) => Promise<void>;
   deleteRoster: (rosterId: string) => Promise<void>;
+  togglePersonInMergeSelection: (personId: string) => void;
+  clearMergeSelection: () => void;
+  performMergeOfSelectedPeople: () => Promise<void>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -57,6 +61,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [currentRosterDocId, setCurrentRosterDocId] = useState<string | null>(null);
   const [userRosters, setUserRosters] = useState<ImageSet[]>([]); 
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
+  const [selectedPeopleForMerge, setSelectedPeopleForMerge] = useState<string[]>([]);
   const { toast } = useToast();
 
   const fetchUserRosters = useCallback(async () => {
@@ -116,6 +121,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setRoster([]);
     setSelectedPersonId(null);
     setCurrentRosterDocId(null); 
+    setSelectedPeopleForMerge([]);
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
     }
@@ -161,6 +167,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (!currentUser?.uid) throw new Error("User not authenticated for cloud upload.");
           if (!currentImgSize || !currentImgSize.width || !currentImgSize.height) throw new Error("Image dimensions are invalid.");
           
+          console.log("FRC:handleImageUpload: FirebaseConfig looks okay. Attempting to upload original image...");
           const imageName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
           const imagePath = `users/${currentUser.uid}/original_images/${imageName}`;
           const imageFileRef = storageRef(appFirebaseStorage, imagePath);
@@ -168,6 +175,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           const uploadTask = await uploadBytes(imageFileRef, file);
           const downloadURL = await getDownloadURL(uploadTask.ref);
           const cloudStoragePath = uploadTask.ref.fullPath;
+          console.log("FRC:handleImageUpload: Original image uploaded to Storage. Path:", cloudStoragePath, "URL:", downloadURL);
 
           setOriginalImageStoragePath(cloudStoragePath);
           setImageDataUrl(downloadURL); 
@@ -183,8 +191,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           };
 
           if (!db) throw new Error("Firestore database service is not available.");
+          console.log("FRC:handleImageUpload: Attempting to add roster document to Firestore. Data:", rosterDocData);
 
           const rosterDocRef = await addDoc(collection(db, "rosters"), rosterDocData);
+          console.log("FRC:handleImageUpload: Roster document added to Firestore. ID:", rosterDocRef.id);
           setCurrentRosterDocId(rosterDocRef.id);
           await fetchUserRosters();
 
@@ -309,8 +319,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           isNew: true,
           faceImageUrl: faceImageDataURI, // This is a data URI initially
           tempFaceImageDataUri: faceImageDataURI,
-          name: `New Person ${roster.length + temporaryPeopleForUI.length + 1}`,
-          aiName: `New Person ${roster.length + temporaryPeopleForUI.length + 1}`,
+          name: `Person ${roster.length + temporaryPeopleForUI.length + 1}`, // Default name
+          aiName: `Person ${roster.length + temporaryPeopleForUI.length + 1}`,
           notes: '',
           company: '',
           hobbies: '',
@@ -360,18 +370,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return;
     }
 
-    const finalName = details.name || localPersonEntry.name; // Use new name if provided, else existing
+    const finalName = (details.name || localPersonEntry.name || `Unnamed Person`).trim();
+    if (!finalName) {
+      toast({ title: "Validation Error", description: "Person's name cannot be empty.", variant: "destructive"});
+      setIsProcessing(false);
+      return;
+    }
+
 
     try {
         let targetPersonId = personIdToUpdate;
-        let finalFaceImageUrl = localPersonEntry.faceImageUrl;
+        let finalFaceImageUrl = localPersonEntry.faceImageUrl; // Keep existing URL unless it's a new person
         let personDocRefPath: string;
 
         if (isNewPersonSaveOperation && localPersonEntry.isNew) {
             if (!localPersonEntry.tempFaceImageDataUri || !localPersonEntry.tempOriginalRegion) {
                 throw new Error("Missing temporary image data or region for new person save.");
             }
-            // Search for existing person by name
+            // Search for existing person by name (for this user)
             const peopleQuery = query(
                 collection(db, "people"),
                 where("name", "==", finalName),
@@ -379,40 +395,39 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             );
             const querySnapshot = await getDocs(peopleQuery);
 
-            let existingPersonDoc: Person | null = null;
+            let existingPersonDocData: Person | null = null;
             let existingPersonDocId: string | null = null;
 
             if (!querySnapshot.empty) {
-                // Found existing person(s) with the same name. For simplicity, use the first one.
-                // A more robust solution might involve letting the user choose or confirming.
                 const firstMatch = querySnapshot.docs[0];
                 existingPersonDocId = firstMatch.id;
-                existingPersonDoc = { id: firstMatch.id, ...firstMatch.data() } as Person;
+                existingPersonDocData = { id: firstMatch.id, ...firstMatch.data() } as Person;
                 toast({ title: "Existing Person Found", description: `Linking to existing person: ${finalName}`});
             }
 
+            // Upload face image to Cloud Storage
             const croppedFaceFileName = `${currentRosterDocId}_${existingPersonDocId || 'new'}_${Date.now()}.png`;
             const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
             const croppedFaceRef = storageRef(appFirebaseStorage, faceImageStoragePath);
             
             const uploadResult = await uploadString(croppedFaceRef, localPersonEntry.tempFaceImageDataUri, StringFormat.DATA_URL);
-            finalFaceImageUrl = await getDownloadURL(uploadResult.ref);
+            finalFaceImageUrl = await getDownloadURL(uploadResult.ref); // This is now the Storage URL
 
             const newAppearance: FaceAppearance = {
                 rosterId: currentRosterDocId,
-                faceImageStoragePath: faceImageStoragePath,
+                faceImageStoragePath: faceImageStoragePath, // Store the path, not the download URL
                 originalRegion: localPersonEntry.tempOriginalRegion,
             };
 
-            if (existingPersonDoc && existingPersonDocId) { // Update existing person
+            if (existingPersonDocData && existingPersonDocId) { // Update existing person
                 targetPersonId = existingPersonDocId;
                 personDocRefPath = `people/${existingPersonDocId}`;
-                const updatedFaceAppearances = [...(existingPersonDoc.faceAppearances || []), newAppearance];
-                const updatedRosterIds = Array.from(new Set([...(existingPersonDoc.rosterIds || []), currentRosterDocId]));
+                const updatedFaceAppearances = [...(existingPersonDocData.faceAppearances || []), newAppearance];
+                const updatedRosterIds = Array.from(new Set([...(existingPersonDocData.rosterIds || []), currentRosterDocId]));
                 
                 await updateDoc(doc(db, personDocRefPath), {
-                    ...details, // Update other details like notes, company etc.
-                    name: finalName, // ensure name is updated if it was from `details`
+                    ...details, 
+                    name: finalName, 
                     faceAppearances: updatedFaceAppearances,
                     rosterIds: updatedRosterIds,
                     updatedAt: serverTimestamp()
@@ -442,45 +457,40 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 peopleIds: arrayUnion(targetPersonId),
                 updatedAt: serverTimestamp()
             });
-            // Update userRosters list locally
-            setUserRosters(prev => prev.map(r => r.id === currentRosterDocId ? {...r, peopleIds: Array.from(new Set([...(r.peopleIds || []), targetPersonId])) } : r));
+             setUserRosters(prev => prev.map(r => r.id === currentRosterDocId ? {...r, peopleIds: Array.from(new Set([...(r.peopleIds || []), targetPersonId])) } : r));
 
 
-        } else { // Standard update for an already saved person (not a new temporary one)
-            personDocRefPath = `people/${personIdToUpdate}`;
+        } else { // Standard update for an already saved person
+            personDocRefPath = `people/${personIdToUpdate}`; // personIdToUpdate is already Firestore ID
             const firestoreUpdateData: { [key: string]: any } = { 
                 ...details,
-                name: finalName, // ensure name is updated
+                name: finalName, 
                 updatedAt: serverTimestamp() 
             };
             await updateDoc(doc(db, personDocRefPath), firestoreUpdateData);
         }
         
-        // Optimistically update UI roster
         setRoster(prevRoster =>
           prevRoster.map(p =>
-            p.id === personIdToUpdate // The original ID (temp or Firestore)
+            p.id === personIdToUpdate 
               ? { 
                   ...p, 
-                  ...details, // Apply all incoming textual details
-                  name: finalName, // Ensure name is set
-                  id: targetPersonId, // Update to real Firestore ID if it was new
+                  ...details,
+                  name: finalName, 
+                  id: targetPersonId, 
                   isNew: false, 
                   tempFaceImageDataUri: undefined,
                   tempOriginalRegion: undefined,
-                  faceImageUrl: finalFaceImageUrl, // Update to Storage URL
-                  currentRosterAppearance: isNewPersonSaveOperation && localPersonEntry.tempOriginalRegion ? { // Set currentRosterAppearance if it was a new save
+                  faceImageUrl: finalFaceImageUrl, 
+                  currentRosterAppearance: isNewPersonSaveOperation && localPersonEntry.tempOriginalRegion && finalFaceImageUrl.includes("firebasestorage") ? {
                       rosterId: currentRosterDocId,
-                      faceImageStoragePath: (finalFaceImageUrl.includes("firebasestorage.googleapis.com") ? 
-                        `users/${currentUser?.uid}/cropped_faces/${finalFaceImageUrl.split('%2F').pop()?.split('?')[0]}` // Attempt to reconstruct path
-                        : 'unknown_path'), 
+                      faceImageStoragePath: `users/${currentUser?.uid}/cropped_faces/${finalFaceImageUrl.split('%2F').pop()?.split('?')[0].replace(`${currentRosterDocId}_`, '')}`, // Attempt to reconstruct path
                       originalRegion: localPersonEntry.tempOriginalRegion,
                   } : p.currentRosterAppearance,
                 }
               : p
           )
         );
-        // If a new person was just saved, and it was the selected one, update selectedPersonId to the new Firestore ID.
         if (isNewPersonSaveOperation && selectedPersonId === personIdToUpdate && selectedPersonId !== targetPersonId) {
           setSelectedPersonId(targetPersonId);
         }
@@ -555,7 +565,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         for (const chunk of peopleChunks) {
             if (chunk.length === 0) continue;
-            const peopleQuery = query(collection(db, "people"), where("__name__", "in", chunk)); // __name__ is document ID field
+            const peopleQuery = query(collection(db, "people"), where("__name__", "in", chunk)); 
             const peopleSnapshots = await getDocs(peopleQuery);
             
             for (const personDoc of peopleSnapshots.docs) {
@@ -585,7 +595,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
               peopleForRosterUI.push({
                   id: personDoc.id,
-                  isNew: false, // Loaded from Firestore, so not new
+                  isNew: false, 
                   name: personData.name,
                   aiName: personData.aiName,
                   notes: personData.notes,
@@ -648,7 +658,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
           for (const personId of rosterData.peopleIds) {
             const personRef = doc(db, "people", personId);
-            const personSnap = await getDoc(personRef);
+            const personSnap = await getDoc(personRef); // Use await here
             if (personSnap.exists()) {
               const personData = personSnap.data() as Person;
               const appearanceToDelete = personData.faceAppearances?.find(app => app.rosterId === rosterId);
@@ -668,11 +678,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 });
               } else {
                 // If no other rosters link to this person, delete the person entirely
-                // (and any other orphaned face images, though this should be covered if logic is tight)
-                personData.faceAppearances?.forEach(async app => {
-                    if (app.rosterId !== rosterId && app.faceImageStoragePath) { 
+                // And delete ALL their face images from storage
+                personData.faceAppearances?.forEach(async app => { // ensure all appearances are considered
+                    if (app.faceImageStoragePath) { 
                          const otherFaceRef = storageRef(appFirebaseStorage, app.faceImageStoragePath);
-                         try { await deleteObject(otherFaceRef); } catch (e:any) { console.warn("FRC: Clean-up: Failed to delete another face image:", app.faceImageStoragePath, e.message); }
+                         try { await deleteObject(otherFaceRef); } catch (e:any) { console.warn("FRC: Clean-up: Failed to delete other face image:", app.faceImageStoragePath, e.message); }
                     }
                 });
                 batch.delete(personRef);
@@ -703,6 +713,143 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast, fetchUserRosters, currentRosterDocId, clearAllData]);
 
+  const togglePersonInMergeSelection = useCallback((personId: string) => {
+    setSelectedPeopleForMerge(prev => {
+      if (prev.includes(personId)) {
+        return prev.filter(id => id !== personId);
+      } else {
+        if (prev.length < 2) { // Allow selecting up to 2 people
+          return [...prev, personId];
+        }
+        return prev; // Limit to 2 selections
+      }
+    });
+  }, []);
+
+  const clearMergeSelection = useCallback(() => {
+    setSelectedPeopleForMerge([]);
+  }, []);
+
+  const performMergeOfSelectedPeople = useCallback(async () => {
+    if (selectedPeopleForMerge.length !== 2) {
+      toast({ title: "Merge Error", description: "Please select exactly two people to merge.", variant: "destructive" });
+      return;
+    }
+    if (!db || !currentUser) {
+      toast({ title: "Error", description: "Not logged in or Firebase unavailable.", variant: "destructive" });
+      return;
+    }
+
+    setIsProcessing(true);
+    const [id1, id2] = selectedPeopleForMerge;
+
+    // For simplicity, let's designate the first selected (id1) as the TARGET and id2 as SOURCE (to be deleted)
+    // A more advanced version might let the user choose the target.
+    const targetPersonId = id1;
+    const sourcePersonId = id2;
+
+    try {
+      const targetPersonRef = doc(db, "people", targetPersonId);
+      const sourcePersonRef = doc(db, "people", sourcePersonId);
+
+      const targetDocSnap = await getDoc(targetPersonRef);
+      const sourceDocSnap = await getDoc(sourcePersonRef);
+
+      if (!targetDocSnap.exists() || !sourceDocSnap.exists()) {
+        throw new Error("One or both selected people not found in the database.");
+      }
+
+      const targetData = targetDocSnap.data() as Person;
+      const sourceData = sourceDocSnap.data() as Person;
+
+      // --- Consolidate Data ---
+      // 1. Face Appearances: Combine, ensuring uniqueness by rosterId and path (though path should be unique enough)
+      const combinedFaceAppearances = [...targetData.faceAppearances];
+      sourceData.faceAppearances.forEach(sourceAppearance => {
+        if (!combinedFaceAppearances.some(targetAppearance => 
+            targetAppearance.rosterId === sourceAppearance.rosterId && 
+            targetAppearance.faceImageStoragePath === sourceAppearance.faceImageStoragePath
+        )) {
+          combinedFaceAppearances.push(sourceAppearance);
+        }
+      });
+
+      // 2. Roster IDs: Combine and make unique
+      const combinedRosterIds = Array.from(new Set([...targetData.rosterIds, ...sourceData.rosterIds]));
+
+      // 3. Other Fields (simple strategy: target's takes precedence, append notes)
+      const mergedNotes = [targetData.notes, `Merged from ${sourceData.name}:\n${sourceData.notes}`]
+                          .filter(Boolean).join("\n---\n").trim();
+
+      const updatedTargetData: Partial<Person> = {
+        name: targetData.name, // Keep target's name by default
+        notes: mergedNotes,
+        company: targetData.company || sourceData.company,
+        hobbies: targetData.hobbies || sourceData.hobbies,
+        birthday: targetData.birthday || sourceData.birthday,
+        firstMet: targetData.firstMet || sourceData.firstMet,
+        firstMetContext: targetData.firstMetContext || sourceData.firstMetContext,
+        // aiName, knownAcquaintances, spouse could be handled similarly or with user input in future
+        faceAppearances: combinedFaceAppearances,
+        rosterIds: combinedRosterIds,
+        updatedAt: serverTimestamp(),
+      };
+
+      // --- Firestore Operations ---
+      const batch = writeBatch(db);
+      batch.update(targetPersonRef, updatedTargetData);
+      batch.delete(sourcePersonRef);
+      await batch.commit();
+
+      // Update roster documents that pointed to the sourcePersonId
+      // This needs to be done after the people merge, as we need the final list of combinedRosterIds
+      // and to ensure the target person exists.
+      const rostersToUpdate = new Set<string>(sourceData.rosterIds); // Rosters that source person was part of
+      for (const rosterId of rostersToUpdate) {
+          const rosterRef = doc(db, "rosters", rosterId);
+          // We need to fetch the roster to correctly update its peopleIds array
+          const rosterDoc = await getDoc(rosterRef);
+          if (rosterDoc.exists()) {
+              let currentPeopleIds = (rosterDoc.data() as ImageSet).peopleIds || [];
+              // Remove sourceId if present
+              currentPeopleIds = currentPeopleIds.filter(id => id !== sourcePersonId);
+              // Add targetId if not present
+              if (!currentPeopleIds.includes(targetPersonId)) {
+                  currentPeopleIds.push(targetPersonId);
+              }
+              await updateDoc(rosterRef, { 
+                peopleIds: currentPeopleIds,
+                updatedAt: serverTimestamp()
+              });
+          }
+      }
+      
+      // --- Update Local State ---
+      setRoster(prevRoster => {
+        const newRoster = prevRoster.filter(p => p.id !== sourcePersonId);
+        return newRoster.map(p => 
+          p.id === targetPersonId 
+            ? { ...p, ...updatedTargetData, faceImageUrl: p.faceImageUrl } // Keep current faceImageUrl for UI
+            : p
+        );
+      });
+
+      if (selectedPersonId === sourcePersonId) {
+        setSelectedPersonId(targetPersonId); // If deleted person was selected, select the target
+      }
+      
+      clearMergeSelection();
+      await fetchUserRosters(); // Refresh roster list on landing page if any roster was affected
+      toast({ title: "Merge Successful", description: `${sourceData.name} merged into ${targetData.name}.` });
+
+    } catch (error: any) {
+      console.error("FRC: Error merging people:", error);
+      toast({ title: "Merge Failed", description: `Could not merge people: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [selectedPeopleForMerge, currentUser, db, toast, roster, selectedPersonId, clearMergeSelection, fetchUserRosters]);
+
 
   return (
     <FaceRosterContext.Provider value={{
@@ -718,6 +865,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       currentRosterDocId,
       userRosters,
       isLoadingUserRosters,
+      selectedPeopleForMerge,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -729,6 +877,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       fetchUserRosters,
       loadRosterForEditing,
       deleteRoster,
+      togglePersonInMergeSelection,
+      clearMergeSelection,
+      performMergeOfSelectedPeople,
     }}>
       {children}
     </FaceRosterContext.Provider>
