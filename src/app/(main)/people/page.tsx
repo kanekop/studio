@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { UserCheck, Users, Brain, Merge, XCircle } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
+import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
+import type { Person, FieldMergeChoices } from '@/types';
 
 export default function ManagePeoplePage() {
   const { 
@@ -21,6 +23,7 @@ export default function ManagePeoplePage() {
   } = useFaceRoster();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
+  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
 
   useEffect(() => {
     if (currentUser && !allUserPeople.length && !isLoadingAllUserPeople) {
@@ -29,7 +32,6 @@ export default function ManagePeoplePage() {
   }, [currentUser, fetchAllUserPeople, allUserPeople, isLoadingAllUserPeople]);
 
   useEffect(() => {
-    // If exiting merge mode, clear selections
     if (!isMergeSelectionMode) {
       clearGlobalMergeSelection();
     }
@@ -39,14 +41,26 @@ export default function ManagePeoplePage() {
     setIsMergeSelectionMode(!isMergeSelectionMode);
   };
 
-  const handlePerformMerge = async () => {
+  const handleInitiateMerge = () => {
     if (globallySelectedPeopleForMerge.length === 2) {
-      await performGlobalPeopleMerge();
-      setIsMergeSelectionMode(false); // Exit merge mode after attempting merge
+      setIsMergeDialogOpen(true);
     }
   };
   
+  const handleConfirmMergeFromDialog = async (
+    targetPersonId: string, 
+    sourcePersonId: string, 
+    fieldChoices: FieldMergeChoices
+  ) => {
+    await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices);
+    setIsMergeDialogOpen(false);
+    setIsMergeSelectionMode(false); // Exit merge selection mode after merge
+  };
+  
   const canMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing;
+
+  const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
+  const person2ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[1]) || null;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -66,7 +80,7 @@ export default function ManagePeoplePage() {
           >
             {isMergeSelectionMode ? (
               <>
-                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge
+                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge Selection
               </>
             ) : (
               <>
@@ -76,7 +90,7 @@ export default function ManagePeoplePage() {
           </Button>
           {isMergeSelectionMode && (
             <Button 
-              onClick={handlePerformMerge}
+              onClick={handleInitiateMerge}
               disabled={!canMerge}
               size="default"
               className="bg-green-600 hover:bg-green-700 text-white"
@@ -91,7 +105,7 @@ export default function ManagePeoplePage() {
         <div className="mb-4 p-3 bg-accent/20 border border-accent rounded-md text-center">
           <p className="text-sm text-accent-foreground">
             Select exactly two people from the list below to merge their information. 
-            The first person selected will be the primary record.
+            The first person selected will be the primary record for data conflict resolution in the upcoming dialog.
           </p>
         </div>
       )}
@@ -116,6 +130,16 @@ export default function ManagePeoplePage() {
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
           onToggleSelection={toggleGlobalPersonSelectionForMerge}
+        />
+      )}
+
+      {person1ForDialog && person2ForDialog && (
+        <MergePeopleDialog
+          isOpen={isMergeDialogOpen}
+          onOpenChange={setIsMergeDialogOpen}
+          person1={person1ForDialog}
+          person2={person2ForDialog}
+          onConfirmMerge={handleConfirmMergeFromDialog}
         />
       )}
     </div>

@@ -7,7 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance } from '@/types';
+import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 
 const MAX_FILE_SIZE_MB = 10;
@@ -46,12 +46,17 @@ interface FaceRosterContextType {
   fetchAllUserPeople: () => Promise<void>;
   toggleGlobalPersonSelectionForMerge: (personId: string) => void;
   clearGlobalMergeSelection: () => void;
-  performGlobalPeopleMerge: () => Promise<void>;
+  performGlobalPeopleMerge: (
+    targetPersonId: string, 
+    sourcePersonId: string, 
+    fieldChoices: FieldMergeChoices
+  ) => Promise<void>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
 
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [originalImageStoragePath, setOriginalImageStoragePath] = useState<string | null>(null);
@@ -67,7 +72,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [allUserPeople, setAllUserPeople] = useState<Person[]>([]);
   const [isLoadingAllUserPeople, setIsLoadingAllUserPeople] = useState<boolean>(false);
   const [globallySelectedPeopleForMerge, setGloballySelectedPeopleForMerge] = useState<string[]>([]);
-  const { toast } = useToast();
   
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -431,7 +435,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 const firstMatch = querySnapshot.docs[0];
                 existingPersonDocId = firstMatch.id;
                 existingPersonDocData = { id: firstMatch.id, ...firstMatch.data() } as Person;
-                targetPersonId = existingPersonDocId; // Use existing person's ID
+                targetPersonId = existingPersonDocId; 
                 toast({ title: "Existing Person Found", description: `Linking to existing person: ${finalName}`});
             }
             
@@ -448,7 +452,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 originalRegion: localPersonEntry.tempOriginalRegion,
             };
 
-            if (existingPersonDocData && existingPersonDocId) { // Update existing person
+            if (existingPersonDocData && existingPersonDocId) { 
                 const personRef = doc(db, "people", existingPersonDocId);
                 batch.update(personRef, {
                     name: finalName,
@@ -462,9 +466,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     rosterIds: arrayUnion(currentRosterDocId),
                     updatedAt: serverTimestamp()
                 });
-            } else { // Create new person
+            } else { 
                 const newPersonDocRef = doc(collection(db, "people")); 
-                targetPersonId = newPersonDocRef.id; // Get ID for new person
+                targetPersonId = newPersonDocRef.id; 
                 const newPersonData: Omit<Person, 'id'> = {
                     name: finalName,
                     aiName: details.aiName || finalName,
@@ -505,7 +509,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 firstMetContext: details.firstMetContext,
                 updatedAt: serverTimestamp() 
             };
-             // Filter out undefined values to avoid overwriting with undefined
             Object.keys(firestoreUpdateData).forEach(key => firestoreUpdateData[key] === undefined && delete firestoreUpdateData[key]);
 
             await updateDoc(personDocRef, firestoreUpdateData);
@@ -775,9 +778,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (prevSelected.length < 2) {
           return [...prevSelected, personId];
         }
-        // If already 2 selected, replace the first one with the new one, or just don't add.
-        // For simplicity, let's just allow toggling off or adding if less than 2.
-        // UI should prevent selecting more than 2 by disabling checkboxes.
         return prevSelected; 
       }
     });
@@ -787,16 +787,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setGloballySelectedPeopleForMerge([]);
   }, []);
 
-  const performGlobalPeopleMerge = useCallback(async () => {
-    if (!db || !currentUser || globallySelectedPeopleForMerge.length !== 2) {
-      toast({ title: "Merge Error", description: "Please select exactly two people to merge.", variant: "destructive" });
+  const performGlobalPeopleMerge = useCallback(async (
+    targetPersonId: string, 
+    sourcePersonId: string, 
+    fieldChoices: FieldMergeChoices
+  ) => {
+    if (!db || !currentUser) {
+      toast({ title: "Merge Error", description: "User not authenticated or database unavailable.", variant: "destructive" });
       return;
     }
     setIsProcessing(true);
 
-    const [targetId, sourceId] = globallySelectedPeopleForMerge;
-    const targetPersonRef = doc(db, "people", targetId);
-    const sourcePersonRef = doc(db, "people", sourceId);
+    const targetPersonRef = doc(db, "people", targetPersonId);
+    const sourcePersonRef = doc(db, "people", sourcePersonId);
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -809,20 +812,26 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         const targetData = targetDoc.data() as Person;
         const sourceData = sourceDoc.data() as Person;
+        
+        const getValue = (fieldKey: keyof FieldMergeChoices, tVal: string | undefined, sVal: string | undefined): string | undefined => {
+            if (fieldChoices[fieldKey] === 'person1') return tVal;
+            if (fieldChoices[fieldKey] === 'person2') return sVal;
+            return tVal || sVal; // Default fallback, should ideally not happen if choices are enforced
+        };
 
-        // 1. Consolidate data
-        const mergedName = targetData.name; // Target's name takes precedence
+        const mergedName = getValue('name', targetData.name, sourceData.name) || targetData.name; // Name is crucial
+        const mergedCompany = getValue('company', targetData.company, sourceData.company);
+        const mergedHobbies = getValue('hobbies', targetData.hobbies, sourceData.hobbies);
+        const mergedBirthday = getValue('birthday', targetData.birthday, sourceData.birthday);
+        const mergedFirstMet = getValue('firstMet', targetData.firstMet, sourceData.firstMet);
+        const mergedFirstMetContext = getValue('firstMetContext', targetData.firstMetContext, sourceData.firstMetContext);
+        
         let mergedNotes = targetData.notes || "";
         if (sourceData.notes) {
-          mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${sourceData.name}:\n${sourceData.notes}`;
+          mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${sourceData.name} (ID: ${sourcePersonId}):\n${sourceData.notes}`;
         }
-        const mergedCompany = targetData.company || sourceData.company || "";
-        const mergedHobbies = targetData.hobbies || sourceData.hobbies || "";
-        const mergedBirthday = targetData.birthday || sourceData.birthday || "";
-        const mergedFirstMet = targetData.firstMet || sourceData.firstMet || "";
-        const mergedFirstMetContext = targetData.firstMetContext || sourceData.firstMetContext || "";
         
-        const mergedFaceAppearances = [...(targetData.faceAppearances || [])];
+        const mergedFaceAppearances: FaceAppearance[] = [...(targetData.faceAppearances || [])];
         (sourceData.faceAppearances || []).forEach(sourceAppearance => {
           if (!mergedFaceAppearances.some(targetAppearance => targetAppearance.faceImageStoragePath === sourceAppearance.faceImageStoragePath)) {
             mergedFaceAppearances.push(sourceAppearance);
@@ -831,47 +840,42 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
 
-        // 2. Update target person document
         transaction.update(targetPersonRef, {
           name: mergedName,
           notes: mergedNotes,
-          company: mergedCompany,
-          hobbies: mergedHobbies,
-          birthday: mergedBirthday,
-          firstMet: mergedFirstMet,
-          firstMetContext: mergedFirstMetContext,
+          company: mergedCompany || "",
+          hobbies: mergedHobbies || "",
+          birthday: mergedBirthday || "",
+          firstMet: mergedFirstMet || "",
+          firstMetContext: mergedFirstMetContext || "",
           faceAppearances: mergedFaceAppearances,
           rosterIds: mergedRosterIds,
           updatedAt: serverTimestamp()
         });
 
-        // 3. Delete source person document
         transaction.delete(sourcePersonRef);
-
-        // 4. Update affected rosters (peopleIds array)
-        // This needs to be done outside the transaction for reads after writes, or in a separate step.
-        // For now, we'll collect roster IDs that need update and do it after transaction.
       });
 
-      // Post-transaction: Update rosters
-      const rostersToUpdate = new Set([...(sourceData.rosterIds || [])]);
+      const sourceRosterIds = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
       const batch = writeBatch(db);
-      for (const rosterId of rostersToUpdate) {
+      for (const rosterId of sourceRosterIds) {
         const rosterRef = doc(db, "rosters", rosterId);
-        // We need to check if the roster still exists, though less likely to be an issue here.
         batch.update(rosterRef, {
-          peopleIds: arrayRemove(sourceId)
+          peopleIds: arrayRemove(sourcePersonId) 
         });
         batch.update(rosterRef, {
-          peopleIds: arrayUnion(targetId) 
+          peopleIds: arrayUnion(targetPersonId)
         });
       }
       await batch.commit();
 
+      const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
+      const targetName = allUserPeople.find(p => p.id === targetPersonId)?.name || "Target Person";
 
-      toast({ title: "Merge Successful", description: `${sourceData.name} has been merged into ${targetData.name}.` });
+      toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetName}.` });
+      
       await fetchAllUserPeople();
-      await fetchUserRosters(); // Roster people counts might have changed
+      await fetchUserRosters();
       clearGlobalMergeSelection();
 
     } catch (error: any) {
@@ -880,7 +884,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessing(false);
     }
-  }, [db, currentUser, globallySelectedPeopleForMerge, toast, fetchAllUserPeople, fetchUserRosters, clearGlobalMergeSelection]);
+  }, [db, currentUser, toast, fetchAllUserPeople, fetchUserRosters, clearGlobalMergeSelection, allUserPeople]);
 
 
   return (
@@ -928,4 +932,3 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-

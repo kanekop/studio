@@ -89,3 +89,15 @@ export interface ImageSet {
   updatedAt: any; // Firestore serverTimestamp for last update
 }
 
+// Defines the user's choices for merging conflicting fields between two Person objects.
+// 'person1' means the value from the first selected person (target) is chosen.
+// 'person2' means the value from the second selected person (source) is chosen.
+export interface FieldMergeChoices {
+  name: 'person1' | 'person2';
+  company: 'person1' | 'person2';
+  hobbies: 'person1' | 'person2';
+  birthday: 'person1' | 'person2';
+  firstMet: 'person1' | 'person2';
+  firstMetContext: 'person1' | 'person2';
+  // Notes are typically concatenated or handled with a specific strategy, not a simple choice.
+}
