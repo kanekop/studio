@@ -1,117 +1,104 @@
 
 'use server';
 /**
- * @fileOverview A function to suggest potential merges between people based on name similarity.
- * This is an initial placeholder and does not use actual AI image analysis yet.
+ * @fileOverview A Genkit flow to suggest potential merges between people based on textual similarity using an AI model.
  *
- * - suggestPeopleMerges - A function that handles the merge suggestion process.
- * - SuggestMergeInput - The input type for the suggestPeopleMerges function.
- * - SuggestMergeOutput - The return type for the suggestPeopleMerges function.
+ * - suggestPeopleMerges - An async wrapper function that invokes the Genkit flow.
+ * - SuggestMergeInput - The TypeScript type for the input to the suggestPeopleMerges function.
+ * - SuggestMergeOutput - The TypeScript type for the output from the suggestPeopleMerges function.
  */
 
-import { z } from 'zod';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
+// Input schema for a single person, now including company and hobbies
 const SuggestMergePersonSchema = z.object({
   id: z.string().describe('The unique identifier of the person.'),
   name: z.string().describe('The name of the person.'),
+  company: z.string().optional().describe('The company the person works for.'),
+  hobbies: z.string().optional().describe('The hobbies of the person.'),
 });
-export type SuggestMergeInput = z.infer<typeof SuggestMergePersonSchema>;
 
+// Input schema: An array of people
+const SuggestMergeInputSchema = z.array(SuggestMergePersonSchema).describe('A list of people to analyze for potential duplicates.');
+export type SuggestMergeInput = z.infer<typeof SuggestMergeInputSchema>;
+
+
+// Output schema for a single suggested pair
 const SuggestedMergePairSchema = z.object({
-  person1Id: z.string(),
-  person1Name: z.string(),
-  person2Id: z.string(),
-  person2Name: z.string(),
-  reason: z.string(),
-  confidence: z.enum(['high', 'medium', 'low']).optional(),
+  person1Id: z.string().describe('The ID of the first person in the suggested pair.'),
+  person1Name: z.string().describe('The name of the first person.'),
+  person2Id: z.string().describe('The ID of the second person in the suggested pair.'),
+  person2Name: z.string().describe('The name of the second person.'),
+  reason: z.string().describe('The AI-generated reason why these two people might be the same.'),
+  confidence: z.enum(['high', 'medium', 'low']).optional().describe('The AI-assessed confidence level of the suggestion.'),
 });
-export type SuggestMergeOutput = z.infer<typeof SuggestedMergePairSchema>;
+
+// Output schema: An array of suggested pairs
+const SuggestMergeOutputSchema = z.array(SuggestedMergePairSchema).describe('A list of suggested merge pairs.');
+export type SuggestMergeOutput = z.infer<typeof SuggestMergeOutputSchema>;
 
 
-function levenshteinDistance(a: string, b: string): number {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  const matrix = [];
-
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
+// Exported async wrapper function that calls the Genkit flow
+export async function suggestPeopleMerges(input: SuggestMergeInput): Promise<SuggestMergeOutput> {
+  if (!input || input.length < 2) {
+    return []; // Not enough people to compare
   }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
+  return suggestPeopleMergesFlow(input);
 }
 
-export async function suggestPeopleMerges(peopleList: SuggestMergeInput): Promise<SuggestMergeOutput> {
-  const suggestions: SuggestMergeOutput = [];
-  const processedPairs = new Set<string>();
+const suggestPeopleMergesFlowPrompt = ai.definePrompt({
+  name: 'suggestPeopleMergesPrompt',
+  input: { schema: SuggestMergeInputSchema },
+  output: { schema: SuggestMergeOutputSchema },
+  prompt: `You are an expert in data deduplication and identifying similar entities.
+Given the following list of people, each with an ID, name, and optionally company and hobbies:
+{{#each this}}
+- Person ID: {{id}}, Name: "{{name}}"{{#if company}}, Company: "{{company}}"{{/if}}{{#if hobbies}}, Hobbies: "{{hobbies}}"{{/if}}
+{{/each}}
 
-  for (let i = 0; i < peopleList.length; i++) {
-    for (let j = i + 1; j < peopleList.length; j++) {
-      const person1 = peopleList[i];
-      const person2 = peopleList[j];
+Your task is to identify pairs of people from this list who are likely to be the same individual.
+Consider variations in names (e.g., nicknames, full names, misspellings), and use company and hobbies as supporting evidence if available.
+For each potential duplicate pair you identify, provide:
+- person1Id: The ID of the first person.
+- person1Name: The name of the first person.
+- person2Id: The ID of the second person.
+- person2Name: The name of the second person.
+- reason: A concise explanation for why you think they might be the same person.
+- confidence: Your confidence level for this suggestion ('high', 'medium', or 'low').
 
-      const pairKey = [person1.id, person2.id].sort().join('-');
-      if (processedPairs.has(pairKey)) {
-        continue;
+Ensure person1Id and person2Id are different.
+If no potential duplicates are found, return an empty list.
+Present your findings as a list of objects matching the output schema.
+Focus on high-quality suggestions. It's better to miss a few than to suggest many incorrect pairs.
+Example of a good reason: "Similar names ('Mike' and 'Michael') and both work at 'Google'."
+Example of another reason: "Name 'Jane Doe' and 'J. Doe' with overlapping hobbies like 'Reading'."
+`,
+});
+
+const suggestPeopleMergesFlow = ai.defineFlow(
+  {
+    name: 'suggestPeopleMergesFlow',
+    inputSchema: SuggestMergeInputSchema,
+    outputSchema: SuggestMergeOutputSchema,
+  },
+  async (peopleList) => {
+    if (peopleList.length < 2) {
+        return [];
+    }
+    try {
+      const { output } = await suggestPeopleMergesFlowPrompt(peopleList);
+      if (!output) {
+        console.warn("AI merge suggestion prompt returned null output.");
+        return [];
       }
-      processedPairs.add(pairKey);
-
-      const name1Lower = person1.name.toLowerCase();
-      const name2Lower = person2.name.toLowerCase();
-
-      let isSimilar = false;
-      let reason = '';
-      let confidence: 'high' | 'medium' | 'low' = 'medium';
-
-      if (name1Lower === name2Lower && person1.id !== person2.id) {
-        isSimilar = true;
-        reason = 'Exact name match (different IDs).';
-        confidence = 'high';
-      } else if (name1Lower.includes(name2Lower) || name2Lower.includes(name1Lower)) {
-        isSimilar = true;
-        reason = 'One name is part of the other.';
-        confidence = 'medium';
-      } else {
-        const distance = levenshteinDistance(name1Lower, name2Lower);
-        const maxLength = Math.max(name1Lower.length, name2Lower.length);
-        // Threshold: Allow up to 25% difference in length for similarity, minimum 1
-        const threshold = Math.max(1, Math.floor(maxLength / 4)); 
-        if (distance > 0 && distance <= threshold) {
-          isSimilar = true;
-          reason = `Names are very similar (Levenshtein distance: ${distance}).`;
-          confidence = distance === 1 ? 'medium' : 'low';
-        }
-      }
-      
-      if (isSimilar) {
-        suggestions.push({
-          person1Id: person1.id,
-          person1Name: person1.name,
-          person2Id: person2.id,
-          person2Name: person2.name,
-          reason: `${reason} (This is a placeholder, full AI image analysis pending.)`,
-          confidence: confidence,
-        });
-      }
+      // Ensure IDs are not the same within a pair (should be handled by prompt, but good to double check)
+      return output.filter(pair => pair.person1Id !== pair.person2Id);
+    } catch (error) {
+      console.error('Error in suggestPeopleMergesFlow:', error);
+      // Consider how to propagate this error or return an empty list
+      // For now, returning empty list on error to avoid breaking UI
+      return [];
     }
   }
-  return suggestions;
-}
-
+);

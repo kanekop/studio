@@ -786,11 +786,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } else {
         if (prevSelected.length < 2) {
           return [...prevSelected, personId];
-        } else { // If already 2 selected, replace the second one (or first, depending on strategy)
-          // This strategy replaces the last selected if trying to add a third.
-          // A more sophisticated UX might involve highlighting which to replace or disallowing.
-          // For now, let's replace the second element.
-          // Or even better,toast a message "Only two people can be selected for merge."
+        } else { 
            toast({title: "Selection Limit", description: "You can only select two people to merge at a time.", variant: "default"});
            return prevSelected;
         }
@@ -832,7 +828,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             const choice = fieldChoices[fieldKey];
             if (choice === 'person1') return tVal;
             if (choice === 'person2') return sVal;
-            return tVal; // Default to target if choice is somehow not set, though UI should enforce it.
+            return tVal; 
         };
 
         const mergedName = getValue('name', targetData.name, sourceData.name) || targetData.name;
@@ -876,23 +872,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
 
         transaction.delete(sourcePersonRef);
-
-        // Update rosters to replace sourcePersonId with targetPersonId in peopleIds
-        const allInvolvedRosterIds = mergedRosterIds; // Rosters that might contain sourcePersonId
-        for (const rosterId of allInvolvedRosterIds) {
-          const rosterRef = doc(db, "rosters", rosterId);
-          // We can't read inside a transaction after a write to a different doc usually, 
-          // so we'll do this in a subsequent batch or separate updates if needed.
-          // For now, we assume rosterIds on targetPerson is now the superset.
-          // We need to ensure sourcePersonId is removed from rosters it was in.
-          // And targetPersonId is added (which arrayUnion in the merge already handles for targetData).
-          // The main thing is removing sourcePersonId.
-          // This part might be better handled outside the transaction or in a more complex way.
-          // Simplified: The transaction will update the person. Roster updates will be separate.
-        }
       });
 
-      // Post-transaction: Update roster documents
       const batch = writeBatch(db);
       const sourceRosterIdsFromDataSource = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
       
@@ -901,9 +882,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         batch.update(rosterRef, {
           peopleIds: arrayRemove(sourcePersonId)
         });
-        // Ensure target is in, though the person.rosterIds update should make this somewhat redundant
-        // if other flows correctly update roster.peopleIds from person.rosterIds.
-        // To be safe, ensure target ID is present.
         batch.update(rosterRef, {
            peopleIds: arrayUnion(targetPersonId) 
         });
@@ -912,11 +890,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetName = allUserPeople.find(p => p.id === targetPersonId)?.name || "Target Person"; // Name might have changed by merge
+      const targetNameAfterMerge = allUserPeople.find(p => p.id === targetPersonId)?.name || targetData.name; 
 
-      toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetName}.` });
+
+      toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}.` });
       
-      await fetchAllUserPeople(); // Refresh lists
+      await fetchAllUserPeople(); 
       await fetchUserRosters();
       clearGlobalMergeSelection();
 
@@ -938,17 +917,30 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setIsLoadingMergeSuggestions(true);
     try {
-      const flowInput: SuggestMergeInput = allUserPeople.map(p => ({ id: p.id, name: p.name }));
+      // Prepare input for the Genkit flow
+      const flowInput: SuggestMergeInput = allUserPeople.map(p => ({ 
+        id: p.id, 
+        name: p.name,
+        company: p.company, // Ensure these are passed
+        hobbies: p.hobbies,   // Ensure these are passed
+      }));
+      
       const suggestions = await suggestPeopleMerges(flowInput);
       setMergeSuggestions(suggestions);
+
       if (suggestions.length === 0) {
-        toast({ title: "No Merge Suggestions", description: "The AI (placeholder) found no potential duplicates based on current criteria." });
+        toast({ title: "No Merge Suggestions", description: "The AI found no potential duplicates based on current criteria." });
       } else {
         toast({ title: "Merge Suggestions Found", description: `Found ${suggestions.length} potential merge(s). Review them below.` });
       }
-    } catch (error: any) {
-      console.error("FRC: Error fetching merge suggestions:", error);
-      toast({ title: "Suggestion Error", description: `Could not fetch merge suggestions: ${error.message}`, variant: "destructive" });
+    } catch (error: any)
+     {
+      console.error("FRC: Error fetching merge suggestions from Genkit flow:", error);
+      let detailedErrorMessage = `Could not fetch merge suggestions: ${error.message}`;
+      if (error.cause) { // Genkit errors often have a 'cause'
+        detailedErrorMessage += ` Cause: ${JSON.stringify(error.cause)}`;
+      }
+      toast({ title: "Suggestion Error", description: detailedErrorMessage, variant: "destructive", duration: 10000 });
       setMergeSuggestions([]);
     } finally {
       setIsLoadingMergeSuggestions(false);
