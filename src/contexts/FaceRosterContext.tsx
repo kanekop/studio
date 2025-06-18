@@ -170,23 +170,50 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setIsLoadingAllUserPeople(true);
     try {
-      const [field, direction] = peopleSortOption.split('_') as [('createdAt' | 'name'), ('asc' | 'desc')];
       const q = query(
         collection(db, "people"),
-        where("addedBy", "==", currentUser.uid),
-        orderBy(field, direction) 
+        where("addedBy", "==", currentUser.uid)
+        // Server-side orderBy removed to avoid index requirement for now
       );
       const querySnapshot = await getDocs(q);
-      const fetchedPeople: Person[] = [];
+      const fetchedPeopleDocs: Person[] = [];
       querySnapshot.forEach((doc) => {
-        fetchedPeople.push({ id: doc.id, ...doc.data() } as Person);
+        fetchedPeopleDocs.push({ id: doc.id, ...doc.data() } as Person);
       });
-      setAllUserPeople(fetchedPeople);
+
+      // Client-side sorting
+      const [sortField, sortDirection] = peopleSortOption.split('_') as [('createdAt' | 'name'), ('asc' | 'desc')];
+      
+      fetchedPeopleDocs.sort((a, b) => {
+        let valA, valB;
+
+        if (sortField === 'name') {
+          valA = a.name?.toLowerCase() || '';
+          valB = b.name?.toLowerCase() || '';
+        } else { // createdAt
+          // Handle potential null or undefined createdAt, or cases where it might not be a Timestamp
+          const timeA = (a.createdAt as Timestamp)?.toMillis?.();
+          const timeB = (b.createdAt as Timestamp)?.toMillis?.();
+          valA = typeof timeA === 'number' ? timeA : 0;
+          valB = typeof timeB === 'number' ? timeB : 0;
+        }
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+        
+        // Ensure number comparison for timestamps
+        const numA = Number(valA);
+        const numB = Number(valB);
+        return sortDirection === 'asc' ? numA - numB : numB - numA;
+      });
+      
+      setAllUserPeople(fetchedPeopleDocs);
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
-       if (error instanceof FirestoreError && error.code === 'failed-precondition' && error.message.includes('query requires an index')) {
-        toast({ title: "Database Index Required", description: `A database index is needed for people list (Field: ${peopleSortOption}). Error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000});
-      } else if (error instanceof FirestoreError) {
+      // Removed the specific "index required" toast for this query as it's now handled by client-side sorting.
+      // General error handling remains.
+      if (error instanceof FirestoreError) {
         toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
       } else {
         toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${(error as Error).message}`, variant: "destructive" });
