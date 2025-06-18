@@ -21,8 +21,8 @@ import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine, Users 
 interface MergePeopleDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  person1: Person | null; // Target person (first selected)
-  person2: Person | null; // Source person (second selected)
+  person1: Person | null; 
+  person2: Person | null; 
   onConfirmMerge: (
     targetPersonId: string,
     sourcePersonId: string,
@@ -171,8 +171,8 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow pr-6 -mr-6 mt-4 mb-4">
-          <div className="space-y-4 divide-y divide-border">
+        <ScrollArea className="flex-grow min-h-0 pr-6 -mr-6"> 
+          <div className="space-y-4 divide-y divide-border py-4"> 
             {renderFieldChoice('name', 'Name', User)}
             {renderFieldChoice('company', 'Company', Building)}
             {renderFieldChoice('hobbies', 'Hobbies', Smile, true)}
@@ -234,4 +234,3 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 };
 
 export default MergePeopleDialog;
-
