@@ -400,7 +400,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const newPersonIdsForRosterUpdate: string[] = [];
     
     const img = new Image();
-    img.crossOrigin = "anonymous"; 
+    // Conditionally set crossOrigin to prevent issues with data: URLs
+    if (imageDataUrl && imageDataUrl.startsWith('http')) {
+      img.crossOrigin = "anonymous";
+    }
 
     const imageLoadPromise = new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
@@ -418,7 +421,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       await imageLoadPromise;
 
-      let personCounter = roster.length; // Start counter from existing roster size
+      let personCounter = roster.length; 
 
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
@@ -444,7 +447,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
         const croppedFaceRef = storageRefStandard(appFirebaseStorage, faceImageStoragePath);
         
-        // This promise will resolve after upload and URL retrieval
         const uploadAndGetUrlPromise = uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL)
           .then(uploadResult => getDownloadURL(uploadResult.ref))
           .then(downloadURL => {
@@ -455,7 +457,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             };
             const newPersonData: Omit<Person, 'id'> = {
                 name: defaultName,
-                aiName: defaultName, // Can be refined later
+                aiName: defaultName, 
                 notes: '',
                 company: '',
                 hobbies: '',
@@ -482,7 +484,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           .catch(uploadError => {
             console.error(`FRC: Error uploading face image for ${defaultName} or getting URL:`, uploadError);
             toast({ title: "Image Upload Failed", description: `Could not save image for ${defaultName}.`, variant: "destructive"});
-            return null; // Skip this person if upload fails
+            return null; 
           });
         newPeopleForUIPromises.push(uploadAndGetUrlPromise);
       }
@@ -494,11 +496,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             updatedAt: serverTimestamp()
         });
         await batch.commit();
-      } else if (drawnRegions.length > 0) { // Drawn regions existed but all failed image processing/upload
+      } else if (drawnRegions.length > 0) { 
         toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive"});
         setIsProcessing(false);
         return;
-      } else { // No regions to process
+      } else { 
         setIsProcessing(false);
         return;
       }
@@ -509,11 +511,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setDrawnRegions([]); 
       
       if (successfullyCreatedPeople.length > 0) {
-        setSelectedPersonId(successfullyCreatedPeople[0].id); // Select the first newly added person
-        await fetchUserRosters(); // Update roster list on landing page
-        await fetchAllUserPeople(); // Update full people list
+        setSelectedPersonId(successfullyCreatedPeople[0].id); 
+        await fetchUserRosters(); 
+        await fetchAllUserPeople(); 
         toast({ title: "Roster Updated", description: `${successfullyCreatedPeople.length} new person/people saved to the roster.` });
-      } else if (drawnRegions.length > 0) { // Drawn regions existed but all failed promises
+      } else if (drawnRegions.length > 0) { 
          toast({ title: "Save Incomplete", description: "Some or all new people could not be saved due to image processing errors.", variant: "destructive"});
       }
 
@@ -534,7 +536,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     personIdToUpdate: string, 
     details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>
   ) => {
-    if (!db || !currentUser?.uid || !currentRosterDocId) { // currentRosterDocId might not be strictly necessary if updating a person globally, but good for context
+    if (!db || !currentUser?.uid || !currentRosterDocId) { 
         toast({ title: "Error", description: "User not authenticated, or database service unavailable.", variant: "destructive" });
         return;
     }
@@ -572,7 +574,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             firstMetContext: details.firstMetContext,
             updatedAt: serverTimestamp() 
         };
-        // Remove undefined fields to avoid overwriting with undefined in Firestore
+        
         Object.keys(firestoreUpdateData).forEach(key => firestoreUpdateData[key] === undefined && delete firestoreUpdateData[key]);
 
         await updateDoc(personDocRef, firestoreUpdateData);
@@ -593,7 +595,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               : p
           )
         );
-        await fetchAllUserPeople(); // Refresh the global list of people too
+        await fetchAllUserPeople(); 
         toast({ title: "Details Saved", description: `${finalName}'s information updated.` });
 
     } catch (error: any) {
@@ -1067,15 +1069,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error: any) {
       console.error(`FRC: Error during Firestore batch deletion:`, error);
       toast({ title: "Database Deletion Failed", description: `Could not delete people from database: ${error.message}. Some people may not have been deleted.`, variant: "destructive" });
-      // Don't set isProcessing to false here if we proceed to image deletion attempt
-      // But if it fails here, we should probably stop.
+      
       setIsProcessing(false);
       await fetchAllUserPeople(); 
       await fetchUserRosters();
       return; 
     }
 
-    // Only attempt image deletion if Firestore operations were successful
+    
     if (successfullyProcessedFirestore) {
       let imagesSuccessfullyDeletedCount = 0;
       for (const path of imagesToDeleteFromStorage) {
@@ -1084,7 +1085,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           imagesSuccessfullyDeletedCount++;
         } catch (storageError: any) {
           console.warn(`FRC: Failed to delete face image ${path} from Storage:`, storageError.message);
-          // Don't stop all processing for a single image delete failure
+          
         }
       }
       if (imagesToDeleteFromStorage.length > 0) {
@@ -1092,7 +1093,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     }
     
-    // Reset selections and refresh lists regardless of partial image deletion failures
+    
     clearPeopleSelectionForDeletion();
     await fetchAllUserPeople(); 
     await fetchUserRosters(); 
