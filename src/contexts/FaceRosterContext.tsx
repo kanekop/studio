@@ -210,16 +210,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setAllUserPeople(fetchedPeopleDocs);
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
-      if (error instanceof FirestoreError) {
-        // toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
-      } else {
-        toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${(error as Error).message}`, variant: "destructive" });
-      }
+      // Avoid toast spamming if indexes are missing during sort changes
+      // if (error instanceof FirestoreError) {
+      //   // toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
+      // } else {
+      //   toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${(error as Error).message}`, variant: "destructive" });
+      // }
       setAllUserPeople([]);
     } finally {
       setIsLoadingAllUserPeople(false);
     }
-  }, [currentUser, toast, peopleSortOption]);
+  }, [currentUser, peopleSortOption]);
 
 
   useEffect(() => {
@@ -395,13 +396,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     
     setIsProcessing(true);
-    const newPeopleForUIPromises: Promise<EditablePersonInContext | null>[] = [];
-    const batch = writeBatch(db);
-    const newPersonIdsForRosterUpdate: string[] = [];
     
     const img = new Image();
-    // Conditionally set crossOrigin to prevent issues with data: URLs
-    if (imageDataUrl && imageDataUrl.startsWith('http')) {
+    if (imageDataUrl && (imageDataUrl.startsWith('http://') || imageDataUrl.startsWith('https://'))) {
       img.crossOrigin = "anonymous";
     }
 
@@ -418,15 +415,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       img.src = imageDataUrl; 
     });
 
+    type PreparedPersonData = {
+      id: string;
+      data: Omit<Person, 'id'>;
+      faceImageUrlForUI: string; // Download URL for UI
+      originalRegion: Region;
+    };
+
     try {
       await imageLoadPromise;
 
       let personCounter = roster.length; 
+      const preparedPeoplePromises: Promise<PreparedPersonData | null>[] = [];
 
       for (let i = 0; i < drawnRegions.length; i++) {
         const region = drawnRegions[i];
         personCounter++;
         const defaultName = `Person ${personCounter}`;
+        const newPersonId = doc(collection(db, "people")).id; // Generate ID upfront
 
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.max(1, Math.floor(region.width)); 
@@ -434,20 +440,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const ctx = tempCanvas.getContext('2d');
         if (!ctx) {
             console.warn(`FRC: Could not get 2D context for canvas for region ${i}, skipping.`);
+            preparedPeoplePromises.push(Promise.resolve(null)); // Keep promise array length consistent
             continue; 
         }
         ctx.drawImage(img, Math.floor(region.x), Math.floor(region.y), Math.floor(region.width), Math.floor(region.height), 0, 0, tempCanvas.width, tempCanvas.height);
         const faceImageDataURI = tempCanvas.toDataURL('image/png'); 
         
-        const newPersonDocRef = doc(collection(db, "people"));
-        const newPersonId = newPersonDocRef.id;
-        newPersonIdsForRosterUpdate.push(newPersonId);
-
         const croppedFaceFileName = `${currentRosterDocId}_${newPersonId}_${Date.now()}.png`;
         const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
         const croppedFaceRef = storageRefStandard(appFirebaseStorage, faceImageStoragePath);
         
-        const uploadAndGetUrlPromise = uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL)
+        const uploadPromise = uploadString(croppedFaceRef, faceImageDataURI, StringFormat.DATA_URL)
           .then(uploadResult => getDownloadURL(uploadResult.ref))
           .then(downloadURL => {
             const newAppearance: FaceAppearance = {
@@ -455,68 +458,90 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 faceImageStoragePath: faceImageStoragePath,
                 originalRegion: region,
             };
-            const newPersonData: Omit<Person, 'id'> = {
+            const newPersonDataForDb: Omit<Person, 'id'> = {
                 name: defaultName,
                 aiName: defaultName, 
-                notes: '',
-                company: '',
-                hobbies: '',
-                birthday: '',
-                firstMet: '',
-                firstMetContext: '',
+                notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
                 faceAppearances: [newAppearance],
                 addedBy: currentUser.uid,
                 rosterIds: [currentRosterDocId],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             };
-            batch.set(newPersonDocRef, newPersonData);
-
-            return {
-              id: newPersonId,
-              isNew: false,
-              name: defaultName,
-              faceImageUrl: downloadURL,
-              currentRosterAppearance: newAppearance,
-              notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: ''
-            } as EditablePersonInContext;
+            return { 
+              id: newPersonId, 
+              data: newPersonDataForDb, 
+              faceImageUrlForUI: downloadURL,
+              originalRegion: region
+            } as PreparedPersonData;
           })
           .catch(uploadError => {
-            console.error(`FRC: Error uploading face image for ${defaultName} or getting URL:`, uploadError);
-            toast({ title: "Image Upload Failed", description: `Could not save image for ${defaultName}.`, variant: "destructive"});
+            console.error(`FRC: Error uploading face image for Person (ID: ${newPersonId}) or getting URL:`, uploadError);
+            toast({ title: "Image Upload Failed", description: `Could not save image for a new person.`, variant: "destructive"});
             return null; 
           });
-        newPeopleForUIPromises.push(uploadAndGetUrlPromise);
+        preparedPeoplePromises.push(uploadPromise);
       }
 
-      if (newPersonIdsForRosterUpdate.length > 0) {
-        const rosterRef = doc(db, "rosters", currentRosterDocId);
-        batch.update(rosterRef, {
-            peopleIds: arrayUnion(...newPersonIdsForRosterUpdate), 
-            updatedAt: serverTimestamp()
-        });
-        await batch.commit();
-      } else if (drawnRegions.length > 0) { 
+      const successfullyPreparedPeople = (await Promise.all(preparedPeoplePromises)).filter(p => p !== null) as PreparedPersonData[];
+      
+      if (successfullyPreparedPeople.length === 0 && drawnRegions.length > 0) {
         toast({ title: "Processing Error", description: "Could not process any of the selected regions for saving.", variant: "destructive"});
         setIsProcessing(false);
         return;
-      } else { 
+      }
+      if (successfullyPreparedPeople.length === 0) {
         setIsProcessing(false);
         return;
       }
-      
-      const successfullyCreatedPeople = (await Promise.all(newPeopleForUIPromises)).filter(p => p !== null) as EditablePersonInContext[];
 
-      setRoster(prev => [...prev, ...successfullyCreatedPeople]); 
+      const batch = writeBatch(db);
+      const newPersonIdsForRosterUpdate: string[] = [];
+      const newPeopleForUI: EditablePersonInContext[] = [];
+
+      successfullyPreparedPeople.forEach(prepData => {
+        const personDocRef = doc(db, "people", prepData.id);
+        batch.set(personDocRef, prepData.data);
+        newPersonIdsForRosterUpdate.push(prepData.id);
+        
+        newPeopleForUI.push({
+          id: prepData.id,
+          isNew: false,
+          name: prepData.data.name,
+          aiName: prepData.data.aiName,
+          notes: prepData.data.notes,
+          company: prepData.data.company,
+          hobbies: prepData.data.hobbies,
+          birthday: prepData.data.birthday,
+          firstMet: prepData.data.firstMet,
+          firstMetContext: prepData.data.firstMetContext,
+          faceImageUrl: prepData.faceImageUrlForUI,
+          currentRosterAppearance: {
+            rosterId: currentRosterDocId,
+            faceImageStoragePath: (prepData.data.faceAppearances && prepData.data.faceAppearances[0]?.faceImageStoragePath) || '',
+            originalRegion: prepData.originalRegion,
+          },
+        });
+      });
+      
+      const rosterRef = doc(db, "rosters", currentRosterDocId);
+      batch.update(rosterRef, {
+          peopleIds: arrayUnion(...newPersonIdsForRosterUpdate), 
+          updatedAt: serverTimestamp()
+      });
+      
+      await batch.commit();
+      
+      setRoster(prev => [...prev, ...newPeopleForUI]); 
       setDrawnRegions([]); 
       
-      if (successfullyCreatedPeople.length > 0) {
-        setSelectedPersonId(successfullyCreatedPeople[0].id); 
+      if (newPeopleForUI.length > 0) {
+        setSelectedPersonId(newPeopleForUI[0].id); 
         await fetchUserRosters(); 
         await fetchAllUserPeople(); 
-        toast({ title: "Roster Updated", description: `${successfullyCreatedPeople.length} new person/people saved to the roster.` });
+        toast({ title: "Roster Updated", description: `${newPeopleForUI.length} new person/people saved to the roster.` });
       } else if (drawnRegions.length > 0) { 
-         toast({ title: "Save Incomplete", description: "Some or all new people could not be saved due to image processing errors.", variant: "destructive"});
+         toast({ title: "Save Incomplete", description: "Some or all new people could not be saved due to image processing or upload errors.", variant: "destructive"});
       }
 
     } catch (error: any) {
