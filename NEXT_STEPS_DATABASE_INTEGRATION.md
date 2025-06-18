@@ -1,3 +1,4 @@
+
 # FaceRoster アプリケーション仕様書 (改訂版)
 
 ## 1. 概要
@@ -110,6 +111,39 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
     *   `createdAt`: Timestamp (人物データ作成日時)
     *   `updatedAt`: Timestamp (人物データ最終更新日時)
 
+### `connections` コレクション (新規)
+*   役割: 人物間の関係性を管理します。これにより、柔軟な関係性の記録と将来的な拡張（関係の強さ、出会った時期など）が可能になります。
+*   ドキュメントID: Firestoreによる自動生成ID。
+*   フィールド:
+    *   `fromPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の起点となる人物。)
+    *   `toPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の対象となる人物。)
+    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member"]`)
+    *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生"]`)
+    *   `strength`: `number` (任意。関係の強さや親密さを示す数値。例: 1-5のスケール)
+    *   `notes`: `string` (任意。この関係性に関するメモ。)
+    *   `createdAt`: `Timestamp` (関係性が記録された日時)
+    *   `updatedAt`: `Timestamp` (関係性が最後に更新された日時)
+*   **サンプルドキュメント:**
+    ```json
+    // Document ID: (e.g., conn_randomId123)
+    {
+      "fromPersonId": "people_doc_id_A",
+      "toPersonId": "people_doc_id_B",
+      "types": ["colleague", "mentor"],
+      "reasons": ["Globex Corporation - Marketing Dept.", "Provided career advice in 2022"],
+      "strength": 4,
+      "notes": "Reliable contact for marketing strategies.",
+      "createdAt": "Timestamp(seconds=1679700000, nanoseconds=0)",
+      "updatedAt": "Timestamp(seconds=1679700300, nanoseconds=0)"
+    }
+    ```
+*   **双方向検索に関する注意点:**
+    特定の人物（例：`person_A_id`）の全ての関係性を取得するには、アプリケーション側で以下の2つのクエリを実行し、結果をマージする必要があります。
+    1.  `connections` コレクションで `fromPersonId == "person_A_id"` となるドキュメントを検索。
+    2.  `connections` コレクションで `toPersonId == "person_A_id"` となるドキュメントを検索。
+    これにより、`person_A_id` が起点となっている関係と、対象となっている関係の両方を取得できます。
+    または、`fromPersonId` と `toPersonId` に加えて、`participants: ["person_A_id", "person_B_id"]` (IDは常にソート順で格納) という配列フィールドを各コネクションドキュメントに持たせ、`array-contains` クエリ (`where('participants', 'array-contains', 'person_A_id')`) で単一クエリで取得する方法も考えられますが、現行のフィールド定義では上記の2クエリ方式が基本となります。
+
 ## 5. ファイル構成と各ファイルの役割 (主要な変更点)
 
 *   **`src/app/(auth)/` (新規)**:
@@ -133,7 +167,7 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
     *   **`firebase.ts` (新規)**: Firebaseプロジェクトの設定情報を記述し、Firebase Appインスタンスを初期化・エクスポート。
     *   **`localStorage.ts`**: アプリケーションデータの保存・読み込み処理を削除。UIテーマ設定など、ユーザーセッションに依存しないごく軽微な設定情報のみに限定的に利用（または完全に廃止）。
 *   **`src/services/` (新規ディレクトリ検討)**:
-    *   Firestoreの各コレクションに対するCRUD操作をカプセル化したサービス関数群 (例: `imageSetService.ts`, `personService.ts`) を作成。Contextやコンポーネントはこれらのサービスを呼び出す。
+    *   Firestoreの各コレクションに対するCRUD操作をカプセル化したサービス関数群 (例: `imageSetService.ts`, `personService.ts`, `connectionService.ts`) を作成。Contextやコンポーネントはこれらのサービスを呼び出す。
 *   **`src/ai/`**:
     *   将来的に、Cloud FunctionsからGenkitフローを呼び出すためのコードを配置。
         *   例: 画像がCloud Storageにアップロードされたのをトリガーに、顔認識を実行し、`people`コレクションのデータと照合する、といった処理を記述。
@@ -159,13 +193,16 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
     *   `RosterItemDetail`での編集は、対応する`people`ドキュメントおよび関連する`rosters`ドキュメントを直接更新。
 5.  **検索**:
     *   ユーザーが検索UI（未実装）で条件を入力すると、Firestoreのクエリを発行し、`people`コレクションや`rosters`コレクションから合致するデータを取得して表示。
+6.  **関係性の管理 (新規)**:
+    *   専用UI (未実装) を通じて、`people`コレクション内の人物間に`connections`ドキュメントを作成・編集・削除する。
 
 ## 7. 認証とセキュリティルール
 
 *   **Firebase Authentication**: ユーザーのサインアップ、ログイン、ログアウト、セッション管理を担当。
 *   **Cloud Firestore セキュリティルール**:
-    *   ユーザーは自身のデータ（自分が作成した`rosters`、自分が追加した`people`など）のみ読み書きできるように設定。
+    *   ユーザーは自身のデータ（自分が作成した`rosters`、自分が追加した`people`、自分が関与する`connections`など）のみ読み書きできるように設定。
     *   `users`コレクションのドキュメントは、対応するUIDのユーザーのみが読み書き可能。
+    *   `connections`コレクションのセキュリティルールでは、`fromPersonId` または `toPersonId` に紐づく`people`ドキュメントの`addedBy`が認証ユーザーのUIDと一致する場合などに読み書きを許可する、といった設定を検討。
 *   **Cloud Storage セキュリティルール**:
     *   認証されたユーザーのみが画像をアップロード可能。
     *   ユーザーは自身がアップロードした画像、または自身がアクセス権を持つ`rosters`に関連付けられた画像のみ読み取り可能。
@@ -182,5 +219,8 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 8.  `FaceRosterContext`をFirebase連携中心にリファクタリング。
 9.  ランディングページを、ログインユーザーの`ImageSet`（または`Roster`）一覧表示に変更。
 10. エラーハンドリングと状態管理の改善。
+11. **`connections`コレクションの管理UIの実装 (人物詳細ページなど)。**
+12. **`people`ドキュメント内の`knownAcquaintances`や`spouse`フィールドを`connections`コレクションへの参照に移行または連携させることを検討。**
 
 この仕様書は、アプリケーションの成長に合わせて継続的に更新されるものです。
+
