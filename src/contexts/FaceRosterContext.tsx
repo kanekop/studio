@@ -16,6 +16,8 @@ const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
+export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
+
 
 interface FaceRosterContextType {
   currentUser: FirebaseUser | null;
@@ -35,6 +37,8 @@ interface FaceRosterContextType {
   globallySelectedPeopleForMerge: string[];
   mergeSuggestions: SuggestedMergePair[];
   isLoadingMergeSuggestions: boolean;
+  peopleSortOption: PeopleSortOptionValue;
+  selectedPeopleIdsForDeletion: string[];
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -56,24 +60,25 @@ interface FaceRosterContextType {
     fieldChoices: FieldMergeChoices
   ) => Promise<void>;
   fetchMergeSuggestions: () => Promise<void>;
+  setPeopleSortOption: (option: PeopleSortOptionValue) => void;
+  togglePersonSelectionForDeletion: (personId: string) => void;
+  clearPeopleSelectionForDeletion: () => void;
+  deleteSelectedPeople: () => Promise<void>;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
 
-// Helper function to convert a Firebase Storage path to a Base64 Data URI
 async function imageStoragePathToDataURI(path: string): Promise<string | undefined> {
   if (!appFirebaseStorage || !path) return undefined;
   try {
     const fileRef = storageRefStandard(appFirebaseStorage, path);
     const url = await getDownloadURL(fileRef);
-    // Fetch as blob
-    const response = await fetch(url); // `fetch` is globally available in modern browsers and Node.js
+    const response = await fetch(url); 
     if (!response.ok) {
       console.error(`Failed to fetch image from URL ${url}: ${response.status} ${response.statusText}`);
       throw new Error(`Failed to fetch image: ${response.statusText}`);
     }
     const blob = await response.blob();
-    // Convert blob to data URI
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => resolve(reader.result as string);
@@ -109,6 +114,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [globallySelectedPeopleForMerge, setGloballySelectedPeopleForMerge] = useState<string[]>([]);
   const [mergeSuggestions, setMergeSuggestions] = useState<SuggestedMergePair[]>([]);
   const [isLoadingMergeSuggestions, setIsLoadingMergeSuggestions] = useState<boolean>(false);
+  const [peopleSortOption, setPeopleSortOptionState] = useState<PeopleSortOptionValue>('createdAt_desc');
+  const [selectedPeopleIdsForDeletion, setSelectedPeopleIdsForDeletion] = useState<string[]>([]);
   
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -118,7 +125,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setRoster([]);
     setSelectedPersonId(null);
     setCurrentRosterDocId(null); 
-    // Do not clear merge suggestions here as they are global
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
     }
@@ -164,10 +170,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setIsLoadingAllUserPeople(true);
     try {
+      const [field, direction] = peopleSortOption.split('_') as [('createdAt' | 'name'), ('asc' | 'desc')];
       const q = query(
         collection(db, "people"),
         where("addedBy", "==", currentUser.uid),
-        orderBy("name", "asc") 
+        orderBy(field, direction) 
       );
       const querySnapshot = await getDocs(q);
       const fetchedPeople: Person[] = [];
@@ -178,7 +185,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
        if (error instanceof FirestoreError && error.code === 'failed-precondition' && error.message.includes('query requires an index')) {
-        toast({ title: "Database Index Required", description: `A database index is needed for people list. Error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000});
+        toast({ title: "Database Index Required", description: `A database index is needed for people list (Field: ${peopleSortOption}). Error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000});
       } else if (error instanceof FirestoreError) {
         toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
       } else {
@@ -188,7 +195,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoadingAllUserPeople(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, peopleSortOption]);
 
 
   useEffect(() => {
@@ -201,13 +208,21 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setAllUserPeople([]);
         setGloballySelectedPeopleForMerge([]);
         setMergeSuggestions([]);
+        setSelectedPeopleIdsForDeletion([]);
+        setPeopleSortOptionState('createdAt_desc');
       } else {
-        fetchUserRosters();
-        fetchAllUserPeople(); 
+        // fetchAllUserPeople will be called by setPeopleSortOption or its own useEffect dependency
       }
     });
     return () => unsubscribe();
-  }, [fetchUserRosters, fetchAllUserPeople, clearAllData]);
+  }, [clearAllData]);
+
+  useEffect(() => {
+    if (currentUser) {
+        fetchUserRosters();
+        fetchAllUserPeople();
+    }
+  }, [currentUser, peopleSortOption, fetchUserRosters, fetchAllUserPeople]);
 
 
   const handleImageUpload = useCallback(async (file: File) => {
@@ -508,7 +523,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             } else { 
                 const newPersonDocRef = doc(collection(db, "people")); 
                 targetPersonId = newPersonDocRef.id; 
-                const newPersonData: Omit<Person, 'id'> = {
+                const newPersonData: Omit<Person, 'id' | 'createdAt'> & {createdAt?: any} = {
                     name: finalName,
                     aiName: details.aiName || finalName,
                     notes: details.notes || '',
@@ -946,10 +961,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
     setIsLoadingMergeSuggestions(true);
-    setMergeSuggestions([]); // Clear previous suggestions
+    setMergeSuggestions([]); 
 
     try {
-      // Prepare input for the Genkit flow, including fetching image data URIs
       const peopleWithImageDataPromises = allUserPeople.map(async (p) => {
         let faceImageDataUri: string | undefined = undefined;
         if (p.faceAppearances && p.faceAppearances.length > 0 && p.faceAppearances[0].faceImageStoragePath) {
@@ -989,6 +1003,101 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, allUserPeople, toast]);
 
+  const setPeopleSortOption = useCallback((option: PeopleSortOptionValue) => {
+    setPeopleSortOptionState(option);
+    // fetchAllUserPeople will be re-triggered by useEffect due to peopleSortOption change
+  }, []);
+
+  const togglePersonSelectionForDeletion = useCallback((personId: string) => {
+    setSelectedPeopleIdsForDeletion(prevSelected => {
+      if (prevSelected.includes(personId)) {
+        return prevSelected.filter(id => id !== personId);
+      } else {
+        return [...prevSelected, personId];
+      }
+    });
+  }, []);
+
+  const clearPeopleSelectionForDeletion = useCallback(() => {
+    setSelectedPeopleIdsForDeletion([]);
+  }, []);
+
+  const deleteSelectedPeople = useCallback(async () => {
+    if (!db || !appFirebaseStorage || !currentUser) {
+      toast({ title: "Error", description: "Cannot delete: Not logged in or Firebase services unavailable.", variant: "destructive"});
+      return;
+    }
+    if (selectedPeopleIdsForDeletion.length === 0) {
+      toast({ title: "No Selection", description: "No people selected for deletion.", variant: "default"});
+      return;
+    }
+
+    setIsProcessing(true);
+    const numToDelete = selectedPeopleIdsForDeletion.length;
+    let numSuccessfullyDeleted = 0;
+
+    for (const personId of selectedPeopleIdsForDeletion) {
+      try {
+        const personDocRef = doc(db, "people", personId);
+        const personSnap = await getDoc(personDocRef);
+
+        if (!personSnap.exists()) {
+          console.warn(`FRC: Person ${personId} not found for deletion. Skipping.`);
+          continue;
+        }
+        const personData = personSnap.data() as Person;
+
+        const batch = writeBatch(db);
+        const imagesToDeleteFromStorage: string[] = [];
+
+        // Collect all face images for this person across all their appearances
+        personData.faceAppearances?.forEach(appearance => {
+          if (appearance.faceImageStoragePath) {
+            imagesToDeleteFromStorage.push(appearance.faceImageStoragePath);
+          }
+        });
+
+        // Remove this person from all rosters they are part of
+        if (personData.rosterIds && personData.rosterIds.length > 0) {
+          for (const rosterId of personData.rosterIds) {
+            const rosterRef = doc(db, "rosters", rosterId);
+            batch.update(rosterRef, {
+              peopleIds: arrayRemove(personId),
+              updatedAt: serverTimestamp()
+            });
+          }
+        }
+        
+        // Delete the person document
+        batch.delete(personDocRef);
+        
+        await batch.commit();
+
+        // After successful Firestore commit, delete images from Storage
+        for (const path of imagesToDeleteFromStorage) {
+          try {
+            await deleteObject(storageRefStandard(appFirebaseStorage, path));
+          } catch (storageError: any) {
+            console.warn(`FRC: Failed to delete face image ${path} from Storage during person deletion:`, storageError.message);
+            // Non-critical, log and continue
+          }
+        }
+        numSuccessfullyDeleted++;
+      } catch (error: any) {
+        console.error(`FRC: Error deleting person ${personId}:`, error);
+        toast({ title: "Deletion Error", description: `Failed to delete ${allUserPeople.find(p=>p.id === personId)?.name || 'a person'}: ${error.message}`, variant: "destructive" });
+      }
+    }
+
+    toast({ title: "Deletion Complete", description: `${numSuccessfullyDeleted} of ${numToDelete} selected people were deleted.` });
+    
+    clearPeopleSelectionForDeletion();
+    await fetchAllUserPeople(); 
+    await fetchUserRosters(); // Rosters might have changed (peopleIds)
+    setIsProcessing(false);
+
+  }, [db, appFirebaseStorage, currentUser, selectedPeopleIdsForDeletion, toast, clearPeopleSelectionForDeletion, fetchAllUserPeople, fetchUserRosters, allUserPeople]);
+
 
   return (
     <FaceRosterContext.Provider value={{
@@ -1009,6 +1118,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       globallySelectedPeopleForMerge,
       mergeSuggestions,
       isLoadingMergeSuggestions,
+      peopleSortOption,
+      selectedPeopleIdsForDeletion,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -1025,6 +1136,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       clearGlobalMergeSelection,
       performGlobalPeopleMerge,
       fetchMergeSuggestions,
+      setPeopleSortOption,
+      togglePersonSelectionForDeletion,
+      clearPeopleSelectionForDeletion,
+      deleteSelectedPeople,
     }}>
       {children}
     </FaceRosterContext.Provider>
@@ -1038,3 +1153,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+

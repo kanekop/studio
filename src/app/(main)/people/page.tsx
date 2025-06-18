@@ -1,15 +1,33 @@
 
 "use client";
 import React, { useEffect, useState } from 'react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
 import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 
 export default function ManagePeoplePage() {
@@ -26,27 +44,54 @@ export default function ManagePeoplePage() {
     fetchMergeSuggestions,
     mergeSuggestions,
     isLoadingMergeSuggestions,
+    peopleSortOption,
+    setPeopleSortOption,
+    selectedPeopleIdsForDeletion,
+    togglePersonSelectionForDeletion,
+    clearPeopleSelectionForDeletion,
+    deleteSelectedPeople,
   } = useFaceRoster();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
+  const [isDeleteSelectionMode, setIsDeleteSelectionMode] = useState(false);
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+
 
   useEffect(() => {
     if (currentUser && !allUserPeople.length && !isLoadingAllUserPeople) {
-      fetchAllUserPeople();
+      // fetchAllUserPeople is now called via useEffect dependency on peopleSortOption or currentUser in context
     }
-  }, [currentUser, fetchAllUserPeople, allUserPeople, isLoadingAllUserPeople]);
+  }, [currentUser, allUserPeople, isLoadingAllUserPeople, fetchAllUserPeople]);
 
   useEffect(() => {
     if (!isMergeSelectionMode) {
       clearGlobalMergeSelection();
     }
-  }, [isMergeSelectionMode, clearGlobalMergeSelection]);
+    if (isMergeSelectionMode && isDeleteSelectionMode) { // Ensure modes are exclusive
+        setIsDeleteSelectionMode(false);
+        clearPeopleSelectionForDeletion();
+    }
+  }, [isMergeSelectionMode, clearGlobalMergeSelection, isDeleteSelectionMode, clearPeopleSelectionForDeletion]);
+
+  useEffect(() => {
+    if (!isDeleteSelectionMode) {
+      clearPeopleSelectionForDeletion();
+    }
+     if (isDeleteSelectionMode && isMergeSelectionMode) { // Ensure modes are exclusive
+        setIsMergeSelectionMode(false);
+        clearGlobalMergeSelection();
+    }
+  }, [isDeleteSelectionMode, clearPeopleSelectionForDeletion, isMergeSelectionMode, clearGlobalMergeSelection]);
 
   const handleToggleMergeMode = () => {
     setIsMergeSelectionMode(!isMergeSelectionMode);
-    // If exiting merge mode, ensure suggestions are cleared or handled if needed
-    // For now, merge suggestions persist until explicitly re-fetched or page reloads
+    if (!isMergeSelectionMode) setIsDeleteSelectionMode(false); // Turn off delete mode if activating merge mode
+  };
+
+  const handleToggleDeleteMode = () => {
+    setIsDeleteSelectionMode(!isDeleteSelectionMode);
+    if (!isDeleteSelectionMode) setIsMergeSelectionMode(false); // Turn off merge mode if activating delete mode
   };
 
   const handleInitiateMergeFromSelection = () => {
@@ -56,11 +101,11 @@ export default function ManagePeoplePage() {
   };
 
   const handleInitiateMergeFromSuggestion = (suggestion: SuggestedMergePair) => {
-    clearGlobalMergeSelection(); // Clear any manual selections
+    clearGlobalMergeSelection(); 
     toggleGlobalPersonSelectionForMerge(suggestion.person1Id);
     toggleGlobalPersonSelectionForMerge(suggestion.person2Id);
-    setIsMergeSelectionMode(true); // Enter merge selection mode
-    // Timeout to allow state to update before opening dialog
+    setIsMergeSelectionMode(true); 
+    setIsDeleteSelectionMode(false);
     setTimeout(() => {
         setIsMergeDialogOpen(true);
     }, 0);
@@ -75,8 +120,17 @@ export default function ManagePeoplePage() {
     setIsMergeDialogOpen(false);
     setIsMergeSelectionMode(false); 
   };
+
+  const handleConfirmDelete = async () => {
+    setIsProcessing(true); // Context isProcessing should cover this too
+    await deleteSelectedPeople();
+    setIsDeleteSelectionMode(false); // Exit delete mode after deletion
+    setIsDeleteDialogOpen(false);
+    // Context will refetch people
+  };
   
   const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing;
+  const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing;
 
   const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
   const person2ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[1]) || null;
@@ -84,15 +138,29 @@ export default function ManagePeoplePage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-headline font-bold text-primary">
+        <h1 className="text-3xl font-headline font-bold text-primary flex items-center">
           <Users className="inline-block mr-3 h-8 w-8" />
           Manage People
         </h1>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <Select value={peopleSortOption} onValueChange={(value) => setPeopleSortOption(value as PeopleSortOptionValue)}>
+            <SelectTrigger className="w-auto sm:w-[200px] text-sm">
+              <ListFilter className="mr-2 h-4 w-4"/>
+              <SelectValue placeholder="Sort by..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="createdAt_desc">Date Added (Newest)</SelectItem>
+              <SelectItem value="createdAt_asc">Date Added (Oldest)</SelectItem>
+              <SelectItem value="name_asc">Name (A-Z)</SelectItem>
+              <SelectItem value="name_desc">Name (Z-A)</SelectItem>
+            </SelectContent>
+          </Select>
+         
           <Button 
             variant="outline" 
             onClick={fetchMergeSuggestions} 
-            disabled={isProcessing || isLoadingMergeSuggestions || allUserPeople.length < 2}
+            disabled={isProcessing || isLoadingMergeSuggestions || allUserPeople.length < 2 || isDeleteSelectionMode}
+            title={isDeleteSelectionMode ? "Finish deletion first" : "Find merge suggestions"}
           >
             {isLoadingMergeSuggestions ? (
               <>
@@ -108,42 +176,110 @@ export default function ManagePeoplePage() {
               </>
             )}
           </Button>
+          
           <Button 
-            variant={isMergeSelectionMode ? "destructive" : "outline"} 
+            variant={isMergeSelectionMode ? "default" : "outline"} 
             onClick={handleToggleMergeMode}
-            disabled={isProcessing || (!isMergeSelectionMode && allUserPeople.length < 2)}
+            disabled={isProcessing || allUserPeople.length < 2 || isDeleteSelectionMode}
+            className={isMergeSelectionMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+            title={isDeleteSelectionMode ? "Finish deletion first" : (isMergeSelectionMode ? "Cancel Merge Selection" : "Select to Merge Manually")}
           >
             {isMergeSelectionMode ? (
               <>
-                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge Selection
+                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge
               </>
             ) : (
               <>
-                <UserCheck className="mr-2 h-4 w-4" /> Select to Merge Manually
+                <UserCheck className="mr-2 h-4 w-4" /> Merge Manually
               </>
             )}
           </Button>
-          {isMergeSelectionMode && (
-            <Button 
+
+          <Button 
+            variant={isDeleteSelectionMode ? "default" : "outline"} 
+            onClick={handleToggleDeleteMode}
+            disabled={isProcessing || allUserPeople.length < 1 || isMergeSelectionMode}
+             className={isDeleteSelectionMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
+            title={isMergeSelectionMode ? "Finish merging first" : (isDeleteSelectionMode ? "Cancel Deletion" : "Select to Delete")}
+          >
+            {isDeleteSelectionMode ? (
+              <>
+                <XCircle className="mr-2 h-4 w-4" /> Cancel Deletion
+              </>
+            ) : (
+              <>
+                <ListChecks className="mr-2 h-4 w-4" /> Select to Delete
+              </>
+            )}
+          </Button>
+
+        </div>
+      </div>
+
+      {isMergeSelectionMode && (
+        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md text-center">
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Merge Mode: Select exactly two people from the list to merge. 
+            The first selected will be the primary.
+          </p>
+          {globallySelectedPeopleForMerge.length > 0 && (
+             <Button 
               onClick={handleInitiateMergeFromSelection}
               disabled={!canManuallyMerge}
-              size="default"
-              className="bg-green-600 hover:bg-green-700 text-white"
+              size="sm"
+              className="mt-2 bg-green-600 hover:bg-green-700 text-white"
             >
-              <Merge className="mr-2 h-4 w-4" /> Merge Manually Selected ({globallySelectedPeopleForMerge.length})
+              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge.length})
             </Button>
           )}
         </div>
-      </div>
+      )}
+
+      {isDeleteSelectionMode && (
+        <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/30 rounded-md text-center">
+          <p className="text-sm text-orange-700 dark:text-orange-300">
+            Delete Mode: Select one or more people from the list to delete.
+          </p>
+          {selectedPeopleIdsForDeletion.length > 0 && (
+             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive"
+                  size="sm"
+                  className="mt-2"
+                  disabled={!canDeleteSelected}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedPeopleIdsForDeletion.length})
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete {selectedPeopleIdsForDeletion.length} selected person(s)? 
+                    This will remove them from all rosters and delete their associated face images. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleConfirmDelete} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90">
+                    {isProcessing ? "Deleting..." : "Yes, Delete"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      )}
       
-      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && (
+      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && (
         <Card className="mb-6 shadow-md">
           <CardHeader>
             <CardTitle className="font-headline text-xl flex items-center">
-              <SearchCheck className="mr-2 h-5 w-5 text-primary" /> Merge Suggestions
+              <SearchCheck className="mr-2 h-5 w-5 text-primary" /> AI Merge Suggestions
             </CardTitle>
             <CardDescription>
-              The AI (placeholder) has found these potential duplicates. Review and merge if appropriate.
+              The AI has found these potential duplicates. Review and merge if appropriate.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -158,12 +294,13 @@ export default function ManagePeoplePage() {
                           <br/>with <strong className="text-accent">{suggestion.person2Name}</strong> (ID: ...{suggestion.person2Id.slice(-4)})?
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">Reason: {suggestion.reason}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Confidence: <span className="font-medium">{suggestion.confidence || 'N/A'}</span></p>
                       </div>
                       <Button 
                         size="sm" 
                         variant="outline"
                         onClick={() => handleInitiateMergeFromSuggestion(suggestion)}
-                        disabled={isProcessing}
+                        disabled={isProcessing || isDeleteSelectionMode}
                         className="mt-2 sm:mt-0 shrink-0"
                       >
                         <Merge className="mr-2 h-4 w-4" /> Review & Merge Pair
@@ -176,7 +313,7 @@ export default function ManagePeoplePage() {
           </CardContent>
         </Card>
       )}
-      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && (
+      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && (
          <div className="mb-6 p-4 text-center text-muted-foreground">
             <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -185,27 +322,18 @@ export default function ManagePeoplePage() {
             Looking for merge suggestions...
         </div>
       )}
-       {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 0 && (
+       {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 1 && !isDeleteSelectionMode && (
          <Card className="mb-6 shadow-sm border-dashed">
             <CardContent className="p-6 text-center">
                 <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3"/>
                 <p className="text-sm text-muted-foreground">
-                    No merge suggestions found by the current (placeholder) AI. <br/>
-                    You can still select people manually from the list below to merge them.
+                    No merge suggestions found by the AI. <br/>
+                    You can still select people manually to merge them.
                 </p>
             </CardContent>
          </Card>
       )}
 
-
-      {isMergeSelectionMode && (
-        <div className="mb-4 p-3 bg-accent/20 border border-accent rounded-md text-center">
-          <p className="text-sm text-accent-foreground">
-            Select exactly two people from the list below to merge their information. 
-            The first person selected will be the primary record for data conflict resolution in the upcoming dialog.
-          </p>
-        </div>
-      )}
 
       {isLoadingAllUserPeople ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -218,15 +346,20 @@ export default function ManagePeoplePage() {
           ))}
         </div>
       ) : allUserPeople.length === 0 ? (
-        <p className="text-center text-muted-foreground text-lg py-10">
-          No people registered yet. Upload images and create rosters to add people.
-        </p>
+        <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
+          <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <p className="font-semibold">No people registered yet.</p>
+          <p className="text-sm">Upload images and create rosters to add people to your list.</p>
+        </div>
       ) : (
         <PeopleList 
           people={allUserPeople} 
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
-          onToggleSelection={toggleGlobalPersonSelectionForMerge}
+          onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
+          isDeleteSelectionMode={isDeleteSelectionMode}
+          selectedPeopleForDelete={selectedPeopleIdsForDeletion}
+          onToggleDeleteSelection={togglePersonSelectionForDeletion}
         />
       )}
 
@@ -242,3 +375,4 @@ export default function ManagePeoplePage() {
     </div>
   );
 }
+

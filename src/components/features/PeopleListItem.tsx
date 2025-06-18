@@ -4,8 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import type { Person } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Layers } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { storage } from '@/lib/firebase'; 
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
@@ -16,16 +15,22 @@ interface PeopleListItemProps {
   person: Person;
   isMergeSelectionMode?: boolean;
   isSelectedForMerge?: boolean;
-  onToggleSelection?: (personId: string) => void;
-  isDisabledForSelection?: boolean;
+  onToggleMergeSelection?: (personId: string) => void;
+  isDisabledForMergeSelection?: boolean;
+  isDeleteSelectionMode?: boolean;
+  isSelectedForDelete?: boolean;
+  onToggleDeleteSelection?: (personId: string) => void;
 }
 
 const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
   person, 
   isMergeSelectionMode = false,
   isSelectedForMerge = false,
-  onToggleSelection = () => {},
-  isDisabledForSelection = false,
+  onToggleMergeSelection = () => {},
+  isDisabledForMergeSelection = false,
+  isDeleteSelectionMode = false,
+  isSelectedForDelete = false,
+  onToggleDeleteSelection = () => {},
 }) => {
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
@@ -66,34 +71,52 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const rosterCount = person.rosterIds?.length || 0;
 
   const handleCardClick = () => {
-    if (isMergeSelectionMode && onToggleSelection && !isDisabledForSelection) {
-      onToggleSelection(person.id);
+    if (isDeleteSelectionMode && onToggleDeleteSelection) {
+      onToggleDeleteSelection(person.id);
+    } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
+      onToggleMergeSelection(person.id);
     }
-    // Potentially navigate to a person detail page in the future if not in merge mode
+    // Future: if not in any selection mode, navigate to a person detail page
   };
+
+  const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
+    if (isDeleteSelectionMode && onToggleDeleteSelection) {
+      onToggleDeleteSelection(person.id);
+    } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
+        onToggleMergeSelection(person.id);
+    }
+  };
+  
+  const showCheckbox = isDeleteSelectionMode || isMergeSelectionMode;
+  const isChecked = isDeleteSelectionMode ? isSelectedForDelete : (isMergeSelectionMode ? isSelectedForMerge : false);
+  const isDisabled = isMergeSelectionMode && isDisabledForMergeSelection;
 
   return (
     <Card 
       className={cn(
         "flex flex-col h-full shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg overflow-hidden relative",
-        isMergeSelectionMode && "cursor-pointer",
-        isSelectedForMerge && "ring-2 ring-primary border-primary",
-        isDisabledForSelection && "opacity-60 cursor-not-allowed"
+        (isMergeSelectionMode || isDeleteSelectionMode) && "cursor-pointer",
+        (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-blue-500 border-blue-500",
+        (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-destructive border-destructive",
+        isDisabled && "opacity-60 cursor-not-allowed"
       )}
       onClick={handleCardClick}
+      role={showCheckbox ? "button" : undefined}
+      aria-pressed={showCheckbox ? isChecked : undefined}
+      tabIndex={showCheckbox ? 0 : -1}
+      onKeyDown={showCheckbox ? (e) => { if (e.key === ' ' || e.key === 'Enter') handleCardClick(); } : undefined}
     >
-      {isMergeSelectionMode && (
+      {showCheckbox && (
         <div className="absolute top-2 right-2 z-10 bg-background/80 p-1 rounded-full">
           <Checkbox
-            checked={isSelectedForMerge}
-            onCheckedChange={() => {
-              if (onToggleSelection && !isDisabledForSelection) {
-                onToggleSelection(person.id);
-              }
-            }}
-            disabled={isDisabledForSelection}
-            aria-label={`Select ${person.name} for merge`}
-            className="h-5 w-5"
+            checked={isChecked}
+            onCheckedChange={handleCheckboxChange}
+            disabled={isDisabled}
+            aria-label={`Select ${person.name}`}
+            className={cn("h-5 w-5", 
+                isDeleteSelectionMode && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
+                isMergeSelectionMode && isChecked && "border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+            )}
           />
         </div>
       )}
@@ -132,3 +155,4 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
+

@@ -8,14 +8,20 @@ interface PeopleListProps {
   people: Person[];
   isMergeSelectionMode?: boolean;
   selectedPeopleForMerge?: string[];
-  onToggleSelection?: (personId: string) => void;
+  onToggleMergeSelection?: (personId: string) => void;
+  isDeleteSelectionMode?: boolean;
+  selectedPeopleForDelete?: string[];
+  onToggleDeleteSelection?: (personId: string) => void;
 }
 
 const PeopleList: React.FC<PeopleListProps> = ({ 
   people,
   isMergeSelectionMode = false,
   selectedPeopleForMerge = [],
-  onToggleSelection = () => {}
+  onToggleMergeSelection = () => {},
+  isDeleteSelectionMode = false,
+  selectedPeopleForDelete = [],
+  onToggleDeleteSelection = () => {},
 }) => {
   if (people.length === 0) {
     return (
@@ -33,8 +39,11 @@ const PeopleList: React.FC<PeopleListProps> = ({
           person={person}
           isMergeSelectionMode={isMergeSelectionMode}
           isSelectedForMerge={selectedPeopleForMerge.includes(person.id)}
-          onToggleSelection={onToggleSelection}
-          isDisabledForSelection={isMergeSelectionMode && selectedPeopleForMerge.length >= 2 && !selectedPeopleForMerge.includes(person.id)}
+          onToggleMergeSelection={onToggleMergeSelection}
+          isDisabledForMergeSelection={isMergeSelectionMode && selectedPeopleForMerge.length >= 2 && !selectedPeopleForMerge.includes(person.id)}
+          isDeleteSelectionMode={isDeleteSelectionMode}
+          isSelectedForDelete={selectedPeopleForDelete.includes(person.id)}
+          onToggleDeleteSelection={onToggleDeleteSelection}
         />
       ))}
     </div>
@@ -42,3 +51,4 @@ const PeopleList: React.FC<PeopleListProps> = ({
 };
 
 export default PeopleList;
+
