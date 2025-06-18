@@ -1,19 +1,21 @@
 
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import type { Person } from '@/types';
+import type { Person, Connection } from '@/types'; // Added Connection
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Layers, Pencil } from 'lucide-react';
+import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react'; // Added icons for badges
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { storage } from '@/lib/firebase'; 
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge'; // For potential future use, current badges are custom
 
 interface PeopleListItemProps {
   person: Person;
+  allUserConnections: Connection[]; // New prop
   isMergeSelectionMode?: boolean;
   isSelectedForMerge?: boolean;
   onToggleMergeSelection?: (personId: string) => void;
@@ -26,8 +28,15 @@ interface PeopleListItemProps {
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
 }
 
+const GENERAL_CONNECTION_TYPES = ['friend', 'colleague', 'club_member', 'associate', 'fellow_member', 'group_member'];
+const FAMILY_CONNECTION_TYPES = ['parent', 'child', 'father', 'mother', 'family_member'];
+const PROFESSIONAL_CONNECTION_TYPES = ['manager', 'reports_to', 'subordinate', 'mentor', 'mentee'];
+const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
+
+
 const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
   person, 
+  allUserConnections,
   isMergeSelectionMode = false,
   isSelectedForMerge = false,
   onToggleMergeSelection = () => {},
@@ -77,10 +86,49 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     return () => { isMounted = false; };
   }, [person]);
 
+  const connectionCounts = useMemo(() => {
+    let general = 0;
+    let family = 0;
+    let professional = 0;
+    let partner = 0;
+
+    const relevantConnections = allUserConnections.filter(
+      conn => conn.fromPersonId === person.id || conn.toPersonId === person.id
+    );
+
+    relevantConnections.forEach(conn => {
+      let countedGeneral = false;
+      let countedFamily = false;
+      let countedProfessional = false;
+      let countedPartner = false;
+
+      conn.types.forEach(type => {
+        if (GENERAL_CONNECTION_TYPES.includes(type) && !countedGeneral) {
+          general++;
+          countedGeneral = true;
+        }
+        if (FAMILY_CONNECTION_TYPES.includes(type) && !countedFamily) {
+          family++;
+          countedFamily = true;
+        }
+        if (PROFESSIONAL_CONNECTION_TYPES.includes(type) && !countedProfessional) {
+          professional++;
+          countedProfessional = true;
+        }
+        if (PARTNER_CONNECTION_TYPES.includes(type) && !countedPartner) {
+          partner++;
+          countedPartner = true;
+        }
+      });
+    });
+    return { general, family, professional, partner };
+  }, [person.id, allUserConnections]);
+
+
   const rosterCount = person.rosterIds?.length || 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) {
+    if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) { // Prevent click if checkbox or button was target
       return;
     }
     if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
@@ -185,7 +233,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       aria-pressed={showCheckbox ? isChecked : undefined}
       tabIndex={0}
       onKeyDown={(e) => { 
-        if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button')) ) {
+        if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button, [role="checkbox"]')) ) {
           e.preventDefault(); 
           handleCardClick(e as any); 
         }
@@ -243,6 +291,28 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         {person.company && (
           <p className="text-xs text-muted-foreground truncate" title={person.company}>{person.company}</p>
         )}
+         <div className="mt-2 flex flex-wrap gap-1.5 items-center text-xs text-muted-foreground">
+          {connectionCounts.general > 0 && (
+            <span className="flex items-center p-1 bg-muted rounded-sm" title={`${connectionCounts.general} general connection(s)`}>
+              <Users className="h-3.5 w-3.5 mr-1 text-sky-600" /> {connectionCounts.general}
+            </span>
+          )}
+          {connectionCounts.family > 0 && (
+            <span className="flex items-center p-1 bg-muted rounded-sm" title={`${connectionCounts.family} family connection(s)`}>
+              <Home className="h-3.5 w-3.5 mr-1 text-green-600" /> {connectionCounts.family}
+            </span>
+          )}
+          {connectionCounts.professional > 0 && (
+            <span className="flex items-center p-1 bg-muted rounded-sm" title={`${connectionCounts.professional} professional connection(s)`}>
+              <Briefcase className="h-3.5 w-3.5 mr-1 text-indigo-600" /> {connectionCounts.professional}
+            </span>
+          )}
+          {connectionCounts.partner > 0 && (
+            <span className="flex items-center p-1 bg-muted rounded-sm" title={`${connectionCounts.partner} partner connection(s)`}>
+              <Heart className="h-3.5 w-3.5 mr-1 text-red-600" /> {connectionCounts.partner}
+            </span>
+          )}
+        </div>
       </CardContent>
       <CardFooter className="p-3 border-t bg-muted/30 pointer-events-none">
         <div className="flex items-center text-xs text-muted-foreground">

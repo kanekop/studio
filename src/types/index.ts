@@ -1,4 +1,6 @@
 
+import type { Timestamp } from 'firebase/firestore';
+
 // Describes a rectangular region within an image, using original image coordinates.
 export interface Region {
   x: number;
@@ -41,8 +43,8 @@ export interface Person {
   knownAcquaintances?: string[]; 
   spouse?: string | null; 
 
-  createdAt: any; // Firestore serverTimestamp for creation
-  updatedAt: any; // Firestore serverTimestamp for last update
+  createdAt: Timestamp | any; // Firestore serverTimestamp for creation (any for FieldValue)
+  updatedAt: Timestamp | any; // Firestore serverTimestamp for last update (any for FieldValue)
 }
 
 // Represents an individual person for display and editing within the context of a specific, currently loaded roster.
@@ -85,8 +87,8 @@ export interface ImageSet {
   
   peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
   
-  createdAt: any; // Firestore serverTimestamp for creation (can be Timestamp object or Date for display)
-  updatedAt: any; // Firestore serverTimestamp for last update
+  createdAt: Timestamp | any; // Firestore serverTimestamp for creation
+  updatedAt: Timestamp | any; // Firestore serverTimestamp for last update
 }
 
 // Defines the user's choices for merging conflicting fields between two Person objects.
@@ -121,8 +123,8 @@ export interface Connection {
   reasons: string[]; // e.g., ["Worked at Globex Corp", "University hiking club"]
   strength?: number | null; // Optional, e.g., 1-5. Use null for Firestore if not set.
   notes?: string; // Optional, private notes about this connection
-  createdAt: any; // Firestore serverTimestamp
-  updatedAt: any; // Firestore serverTimestamp
+  createdAt: Timestamp | any; // Firestore serverTimestamp
+  updatedAt: Timestamp | any; // Firestore serverTimestamp
 }
 
 // This interface represents the data structure that the CreateConnectionDialog

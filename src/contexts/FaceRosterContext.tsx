@@ -16,6 +16,7 @@ import type { EditPersonFormData } from '@/components/features/EditPersonDialog'
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const FIRESTORE_IN_QUERY_LIMIT = 30; // Firestore `in` query limit
 
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
@@ -40,8 +41,8 @@ interface FaceRosterContextType {
   isLoadingMergeSuggestions: boolean;
   peopleSortOption: PeopleSortOptionValue;
   selectedPeopleIdsForDeletion: string[];
-  personConnections: Connection[];
-  isLoadingPersonConnections: boolean;
+  allUserConnections: Connection[]; // Changed from personConnections
+  isLoadingAllUserConnections: boolean; // Changed from isLoadingPersonConnections
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -54,7 +55,7 @@ interface FaceRosterContextType {
   fetchUserRosters: () => Promise<void>;
   loadRosterForEditing: (rosterId: string) => Promise<void>;
   deleteRoster: (rosterId: string) => Promise<void>;
-  fetchAllUserPeople: () => Promise<void>;
+  fetchAllUserPeople: () => Promise<void>; // This will trigger connection fetching
   toggleGlobalPersonSelectionForMerge: (personId: string) => void;
   clearGlobalMergeSelection: () => void;
   performGlobalPeopleMerge: (
@@ -71,7 +72,7 @@ interface FaceRosterContextType {
   updateGlobalPersonDetails: (personId: string, details: EditPersonFormData) => Promise<boolean>;
   
   addConnection: (fromPersonId: string, toPersonId: string, types: string[], reasons: string[], strength?: number, notes?: string) => Promise<string | null>;
-  fetchConnectionsForPerson: (personId: string) => Promise<void>;
+  // fetchConnectionsForPerson removed, replaced by allUserConnections logic
   updateConnection: (connectionId: string, updates: Partial<Omit<Connection, 'id' | 'fromPersonId' | 'toPersonId' | 'createdAt'>>) => Promise<boolean>;
   deleteConnection: (connectionId: string) => Promise<boolean>;
 }
@@ -126,8 +127,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [isLoadingMergeSuggestions, setIsLoadingMergeSuggestions] = useState<boolean>(false);
   const [peopleSortOption, setPeopleSortOptionState] = useState<PeopleSortOptionValue>('createdAt_desc');
   const [selectedPeopleIdsForDeletion, setSelectedPeopleIdsForDeletion] = useState<string[]>([]);
-  const [personConnections, setPersonConnections] = useState<Connection[]>([]);
-  const [isLoadingPersonConnections, setIsLoadingPersonConnections] = useState<boolean>(false);
+  const [allUserConnections, setAllUserConnections] = useState<Connection[]>([]);
+  const [isLoadingAllUserConnections, setIsLoadingAllUserConnections] = useState<boolean>(false);
   
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -175,9 +176,50 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast]);
 
+  const fetchAllConnectionsForAllUserPeople = useCallback(async (peopleIds: string[]) => {
+    if (!db || !currentUser || peopleIds.length === 0) {
+      setAllUserConnections([]);
+      return;
+    }
+    setIsLoadingAllUserConnections(true);
+    const fetchedConnectionsMap = new Map<string, Connection>();
+
+    try {
+      for (let i = 0; i < peopleIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
+        const chunk = peopleIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT);
+        if (chunk.length === 0) continue;
+
+        const fromQuery = query(collection(db, "connections"), where("fromPersonId", "in", chunk));
+        const toQuery = query(collection(db, "connections"), where("toPersonId", "in", chunk));
+
+        const [fromSnapshot, toSnapshot] = await Promise.all([getDocs(fromQuery), getDocs(toQuery)]);
+
+        fromSnapshot.forEach(doc => {
+          if (!fetchedConnectionsMap.has(doc.id)) {
+            fetchedConnectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection);
+          }
+        });
+        toSnapshot.forEach(doc => {
+          if (!fetchedConnectionsMap.has(doc.id)) {
+            fetchedConnectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection);
+          }
+        });
+      }
+      setAllUserConnections(Array.from(fetchedConnectionsMap.values()));
+    } catch (error: any) {
+      console.error("FRC: Error fetching connections for all user people:", error);
+      toast({ title: "Error Loading Connections", description: `Could not fetch connections data: ${error.message}`, variant: "destructive" });
+      setAllUserConnections([]);
+    } finally {
+      setIsLoadingAllUserConnections(false);
+    }
+  }, [currentUser, db, toast]);
+
+
   const fetchAllUserPeople = useCallback(async () => {
     if (!currentUser || !db) {
       setAllUserPeople([]);
+      setAllUserConnections([]);
       return;
     }
     setIsLoadingAllUserPeople(true);
@@ -217,13 +259,21 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
       
       setAllUserPeople(fetchedPeopleDocs);
+      if (fetchedPeopleDocs.length > 0) {
+        const peopleIds = fetchedPeopleDocs.map(p => p.id);
+        await fetchAllConnectionsForAllUserPeople(peopleIds);
+      } else {
+        setAllUserConnections([]);
+      }
+
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
       setAllUserPeople([]);
+      setAllUserConnections([]);
     } finally {
       setIsLoadingAllUserPeople(false);
     }
-  }, [currentUser, peopleSortOption]);
+  }, [currentUser, db, peopleSortOption, fetchAllConnectionsForAllUserPeople]);
 
 
   useEffect(() => {
@@ -234,10 +284,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         clearAllData(false); 
         setUserRosters([]);
         setAllUserPeople([]);
+        setAllUserConnections([]);
         setGloballySelectedPeopleForMerge([]);
         setMergeSuggestions([]);
         setSelectedPeopleIdsForDeletion([]);
-        setPersonConnections([]);
         setPeopleSortOptionState('createdAt_desc');
       }
     });
@@ -247,7 +297,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (currentUser) {
         fetchUserRosters();
-        fetchAllUserPeople();
+        fetchAllUserPeople(); // This will now also trigger fetching connections
     }
   }, [currentUser, peopleSortOption, fetchUserRosters, fetchAllUserPeople]);
 
@@ -401,7 +451,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   
     setIsProcessingState(true);
     const img = new Image();
-    // Only set crossOrigin for HTTP/HTTPS URLs, not for data URIs
     if (imageDataUrl.startsWith('http://') || imageDataUrl.startsWith('https://')) {
       img.crossOrigin = "anonymous";
     }
@@ -433,11 +482,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   
       const faceUploadInfos: UploadedFaceInfo[] = [];
   
-      // Step 1: Process images and collect data (upload to storage)
       const faceProcessingPromises = drawnRegions.map(async (region, index) => {
         personCounter++;
         const defaultName = `Person ${personCounter}`;
-        const newPersonId = doc(collection(db!, "people")).id; // Generate ID upfront
+        const newPersonId = doc(collection(db!, "people")).id; 
   
         const tempCanvas = document.createElement('canvas');
         tempCanvas.width = Math.max(1, Math.floor(region.width));
@@ -483,7 +531,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return;
       }
   
-      // Step 2: Prepare and commit Firestore batch
       const batch = writeBatch(db!);
       const newPersonIdsForRosterUpdate: string[] = [];
       const newPeopleForUI: EditablePersonInContext[] = [];
@@ -532,14 +579,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   
       await batch.commit();
   
-      // Step 3: Update UI
       setRoster(prev => [...prev, ...newPeopleForUI]);
       setDrawnRegions([]);
   
       if (newPeopleForUI.length > 0) {
         setSelectedPersonId(newPeopleForUI[0].id);
         await fetchUserRosters();
-        await fetchAllUserPeople();
+        await fetchAllUserPeople(); // This will trigger connection fetching
         toast({ title: "Roster Updated", description: `${newPeopleForUI.length} new person/people saved to the roster.` });
       } else if (drawnRegions.length > 0) {
         toast({ title: "Save Incomplete", description: "Some new people could not be saved due to image processing or upload errors.", variant: "destructive" });
@@ -688,8 +734,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const peopleForRosterUI: EditablePersonInContext[] = [];
       if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
         const peopleChunks = [];
-        for (let i = 0; i < rosterData.peopleIds.length; i += 30) { 
-            peopleChunks.push(rosterData.peopleIds.slice(i, i + 30));
+        for (let i = 0; i < rosterData.peopleIds.length; i += FIRESTORE_IN_QUERY_LIMIT) { 
+            peopleChunks.push(rosterData.peopleIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT));
         }
 
         for (const chunk of peopleChunks) {
@@ -1163,9 +1209,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessingState(false);
     }
-  }, [currentUser, toast, fetchAllUserPeople]);
-
-  // --- Connection Management Functions ---
+  }, [currentUser, db, toast, fetchAllUserPeople]);
 
   const addConnection = useCallback(async (
     fromPersonId: string, 
@@ -1186,15 +1230,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         toPersonId,
         types,
         reasons,
-        strength: strength ?? null, // Ensure optional fields are handled
+        strength: strength ?? null, 
         notes: notes ?? "",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       const docRef = await addDoc(collection(db, "connections"), connectionData);
       toast({ title: "Connection Added", description: "The new connection has been saved." });
-      // Optionally, refetch connections for the relevant person if UI is showing them
-      // await fetchConnectionsForPerson(fromPersonId); 
+      if (allUserPeople.length > 0) { // Refetch connections if people are loaded
+        const peopleIds = allUserPeople.map(p => p.id);
+        await fetchAllConnectionsForAllUserPeople(peopleIds);
+      }
       return docRef.id;
     } catch (error: any) {
       console.error("FRC: Error adding connection:", error);
@@ -1203,41 +1249,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessingState(false);
     }
-  }, [db, currentUser, toast]);
-
-  const fetchConnectionsForPerson = useCallback(async (personId: string) => {
-    if (!db || !currentUser) {
-      setPersonConnections([]);
-      return;
-    }
-    setIsLoadingPersonConnections(true);
-    try {
-      const fromQuery = query(collection(db, "connections"), where("fromPersonId", "==", personId));
-      const toQuery = query(collection(db, "connections"), where("toPersonId", "==", personId));
-
-      const [fromSnapshot, toSnapshot] = await Promise.all([
-        getDocs(fromQuery),
-        getDocs(toQuery)
-      ]);
-
-      const connectionsMap = new Map<string, Connection>();
-      fromSnapshot.forEach(doc => connectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection));
-      toSnapshot.forEach(doc => {
-        if (!connectionsMap.has(doc.id)) { // Avoid duplicates if a connection somehow matches both
-          connectionsMap.set(doc.id, { id: doc.id, ...doc.data() } as Connection);
-        }
-      });
-      
-      setPersonConnections(Array.from(connectionsMap.values()).sort((a,b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0) ));
-
-    } catch (error: any) {
-      console.error(`FRC: Error fetching connections for person ${personId}:`, error);
-      toast({ title: "Error Loading Connections", description: `Could not fetch connections: ${error.message}`, variant: "destructive" });
-      setPersonConnections([]);
-    } finally {
-      setIsLoadingPersonConnections(false);
-    }
-  }, [db, currentUser, toast]);
+  }, [db, currentUser, toast, allUserPeople, fetchAllConnectionsForAllUserPeople]);
 
   const updateConnection = useCallback(async (
     connectionId: string, 
@@ -1250,16 +1262,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsProcessingState(true);
     try {
       const connectionRef = doc(db, "connections", connectionId);
-      // Ensure owner check if necessary for security rules, though connections are between two people
-      // For now, assuming if user can access the people involved, they can manage the connection.
-      
       const updateData = { ...updates, updatedAt: serverTimestamp() };
       await updateDoc(connectionRef, updateData);
       toast({ title: "Connection Updated", description: "The connection details have been saved." });
-      // Re-fetch connections if they are currently displayed for someone involved in this connection
-      // This might need to check selectedPersonId or a specific person whose connections are being viewed.
-      // For simplicity, if selectedPersonId exists, refetch for them.
-      if(selectedPersonId) await fetchConnectionsForPerson(selectedPersonId);
+      if (allUserPeople.length > 0) {
+         const peopleIds = allUserPeople.map(p => p.id);
+         await fetchAllConnectionsForAllUserPeople(peopleIds);
+      }
       return true;
     } catch (error: any) {
       console.error(`FRC: Error updating connection ${connectionId}:`, error);
@@ -1268,7 +1277,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessingState(false);
     }
-  }, [db, currentUser, toast, selectedPersonId, fetchConnectionsForPerson]);
+  }, [db, currentUser, toast, allUserPeople, fetchAllConnectionsForAllUserPeople]);
 
   const deleteConnection = useCallback(async (connectionId: string): Promise<boolean> => {
     if (!db || !currentUser) {
@@ -1278,10 +1287,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsProcessingState(true);
     try {
       const connectionRef = doc(db, "connections", connectionId);
-      // Add ownership/permission check if needed, similar to updateConnection
       await deleteDoc(connectionRef);
       toast({ title: "Connection Deleted", description: "The connection has been removed." });
-      setPersonConnections(prev => prev.filter(conn => conn.id !== connectionId));
+      setAllUserConnections(prev => prev.filter(conn => conn.id !== connectionId)); // Optimistic UI update
       return true;
     } catch (error: any) {
       console.error(`FRC: Error deleting connection ${connectionId}:`, error);
@@ -1314,8 +1322,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       isLoadingMergeSuggestions,
       peopleSortOption,
       selectedPeopleIdsForDeletion,
-      personConnections,
-      isLoadingPersonConnections,
+      allUserConnections,
+      isLoadingAllUserConnections,
       handleImageUpload, 
       addDrawnRegion, 
       clearDrawnRegions, 
@@ -1339,7 +1347,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       deleteSelectedPeople,
       updateGlobalPersonDetails,
       addConnection,
-      fetchConnectionsForPerson,
       updateConnection,
       deleteConnection,
     }}>

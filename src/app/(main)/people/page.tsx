@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
 import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog';
-import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types';
+import type { Person, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -55,6 +55,8 @@ export default function ManagePeoplePage() {
     deleteSelectedPeople,
     updateGlobalPersonDetails,
     addConnection,
+    allUserConnections, // New: Get all connections
+    isLoadingAllUserConnections, // New: Loading state for all connections
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -195,7 +197,7 @@ export default function ManagePeoplePage() {
   
   const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
-  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection;
+  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections;
 
 
   const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
@@ -400,7 +402,7 @@ export default function ManagePeoplePage() {
           </CardContent>
         </Card>
       )}
-      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
+      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && !isEditPersonDialogOpen &&(
          <div className="mb-6 p-4 text-center text-muted-foreground">
             <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -422,13 +424,14 @@ export default function ManagePeoplePage() {
       )}
 
 
-      {isLoadingAllUserPeople ? (
+      {isLoadingAllUserPeople || (isLoadingAllUserConnections && allUserPeople.length > 0) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="flex flex-col space-y-3 p-4 border rounded-lg">
               <Skeleton className="h-32 w-32 rounded-full mx-auto bg-muted" />
               <Skeleton className="h-4 w-3/4 mx-auto bg-muted" />
               <Skeleton className="h-4 w-1/2 mx-auto bg-muted" />
+              <Skeleton className="h-4 w-full mt-2 bg-muted" />
             </div>
           ))}
         </div>
@@ -441,6 +444,7 @@ export default function ManagePeoplePage() {
       ) : (
         <PeopleList 
           people={allUserPeople} 
+          allUserConnections={allUserConnections} // Pass connections
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
           onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}

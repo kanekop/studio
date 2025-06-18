@@ -1,11 +1,12 @@
 
 "use client";
 import React from 'react';
-import type { Person } from '@/types';
+import type { Person, Connection } from '@/types'; // Added Connection
 import PeopleListItem from './PeopleListItem';
 
 interface PeopleListProps {
   people: Person[];
+  allUserConnections: Connection[]; // New prop for all connections
   isMergeSelectionMode?: boolean;
   selectedPeopleForMerge?: string[];
   onToggleMergeSelection?: (personId: string) => void;
@@ -14,11 +15,12 @@ interface PeopleListProps {
   onToggleDeleteSelection?: (personId: string) => void;
   onEditPerson: (person: Person) => void; 
   generalActionDisabled?: boolean;
-  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void; // For D&D
+  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void; 
 }
 
 const PeopleList: React.FC<PeopleListProps> = ({ 
   people,
+  allUserConnections, // Use this prop
   isMergeSelectionMode = false,
   selectedPeopleForMerge = [],
   onToggleMergeSelection = () => {},
@@ -43,6 +45,7 @@ const PeopleList: React.FC<PeopleListProps> = ({
         <PeopleListItem 
           key={person.id} 
           person={person}
+          allUserConnections={allUserConnections} // Pass all connections down
           isMergeSelectionMode={isMergeSelectionMode}
           isSelectedForMerge={selectedPeopleForMerge.includes(person.id)}
           onToggleMergeSelection={onToggleMergeSelection}
