@@ -1,4 +1,4 @@
-
+// src/components/features/MergePeopleDialog.tsx
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Person, FieldMergeChoices } from '@/types';
@@ -158,7 +158,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] flex flex-col"> {/* Added flex flex-col */}
         <DialogHeader>
           <DialogTitle className="text-2xl font-headline flex items-center">
             <Combine className="mr-2 h-7 w-7 text-primary"/>
@@ -171,9 +171,9 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="flex-1 min-h-0"> {/* Wrapper div for ScrollArea */}
- <ScrollArea className="h-full overflow-y-auto"> {/* ScrollArea takes full height of parent and allows vertical scrolling */}
- <div className="space-y-4 divide-y divide-border p-4 pr-2"> {/* Content padding (pr-2 to avoid scrollbar overlap) */}
+        <div className="flex-1 min-h-0"> {/* Added flex-1 min-h-0 */}
+          <ScrollArea className="h-full overflow-y-auto"> {/* ScrollArea takes full height of parent and allows vertical scrolling */}
+            <div className="space-y-4 divide-y divide-border p-4 pr-2"> {/* Content padding (pr-2 to avoid scrollbar overlap) */}
               {renderFieldChoice('name', 'Name', User)}
               {renderFieldChoice('company', 'Company', Building)}
               {renderFieldChoice('hobbies', 'Hobbies', Smile, true)}
@@ -236,4 +236,3 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 };
 
 export default MergePeopleDialog;
-
