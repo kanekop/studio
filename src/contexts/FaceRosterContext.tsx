@@ -9,7 +9,7 @@ import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion
 
 import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair } from '@/types';
 import { useToast } from "@/hooks/use-toast";
-import { suggestPeopleMerges, type SuggestMergeInput } from '@/ai/flows/suggest-people-merges-flow';
+import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
 
 
 const MAX_FILE_SIZE_MB = 10;
@@ -173,7 +173,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const q = query(
         collection(db, "people"),
         where("addedBy", "==", currentUser.uid)
-        // Server-side orderBy removed to avoid index requirement for now
       );
       const querySnapshot = await getDocs(q);
       const fetchedPeopleDocs: Person[] = [];
@@ -181,7 +180,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         fetchedPeopleDocs.push({ id: doc.id, ...doc.data() } as Person);
       });
 
-      // Client-side sorting
       const [sortField, sortDirection] = peopleSortOption.split('_') as [('createdAt' | 'name'), ('asc' | 'desc')];
       
       fetchedPeopleDocs.sort((a, b) => {
@@ -190,8 +188,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (sortField === 'name') {
           valA = a.name?.toLowerCase() || '';
           valB = b.name?.toLowerCase() || '';
-        } else { // createdAt
-          // Handle potential null or undefined createdAt, or cases where it might not be a Timestamp
+        } else { 
           const timeA = (a.createdAt as Timestamp)?.toMillis?.();
           const timeB = (b.createdAt as Timestamp)?.toMillis?.();
           valA = typeof timeA === 'number' ? timeA : 0;
@@ -202,7 +199,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
         }
         
-        // Ensure number comparison for timestamps
         const numA = Number(valA);
         const numB = Number(valB);
         return sortDirection === 'asc' ? numA - numB : numB - numA;
@@ -211,8 +207,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setAllUserPeople(fetchedPeopleDocs);
     } catch (error) {
       console.error("FRC: Error fetching all user people:", error);
-      // Removed the specific "index required" toast for this query as it's now handled by client-side sorting.
-      // General error handling remains.
       if (error instanceof FirestoreError) {
         toast({ title: "Error Loading People", description: `Could not fetch your people list. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
       } else {
@@ -237,8 +231,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setMergeSuggestions([]);
         setSelectedPeopleIdsForDeletion([]);
         setPeopleSortOptionState('createdAt_desc');
-      } else {
-        // fetchAllUserPeople will be called by setPeopleSortOption or its own useEffect dependency
       }
     });
     return () => unsubscribe();
@@ -883,6 +875,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const targetPersonRef = doc(db, "people", targetPersonId);
     const sourcePersonRef = doc(db, "people", sourcePersonId);
+    let targetData: Person; // To be used in toast message
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -893,13 +886,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           throw new Error("One or both selected people could not be found for merging.");
         }
 
-        const targetData = targetDoc.data() as Person;
+        targetData = targetDoc.data() as Person; // Assign here
         const sourceData = sourceDoc.data() as Person;
         
         const getValue = (fieldKey: keyof FieldMergeChoices, tVal: string | undefined, sVal: string | undefined): string | undefined => {
             const choice = fieldChoices[fieldKey];
-            if (choice === 'person1') return tVal;
-            if (choice === 'person2') return sVal;
+            if (choice === 'person1') return tVal; // person1 is target
+            if (choice === 'person2') return sVal; // person2 is source
             return tVal; 
         };
 
@@ -946,23 +939,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         transaction.delete(sourcePersonRef);
       });
 
-      const batch = writeBatch(db);
+      const batchForRosterUpdates = writeBatch(db);
       const sourceRosterIdsFromDataSource = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
       
       for (const rosterId of sourceRosterIdsFromDataSource) {
         const rosterRef = doc(db, "rosters", rosterId);
-        batch.update(rosterRef, {
+        batchForRosterUpdates.update(rosterRef, {
           peopleIds: arrayRemove(sourcePersonId)
         });
-        batch.update(rosterRef, {
+        batchForRosterUpdates.update(rosterRef, {
            peopleIds: arrayUnion(targetPersonId) 
         });
       }
-      await batch.commit();
+      await batchForRosterUpdates.commit();
 
 
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetNameAfterMerge = allUserPeople.find(p => p.id === targetPersonId)?.name || targetData.name; 
+      // Use targetData fetched inside transaction for the name, or a fallback
+      const targetNameAfterMerge = (fieldChoices.name === 'person1' ? targetData!.name : (allUserPeople.find(p=>p.id === sourcePersonId)?.name)) || targetData!.name;
 
 
       toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}.` });
@@ -1032,7 +1026,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const setPeopleSortOption = useCallback((option: PeopleSortOptionValue) => {
     setPeopleSortOptionState(option);
-    // fetchAllUserPeople will be re-triggered by useEffect due to peopleSortOption change
   }, []);
 
   const togglePersonSelectionForDeletion = useCallback((personId: string) => {
@@ -1060,70 +1053,79 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     setIsProcessing(true);
-    const numToDelete = selectedPeopleIdsForDeletion.length;
-    let numSuccessfullyDeleted = 0;
+    const numPeopleToDelete = selectedPeopleIdsForDeletion.length;
+    const imagesToDeleteFromStorage: string[] = [];
+    const firestoreBatch = writeBatch(db);
+    let successfullyProcessedFirestore = false;
 
-    for (const personId of selectedPeopleIdsForDeletion) {
-      try {
+    try {
+      // Phase 1: Prepare and commit Firestore batch
+      for (const personId of selectedPeopleIdsForDeletion) {
         const personDocRef = doc(db, "people", personId);
-        const personSnap = await getDoc(personDocRef);
+        // We need to get the person's data to find associated images and rosters
+        // This getDoc is necessary before adding to batch.
+        const personSnap = await getDoc(personDocRef); 
 
         if (!personSnap.exists()) {
-          console.warn(`FRC: Person ${personId} not found for deletion. Skipping.`);
-          continue;
+          console.warn(`FRC: Person ${personId} not found for deletion during batch preparation. Skipping.`);
+          continue; 
         }
         const personData = personSnap.data() as Person;
 
-        const batch = writeBatch(db);
-        const imagesToDeleteFromStorage: string[] = [];
-
-        // Collect all face images for this person across all their appearances
         personData.faceAppearances?.forEach(appearance => {
           if (appearance.faceImageStoragePath) {
             imagesToDeleteFromStorage.push(appearance.faceImageStoragePath);
           }
         });
 
-        // Remove this person from all rosters they are part of
         if (personData.rosterIds && personData.rosterIds.length > 0) {
           for (const rosterId of personData.rosterIds) {
             const rosterRef = doc(db, "rosters", rosterId);
-            batch.update(rosterRef, {
+            firestoreBatch.update(rosterRef, {
               peopleIds: arrayRemove(personId),
               updatedAt: serverTimestamp()
             });
           }
         }
         
-        // Delete the person document
-        batch.delete(personDocRef);
-        
-        await batch.commit();
-
-        // After successful Firestore commit, delete images from Storage
-        for (const path of imagesToDeleteFromStorage) {
-          try {
-            await deleteObject(storageRefStandard(appFirebaseStorage, path));
-          } catch (storageError: any) {
-            console.warn(`FRC: Failed to delete face image ${path} from Storage during person deletion:`, storageError.message);
-            // Non-critical, log and continue
-          }
-        }
-        numSuccessfullyDeleted++;
-      } catch (error: any) {
-        console.error(`FRC: Error deleting person ${personId}:`, error);
-        toast({ title: "Deletion Error", description: `Failed to delete ${allUserPeople.find(p=>p.id === personId)?.name || 'a person'}: ${error.message}`, variant: "destructive" });
+        firestoreBatch.delete(personDocRef);
       }
+      
+      await firestoreBatch.commit();
+      successfullyProcessedFirestore = true;
+      toast({ title: "Database Update Complete", description: `Successfully processed ${numPeopleToDelete} person(s) in the database.`});
+
+    } catch (error: any) {
+      console.error(`FRC: Error during Firestore batch deletion:`, error);
+      toast({ title: "Database Deletion Failed", description: `Could not delete people from database: ${error.message}. Some people may not have been deleted.`, variant: "destructive" });
+      setIsProcessing(false);
+      // Attempt to refresh lists even on partial failure, as some operations might have gone through before error or some people skipped.
+      await fetchAllUserPeople(); 
+      await fetchUserRosters();
+      return; 
     }
 
-    toast({ title: "Deletion Complete", description: `${numSuccessfullyDeleted} of ${numToDelete} selected people were deleted.` });
+    if (successfullyProcessedFirestore) {
+      let imagesSuccessfullyDeletedCount = 0;
+      for (const path of imagesToDeleteFromStorage) {
+        try {
+          await deleteObject(storageRefStandard(appFirebaseStorage, path));
+          imagesSuccessfullyDeletedCount++;
+        } catch (storageError: any) {
+          console.warn(`FRC: Failed to delete face image ${path} from Storage:`, storageError.message);
+        }
+      }
+      if (imagesToDeleteFromStorage.length > 0) {
+          toast({ title: "Image Cleanup Complete", description: `Attempted to delete ${imagesToDeleteFromStorage.length} associated image(s). ${imagesSuccessfullyDeletedCount} successful.`});
+      }
+    }
     
     clearPeopleSelectionForDeletion();
     await fetchAllUserPeople(); 
-    await fetchUserRosters(); // Rosters might have changed (peopleIds)
+    await fetchUserRosters(); 
     setIsProcessing(false);
 
-  }, [db, appFirebaseStorage, currentUser, selectedPeopleIdsForDeletion, toast, clearPeopleSelectionForDeletion, fetchAllUserPeople, fetchUserRosters, allUserPeople]);
+  }, [db, appFirebaseStorage, currentUser, selectedPeopleIdsForDeletion, toast, clearPeopleSelectionForDeletion, fetchAllUserPeople, fetchUserRosters]);
 
 
   return (
