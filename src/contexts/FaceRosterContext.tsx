@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth, db, storage as appFirebaseStorage } from '@/lib/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref as storageRef, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
+import { ref as storageRefStandard, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage'; 
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
 
 import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair } from '@/types';
@@ -59,6 +59,36 @@ interface FaceRosterContextType {
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
+
+// Helper function to convert a Firebase Storage path to a Base64 Data URI
+async function imageStoragePathToDataURI(path: string): Promise<string | undefined> {
+  if (!appFirebaseStorage || !path) return undefined;
+  try {
+    const fileRef = storageRefStandard(appFirebaseStorage, path);
+    const url = await getDownloadURL(fileRef);
+    // Fetch as blob
+    const response = await fetch(url); // `fetch` is globally available in modern browsers and Node.js
+    if (!response.ok) {
+      console.error(`Failed to fetch image from URL ${url}: ${response.status} ${response.statusText}`);
+      throw new Error(`Failed to fetch image: ${response.statusText}`);
+    }
+    const blob = await response.blob();
+    // Convert blob to data URI
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = (error) => {
+        console.error("FileReader error:", error);
+        reject(error);
+      };
+      reader.readAsDataURL(blob);
+    });
+  } catch (error) {
+    console.error(`Error converting storage path ${path} to data URI:`, error);
+    return undefined;
+  }
+}
+
 
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { toast } = useToast();
@@ -222,7 +252,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           
           const imageName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
           const imagePath = `users/${currentUser.uid}/original_images/${imageName}`;
-          const imageFileRef = storageRef(appFirebaseStorage, imagePath);
+          const imageFileRef = storageRefStandard(appFirebaseStorage, imagePath);
 
           const uploadTask = await uploadBytes(imageFileRef, file);
           const downloadURL = await getDownloadURL(uploadTask.ref);
@@ -450,7 +480,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             
             const croppedFaceFileName = `${currentRosterDocId}_${targetPersonId}_${Date.now()}.png`;
             const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
-            const croppedFaceRef = storageRef(appFirebaseStorage, faceImageStoragePath);
+            const croppedFaceRef = storageRefStandard(appFirebaseStorage, faceImageStoragePath);
             
             const uploadResult = await uploadString(croppedFaceRef, localPersonEntry.tempFaceImageDataUri, StringFormat.DATA_URL);
             finalFaceImageUrl = await getDownloadURL(uploadResult.ref);
@@ -616,7 +646,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setOriginalImageStoragePath(rosterData.originalImageStoragePath);
       setOriginalImageSize(rosterData.originalImageDimensions);
 
-      const mainImageRef = storageRef(appFirebaseStorage, rosterData.originalImageStoragePath);
+      const mainImageRef = storageRefStandard(appFirebaseStorage, rosterData.originalImageStoragePath);
       const mainImageUrl = await getDownloadURL(mainImageRef);
       setImageDataUrl(mainImageUrl);
 
@@ -642,7 +672,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
               if (appearanceForThisRoster && appearanceForThisRoster.faceImageStoragePath) {
                   try {
-                    const faceRef = storageRef(appFirebaseStorage, appearanceForThisRoster.faceImageStoragePath);
+                    const faceRef = storageRefStandard(appFirebaseStorage, appearanceForThisRoster.faceImageStoragePath);
                     faceImgUrl = await getDownloadURL(faceRef);
                     currentAppearanceDetails = {
                         rosterId: rosterId,
@@ -753,14 +783,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
         
         if (rosterData.originalImageStoragePath) {
-             try { await deleteObject(storageRef(appFirebaseStorage, rosterData.originalImageStoragePath)); } catch (e:any) { console.warn("FRC: Failed to delete original image from Storage:", rosterData.originalImageStoragePath, e.message); }
+             try { await deleteObject(storageRefStandard(appFirebaseStorage, rosterData.originalImageStoragePath)); } catch (e:any) { console.warn("FRC: Failed to delete original image from Storage:", rosterData.originalImageStoragePath, e.message); }
         }
         
         batch.delete(rosterDocRef);
         await batch.commit();
 
         for (const path of faceImagesToDelete) {
-            try { await deleteObject(storageRef(appFirebaseStorage, path)); } catch (e:any) { console.warn("FRC: Failed to delete a face image during roster deletion (post-commit):", path, e.message); }
+            try { await deleteObject(storageRefStandard(appFirebaseStorage, path)); } catch (e:any) { console.warn("FRC: Failed to delete a face image during roster deletion (post-commit):", path, e.message); }
         }
         
         toast({ title: "Roster Deleted", description: `${rosterData.rosterName} and associated data removed.` });
@@ -916,14 +946,25 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
     setIsLoadingMergeSuggestions(true);
+    setMergeSuggestions([]); // Clear previous suggestions
+
     try {
-      // Prepare input for the Genkit flow
-      const flowInput: SuggestMergeInput = allUserPeople.map(p => ({ 
-        id: p.id, 
-        name: p.name,
-        company: p.company, // Ensure these are passed
-        hobbies: p.hobbies,   // Ensure these are passed
-      }));
+      // Prepare input for the Genkit flow, including fetching image data URIs
+      const peopleWithImageDataPromises = allUserPeople.map(async (p) => {
+        let faceImageDataUri: string | undefined = undefined;
+        if (p.faceAppearances && p.faceAppearances.length > 0 && p.faceAppearances[0].faceImageStoragePath) {
+          faceImageDataUri = await imageStoragePathToDataURI(p.faceAppearances[0].faceImageStoragePath);
+        }
+        return { 
+          id: p.id, 
+          name: p.name,
+          company: p.company,
+          hobbies: p.hobbies,
+          faceImageDataUri: faceImageDataUri,
+        };
+      });
+
+      const flowInput: SuggestMergeInput = await Promise.all(peopleWithImageDataPromises);
       
       const suggestions = await suggestPeopleMerges(flowInput);
       setMergeSuggestions(suggestions);
@@ -933,12 +974,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       } else {
         toast({ title: "Merge Suggestions Found", description: `Found ${suggestions.length} potential merge(s). Review them below.` });
       }
-    } catch (error: any)
-     {
-      console.error("FRC: Error fetching merge suggestions from Genkit flow:", error);
+    } catch (error: any) {
+      console.error("FRC: Error fetching merge suggestions (Genkit flow or image prep):", error);
       let detailedErrorMessage = `Could not fetch merge suggestions: ${error.message}`;
-      if (error.cause) { // Genkit errors often have a 'cause'
+      if (error.cause && typeof error.cause === 'object') {
         detailedErrorMessage += ` Cause: ${JSON.stringify(error.cause)}`;
+      } else if (error.cause) {
+        detailedErrorMessage += ` Cause: ${error.cause}`;
       }
       toast({ title: "Suggestion Error", description: detailedErrorMessage, variant: "destructive", duration: 10000 });
       setMergeSuggestions([]);
