@@ -36,7 +36,7 @@ interface FaceRosterContextType {
   clearDrawnRegions: () => void;
   createRosterFromRegions: () => Promise<void>;
   selectPerson: (id: string | null) => void;
-  updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>, isNewPersonSaveOperation?: boolean) => Promise<void>;
+  updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl'>>, isNewPersonSaveOperation?: boolean) => Promise<void>;
   clearAllData: (showToast?: boolean) => void; 
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
   fetchUserRosters: () => Promise<void>;
@@ -63,6 +63,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [allUserPeople, setAllUserPeople] = useState<Person[]>([]);
   const [isLoadingAllUserPeople, setIsLoadingAllUserPeople] = useState<boolean>(false);
   const { toast } = useToast();
+
+  const clearAllData = useCallback((showToast = true) => {
+    setImageDataUrl(null);
+    setOriginalImageStoragePath(null);
+    setOriginalImageSize(null);
+    setDrawnRegions([]);
+    setRoster([]);
+    setSelectedPersonId(null);
+    setCurrentRosterDocId(null); 
+    if (showToast) {
+      toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
+    }
+  }, [toast]);
 
   const fetchUserRosters = useCallback(async () => {
     if (!currentUser || !db) {
@@ -145,21 +158,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     });
     return () => unsubscribe();
-  }, [fetchUserRosters, fetchAllUserPeople]);
+  }, [fetchUserRosters, fetchAllUserPeople, clearAllData]);
 
-
-  const clearAllData = useCallback((showToast = true) => {
-    setImageDataUrl(null);
-    setOriginalImageStoragePath(null);
-    setOriginalImageSize(null);
-    setDrawnRegions([]);
-    setRoster([]);
-    setSelectedPersonId(null);
-    setCurrentRosterDocId(null); 
-    if (showToast) {
-      toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
-    }
-  }, [toast]);
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!currentUser) {
@@ -347,17 +347,16 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         temporaryPeopleForUI.push({
           id: tempId,
           isNew: true,
-          faceImageUrl: faceImageDataURI, // For immediate display
-          tempFaceImageDataUri: faceImageDataURI, // For later upload
-          tempOriginalRegion: region, // For Firestore
+          tempFaceImageDataUri: faceImageDataURI, 
+          tempOriginalRegion: region, 
           name: `Person ${roster.length + temporaryPeopleForUI.length + 1}`,
-          aiName: `Person ${roster.length + temporaryPeopleForUI.length + 1}`,
           notes: '',
           company: '',
           hobbies: '',
           birthday: '',
           firstMet: '',
           firstMetContext: '',
+          faceImageUrl: faceImageDataURI, 
         });
       }
 
@@ -384,8 +383,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const updatePersonDetails = useCallback(async (
     personIdToUpdate: string, 
-    details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>,
-    isNewPersonSaveOperation: boolean = false
+    details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl'>>,
+    isNewPersonSaveOperation: boolean = false // Kept for consistency but logic for isNew is primarily from localPersonEntry.isNew
   ) => {
     if (!db || !currentUser?.uid || !currentRosterDocId) {
         toast({ title: "Error", description: "User not authenticated, no active roster, or database service unavailable.", variant: "destructive" });
@@ -407,17 +406,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    try {
-        let targetPersonId = personIdToUpdate;
-        let finalFaceImageUrl = localPersonEntry.faceImageUrl; 
-        let personDocRefPath: string;
-        let batch = writeBatch(db);
+    let targetPersonId = personIdToUpdate;
+    let finalFaceImageUrl = localPersonEntry.faceImageUrl; 
+    let batch = writeBatch(db);
 
-        if (isNewPersonSaveOperation && localPersonEntry.isNew) {
-            if (!localPersonEntry.tempFaceImageDataUri || !localPersonEntry.tempOriginalRegion) {
-                throw new Error("Missing temporary image data or region for new person save.");
-            }
-            
+    try {
+        if (localPersonEntry.isNew && localPersonEntry.tempFaceImageDataUri && localPersonEntry.tempOriginalRegion) {
             const peopleQuery = query(
                 collection(db, "people"),
                 where("name", "==", finalName),
@@ -432,10 +426,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 const firstMatch = querySnapshot.docs[0];
                 existingPersonDocId = firstMatch.id;
                 existingPersonDocData = { id: firstMatch.id, ...firstMatch.data() } as Person;
+                targetPersonId = existingPersonDocId; // Use existing person's ID
                 toast({ title: "Existing Person Found", description: `Linking to existing person: ${finalName}`});
             }
-
-            const croppedFaceFileName = `${currentRosterDocId}_${existingPersonDocId || 'new'}_${Date.now()}.png`;
+            
+            const croppedFaceFileName = `${currentRosterDocId}_${targetPersonId}_${Date.now()}.png`;
             const faceImageStoragePath = `users/${currentUser.uid}/cropped_faces/${croppedFaceFileName}`;
             const croppedFaceRef = storageRef(appFirebaseStorage, faceImageStoragePath);
             
@@ -448,18 +443,18 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 originalRegion: localPersonEntry.tempOriginalRegion,
             };
 
-            if (existingPersonDocData && existingPersonDocId) {
-                targetPersonId = existingPersonDocId;
-                personDocRefPath = `people/${existingPersonDocId}`;
-                const personRef = doc(db, personDocRefPath);
+            if (existingPersonDocData && existingPersonDocId) { // Update existing person
+                const personRef = doc(db, "people", existingPersonDocId);
                 batch.update(personRef, {
-                    ...details, 
-                    name: finalName, 
+                    ...details, // Apply new details
+                    name: finalName, // Ensure name is updated if changed
                     faceAppearances: arrayUnion(newAppearance),
                     rosterIds: arrayUnion(currentRosterDocId),
                     updatedAt: serverTimestamp()
                 });
-            } else { 
+            } else { // Create new person
+                const newPersonDocRef = doc(collection(db, "people")); 
+                targetPersonId = newPersonDocRef.id; // Get ID for new person
                 const newPersonData: Omit<Person, 'id'> = {
                     name: finalName,
                     aiName: details.aiName || finalName,
@@ -475,32 +470,30 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     createdAt: serverTimestamp(),
                     updatedAt: serverTimestamp(),
                 };
-                const newPersonDocRef = doc(collection(db, "people")); // Create ref first to get ID
-                targetPersonId = newPersonDocRef.id;
-                personDocRefPath = `people/${newPersonDocRef.id}`;
                 batch.set(newPersonDocRef, newPersonData);
             }
+            
             const rosterRef = doc(db, "rosters", currentRosterDocId);
             batch.update(rosterRef, {
-                peopleIds: arrayUnion(targetPersonId),
+                peopleIds: arrayUnion(targetPersonId), // Use the correct targetPersonId
                 updatedAt: serverTimestamp()
             });
             
             await batch.commit();
-            setUserRosters(prev => prev.map(r => r.id === currentRosterDocId ? {...r, peopleIds: Array.from(new Set([...(r.peopleIds || []), targetPersonId])) } : r));
-            await fetchAllUserPeople(); // Refresh the global people list
+            await fetchUserRosters(); // Update list of rosters (might have new people counts)
+            await fetchAllUserPeople(); // Update master list of people
 
-        } else if (!localPersonEntry.isNew) { 
-            personDocRefPath = `people/${personIdToUpdate}`; 
+        } else if (!localPersonEntry.isNew) { // Existing person being edited (not first save from temp)
+            const personDocRef = doc(db, "people", personIdToUpdate); 
             const firestoreUpdateData: { [key: string]: any } = { 
                 ...details,
                 name: finalName, 
                 updatedAt: serverTimestamp() 
             };
-            await updateDoc(doc(db, personDocRefPath), firestoreUpdateData);
-            await fetchAllUserPeople(); // Refresh the global people list
+            await updateDoc(personDocRef, firestoreUpdateData);
+            await fetchAllUserPeople(); // Update master list of people
         } else {
-          throw new Error("updatePersonDetails called for a local 'new' person without isNewPersonSaveOperation flag, or for a non-new person in an unexpected way.");
+          throw new Error("updatePersonDetails called for a local 'new' person without temp data, or for a non-new person in an unexpected way.");
         }
         
         setRoster(prevRoster =>
@@ -510,12 +503,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                   ...p, 
                   ...details,
                   name: finalName, 
-                  id: targetPersonId, 
+                  id: targetPersonId, // Crucial: update ID if it changed from temp to permanent or linked to existing
                   isNew: false, 
                   tempFaceImageDataUri: undefined,
                   tempOriginalRegion: undefined,
                   faceImageUrl: finalFaceImageUrl, 
-                  currentRosterAppearance: isNewPersonSaveOperation && localPersonEntry.tempOriginalRegion && finalFaceImageUrl.includes("firebasestorage") ? {
+                  currentRosterAppearance: (localPersonEntry.isNew && localPersonEntry.tempOriginalRegion && finalFaceImageUrl && finalFaceImageUrl.includes("firebasestorage")) ? {
                       rosterId: currentRosterDocId,
                       faceImageStoragePath: finalFaceImageUrl, 
                       originalRegion: localPersonEntry.tempOriginalRegion,
@@ -524,7 +517,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               : p
           )
         );
-        if (isNewPersonSaveOperation && selectedPersonId === personIdToUpdate && selectedPersonId !== targetPersonId) {
+
+        if (selectedPersonId === personIdToUpdate && selectedPersonId !== targetPersonId) {
           setSelectedPersonId(targetPersonId);
         }
 
@@ -536,22 +530,24 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
         setIsProcessing(false);
     }
-  }, [currentUser, currentRosterDocId, toast, roster, selectedPersonId, fetchAllUserPeople]);
+  }, [currentUser, currentRosterDocId, toast, roster, selectedPersonId, fetchAllUserPeople, fetchUserRosters]);
 
   const getScaledRegionForDisplay = useCallback((
     originalRegion: Region,
     imageDisplaySize: { width: number; height: number }
   ): DisplayRegion => {
     if (!originalImageSize || !imageDisplaySize.width || !imageDisplaySize.height) {
-      return { x: 0, y: 0, width: 0, height: 0 };
+      return { x: 0, y: 0, width: 0, height: 0, id: 'scaled_0_0_0_0' }; 
     }
     const scaleX = imageDisplaySize.width / originalImageSize.width;
     const scaleY = imageDisplaySize.height / originalImageSize.height;
+    const x = originalRegion.x * scaleX;
+    const y = originalRegion.y * scaleY;
+    const w = originalRegion.width * scaleX;
+    const h = originalRegion.height * scaleY;
     return {
-      x: originalRegion.x * scaleX,
-      y: originalRegion.y * scaleY,
-      width: originalRegion.width * scaleX,
-      height: originalRegion.height * scaleY,
+      x, y, width: w, height: h,
+      id: `scaled_${x.toFixed(0)}_${y.toFixed(0)}_${w.toFixed(0)}_${h.toFixed(0)}` 
     };
   }, [originalImageSize]);
 
@@ -789,3 +785,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
