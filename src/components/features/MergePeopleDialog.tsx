@@ -171,55 +171,57 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <ScrollArea className="flex-grow min-h-0 pr-6 -mr-6"> 
-          <div className="space-y-4 divide-y divide-border py-4"> 
-            {renderFieldChoice('name', 'Name', User)}
-            {renderFieldChoice('company', 'Company', Building)}
-            {renderFieldChoice('hobbies', 'Hobbies', Smile, true)}
-            {renderFieldChoice('birthday', 'Birthday', CalendarDays)}
-            {renderFieldChoice('firstMet', 'First Met Date', CalendarDays)}
-            {renderFieldChoice('firstMetContext', 'First Met Context', Info, true)}
-            
-            <div className="space-y-2 py-3">
-              <Label className="text-base font-semibold flex items-center">
-                <Info className="mr-2 h-5 w-5 text-primary" />
-                Notes
-              </Label>
-              <div className="p-3 bg-muted/30 rounded-md space-y-3">
-                 <div>
-                    <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-primary">{person1.name}</strong>:</p>
-                    <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person1.notes || <span className="italic">Not set</span>}</p>
-                 </div>
-                 <div>
-                    <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-accent">{person2.name}</strong>:</p>
-                    <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person2.notes || <span className="italic">Not set</span>}</p>
-                 </div>
-                <div>
-                    <p className="text-xs text-muted-foreground mt-2 mb-1">Notes after merge (will be saved to {fieldChoices.name === 'person1' ? person1.name : person2.name}):</p>
-                    <p className="text-sm font-medium whitespace-pre-wrap p-2 border border-primary/30 rounded bg-card/70 min-h-[60px]">{mergedNotesPreview}</p>
+        <div className="flex-1 min-h-0"> {/* Wrapper div for ScrollArea */}
+          <ScrollArea className="h-full"> {/* ScrollArea takes full height of parent */}
+            <div className="space-y-4 divide-y divide-border py-4 pr-2"> {/* Content padding (pr-2 to avoid scrollbar overlap) */}
+              {renderFieldChoice('name', 'Name', User)}
+              {renderFieldChoice('company', 'Company', Building)}
+              {renderFieldChoice('hobbies', 'Hobbies', Smile, true)}
+              {renderFieldChoice('birthday', 'Birthday', CalendarDays)}
+              {renderFieldChoice('firstMet', 'First Met Date', CalendarDays)}
+              {renderFieldChoice('firstMetContext', 'First Met Context', Info, true)}
+              
+              <div className="space-y-2 py-3">
+                <Label className="text-base font-semibold flex items-center">
+                  <Info className="mr-2 h-5 w-5 text-primary" />
+                  Notes
+                </Label>
+                <div className="p-3 bg-muted/30 rounded-md space-y-3">
+                  <div>
+                      <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-primary">{person1.name}</strong>:</p>
+                      <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person1.notes || <span className="italic">Not set</span>}</p>
+                  </div>
+                  <div>
+                      <p className="text-xs text-muted-foreground mb-1">Current notes for <strong className="text-accent">{person2.name}</strong>:</p>
+                      <p className="text-sm whitespace-pre-wrap p-2 border rounded bg-card min-h-[40px]">{person2.notes || <span className="italic">Not set</span>}</p>
+                  </div>
+                  <div>
+                      <p className="text-xs text-muted-foreground mt-2 mb-1">Notes after merge (will be saved to {fieldChoices.name === 'person1' ? person1.name : person2.name}):</p>
+                      <p className="text-sm font-medium whitespace-pre-wrap p-2 border border-primary/30 rounded bg-card/70 min-h-[60px]">{mergedNotesPreview}</p>
+                  </div>
                 </div>
               </div>
+              
+              <div className="py-3 space-y-1">
+                  <Label className="text-base font-semibold flex items-center">
+                      <Users className="mr-2 h-5 w-5 text-primary" />
+                      Appearances & Rosters
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                      All unique face appearances and roster associations from both individuals will be combined and saved to the merged profile.
+                  </p>
+                  <ul className="text-xs text-muted-foreground list-disc list-inside pl-2">
+                      <li>Appearances for {person1.name}: {person1.faceAppearances?.length || 0}.</li>
+                      <li>Appearances for {person2.name}: {person2.faceAppearances?.length || 0}.</li>
+                      <li>{person1.name} is in {person1.rosterIds?.length || 0} roster(s).</li>
+                      <li>{person2.name} is in {person2.rosterIds?.length || 0} roster(s).</li>
+                  </ul>
+              </div>
             </div>
-            
-            <div className="py-3 space-y-1">
-                <Label className="text-base font-semibold flex items-center">
-                    <Users className="mr-2 h-5 w-5 text-primary" />
-                    Appearances & Rosters
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                    All unique face appearances and roster associations from both individuals will be combined and saved to the merged profile.
-                </p>
-                <ul className="text-xs text-muted-foreground list-disc list-inside pl-2">
-                    <li>Appearances for {person1.name}: {person1.faceAppearances?.length || 0}.</li>
-                    <li>Appearances for {person2.name}: {person2.faceAppearances?.length || 0}.</li>
-                    <li>{person1.name} is in {person1.rosterIds?.length || 0} roster(s).</li>
-                    <li>{person2.name} is in {person2.rosterIds?.length || 0} roster(s).</li>
-                </ul>
-            </div>
-          </div>
-        </ScrollArea>
+          </ScrollArea>
+        </div>
         
-        <DialogFooter className="pt-4 border-t mt-auto">
+        <DialogFooter className="border-t">
           <DialogClose asChild>
             <Button variant="outline">Cancel</Button>
           </DialogClose>
@@ -234,3 +236,4 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 };
 
 export default MergePeopleDialog;
+
