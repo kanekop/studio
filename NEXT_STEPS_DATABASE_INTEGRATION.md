@@ -72,6 +72,10 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 *   人物データの削除: 登録した人物情報を削除する機能。
 *   アカウントの削除: ユーザーアカウントに関連する全てのデータを削除する機能。
 
+### 3.8. 人物間コネクションの作成 (Create Connections between People) (新規)
+*   `/people` (人物管理) ページにて、人物カードを別の人物カードへドラッグ＆ドロップすることで、人物間の関係性（コネクション）を作成できます。
+*   ドロップ後、「関係作成」ダイアログが開き、関係の種類（例: 同僚, 友人, 家族）、理由、強さ（任意）、メモ（任意）などの詳細情報を入力できます。
+
 ## 4. データモデル (Cloud Firestore)
 
 アプリケーションのデータは、以下のコレクション構造でCloud Firestoreに保存されます。
@@ -98,14 +102,18 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 *   フィールド (例):
     *   `name`: String (人物の名前)
     *   `company`: String (所属会社)
-    *   `memo`: String (自由記述メモ)
+    *   `notes`: String (自由記述メモ)
     *   `hobbies`: Array<String> (趣味のリスト)
     *   `knownAcquaintances`: Array<String> (他のpeopleドキュメントIDへの参照リスト)
     *   `spouse`: String (他のpeopleドキュメントIDへの参照)
     *   `birthday`: Timestamp (誕生日)
     *   `firstMet`: Timestamp (初めて会った日)
     *   `firstMetContext`: String (初めて会った状況やきっかけ)
-    *   `faceImageStoragePaths`: Array<String> (Cloud Storageに保存された顔写真パスのリスト)
+    *   `faceImageStoragePaths`: Array<String> (Cloud Storageに保存された顔写真パスのリスト) // `faceAppearances` に移行
+    *   `faceAppearances`: Array<Object> (各名簿での顔の出現情報)
+        *   `rosterId`: String (rostersコレクションのドキュメントID)
+        *   `faceImageStoragePath`: String (Cloud Storage上の切り抜かれた顔画像パス)
+        *   `originalRegion`: Object (元画像内での顔領域 `{x, y, width, height}`)
     *   `addedBy`: String (この人物情報を追加したユーザーのusersドキュメントIDへの参照)
     *   `rosterIds`: Array<String> (この人物が含まれるrostersドキュメントIDのリスト、非正規化データ)
     *   `createdAt`: Timestamp (人物データ作成日時)
@@ -117,7 +125,7 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 *   フィールド:
     *   `fromPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の起点となる人物。)
     *   `toPersonId`: `string` (`people`コレクションのドキュメントIDへの参照。関係の対象となる人物。)
-    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member", "manager", "subordinate", "mentor", "mentee", "parent", "child", "father", "mother", "spouse"]`。階層関係（例：上司・部下、親子）も表現可能。その場合、`fromPersonId` と `toPersonId` の向きと `type` の組み合わせで関係性を定義します。例えば、親子関係の場合、`fromPersonId` を親、`toPersonId` を子とし、`types` に `["parent"]` や `["father"]`, `["mother"]` を設定します。)
+    *   `types`: `Array<string>` (関係の種類を示す配列。例: `["colleague", "friend", "family_member", "manager", "subordinate", "mentor", "mentee", "parent", "child", "father", "mother", "spouse", "club_member"]`。階層関係（例：上司・部下、親子）も表現可能。その場合、`fromPersonId` と `toPersonId` の向きと `type` の組み合わせで関係性を定義します。例えば、親子関係の場合、`fromPersonId` を親、`toPersonId` を子とし、`types` に `["parent"]` や `["father"]`, `["mother"]` を設定します。)
     *   `reasons`: `Array<string>` (関係の具体的な理由や背景を示す配列。例: `["Acme Corp勤務時の同僚", "大学の同級生", "直属の上司として指導", "プロジェクトチームのメンバー", "〇〇クラブのメンバー"]`)
     *   `strength`: `number` (任意。関係の強さや親密さを示す数値。例: 1-5のスケール)
     *   `notes`: `string` (任意。この関係性に関するメモ。)
@@ -166,17 +174,25 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
     *   パスワードリセットページなど、認証関連のUIコンポーネントとロジックを配置。
 *   **`src/app/(main)/page.tsx`**:
     *   Firebase Authenticationの状態を監視し、ログインしていればメインコンテンツ (例: `ImageSet` の一覧やエディタへの導線) を、未ログインであればランディングページやログインページへの誘導を表示。
+*   **`src/app/(main)/people/page.tsx` (更新)**:
+    *   人物リストの表示と管理。
+    *   人物カードのドラッグ＆ドロップによるコネクション作成UIの起点。
+    *   `CreateConnectionDialog`コンポーネントのレンダリングと状態管理。
 *   **`src/components/features/`**:
     *   **`ImageUploadForm.tsx`**: 画像をCloud Storageにアップロードし、そのパスをFirestoreに保存するロジックに変更。
     *   **`RosterItemDetail.tsx`**: 表示・編集するデータソースをローカル状態からFirestoreに変更。入力内容はFirestoreに直接保存/更新。
     *   **`LandingPageUI.tsx` (または `ImageSetList.tsx`など)**: ログインユーザーが所有する`ImageSet`の一覧をFirestoreから取得して表示。新しい`ImageSet`を作成するUIを提供。
-*   **`src/contexts/FaceRosterContext.tsx` (または `FirebaseDataContext.tsx` などに改名も検討)**:
+    *   **`PeopleListItem.tsx` (更新)**: ドラッグ＆ドロップイベントのハンドラー（`onDragStart`, `onDragOver`, `onDrop`など）を実装し、視覚的なフィードバックを提供。ドロップ時に親コンポーネント（`/people/page.tsx`）のコールバックを呼び出す。
+    *   **`CreateConnectionDialog.tsx` (新規)**: 人物間のコネクション作成時に表示されるダイアログ。関係の種類、理由、強さ、メモなどを入力するフォームを持つ。
+    *   **`EditPersonDialog.tsx` (新規)**: 人物詳細情報を編集するためのダイアログ。
+*   **`src/contexts/FaceRosterContext.tsx` (更新)**:
     *   ローカルストレージへの依存を排除。
     *   Firebase SDK (Auth, Firestore, Storage) との連携を全面的に担当。
     *   ユーザー認証状態の管理。
     *   Firestoreからのデータ読み込み (リアルタイムリスナー `onSnapshot` の活用)。
     *   Firestoreへのデータ書き込み (CRUD操作)。
     *   Cloud Storageへのファイルアップロード/ダウンロード処理。
+    *   `connections`コレクションに対するCRUD操作（`addConnection`, `fetchConnectionsForPerson`など）の関数を追加。
 *   **`src/lib/`**:
     *   **`firebase.ts` (新規)**: Firebaseプロジェクトの設定情報を記述し、Firebase Appインスタンスを初期化・エクスポート。
     *   **`localStorage.ts`**: アプリケーションデータの保存・読み込み処理を削除。UIテーマ設定など、ユーザーセッションに依存しないごく軽微な設定情報のみに限定的に利用（または完全に廃止）。
@@ -207,8 +223,16 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
     *   `RosterItemDetail`での編集は、対応する`people`ドキュメントおよび関連する`rosters`ドキュメントを直接更新。
 5.  **検索**:
     *   ユーザーが検索UI（未実装）で条件を入力すると、Firestoreのクエリを発行し、`people`コレクションや`rosters`コレクションから合致するデータを取得して表示。
-6.  **関係性の管理 (新規)**:
-    *   専用UI (未実装) を通じて、`people`コレクション内の人物間に`connections`ドキュメントを作成・編集・削除する。
+6.  **コネクション作成のUIフロー (ドラッグ＆ドロップ)** (新規):
+    *   ユーザーが`/people`ページで人物カード（`PeopleListItem`）を別の人物カードへドラッグ＆ドロップする。
+    *   ドラッグ中、ドラッグされているカードの見た目が変わる（例: 半透明になる）。ドロップ可能なターゲットカードは、マウスオーバー時にハイライトされる（例: 青い枠線が表示される）。
+    *   ドロップが成功すると、`CreateConnectionDialog`コンポーネントが表示される。
+    *   ダイアログには、ドラッグ元の人物（ソース）とドロップ先の人物（ターゲット）が示される。
+    *   ユーザーはダイアログ内で、関係の種類（`types`、カンマ区切りで複数入力可）、理由（`reasons`、カンマ区切りで複数入力可）、関係の強さ（`strength`、数値、任意）、メモ（`notes`、任意）を入力する。
+    *   「保存」ボタンをクリックすると、`FaceRosterContext`の`addConnection`関数が呼び出される。
+    *   `addConnection`関数は、Firestoreの`connections`コレクションに新しいドキュメントを作成する。この際、`fromPersonId`にはドラッグ元の人物IDが、`toPersonId`にはドロップ先の人物IDが設定される。これにより、親子関係や上司部下関係のような非対称な関係性も、ドラッグの方向と入力された`type`によって表現される。
+7.  **コネクションデータの管理**:
+    *   専用UI (未実装) を通じて、`people`コレクション内の人物間に`connections`ドキュメントを作成・編集・削除する。`FaceRosterContext`に用意された`addConnection`, `fetchConnectionsForPerson`, `updateConnection`, `deleteConnection`関数が利用される。
 
 ## 7. 認証とセキュリティルール
 
@@ -233,10 +257,9 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 8.  `FaceRosterContext`をFirebase連携中心にリファクタリング。
 9.  ランディングページを、ログインユーザーの`ImageSet`（または`Roster`）一覧表示に変更。
 10. エラーハンドリングと状態管理の改善。
-11. **`connections`コレクションの管理UIの実装 (人物詳細ページなど)。**
+11. **`connections`コレクションの管理UIの実装 (人物詳細ページなど、コネクションの表示・編集・削除機能)。**
 12. **`people`ドキュメント内の`knownAcquaintances`や`spouse`フィールドを`connections`コレクションへの参照に移行または連携させることを検討。**
+13. **コネクション作成UIの改善（例：スマホでの代替操作、既存コネクションの可視化）。**
 
 この仕様書は、アプリケーションの成長に合わせて継続的に更新されるものです。
 
-
-    
