@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { EditablePersonInContext } from '@/types';
 
 const RosterItemDetail = () => {
-  const { roster, selectedPersonId, updatePersonDetails, isProcessing: isGlobalProcessing } = useFaceRoster();
+  const { roster, selectedPersonId, updatePersonDetails, isProcessing: isGlobalProcessing, selectPerson } = useFaceRoster();
   
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -24,6 +24,7 @@ const RosterItemDetail = () => {
   const [firstMetContext, setFirstMetContext] = useState('');
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false); // Track local unsaved changes
 
   const selectedPerson = useMemo(() => {
     return roster.find(p => p.id === selectedPersonId);
@@ -38,13 +39,21 @@ const RosterItemDetail = () => {
       setBirthday(selectedPerson.birthday || '');
       setFirstMet(selectedPerson.firstMet || '');
       setFirstMetContext(selectedPerson.firstMetContext || '');
-      // If it's a newly added person (from drawn regions, not yet saved to DB),
-      // automatically enter editing mode.
-      if (selectedPerson.isNew) {
+      
+      // If the selected person was just created (not truly 'isNew' anymore, but implied by selection after creation flow),
+      // or if it's a different person selected, start in edit mode.
+      // Check if this specific person was just added (e.g., if their `isNew` flag was set by `createRosterFromRegions` before being cleared).
+      // A simpler approach: if `selectPerson` just set this ID after creation, this useEffect runs.
+      // We can manage `isEditing` more directly if needed. For now, new selections might default to view.
+      // If a *new* person is selected after bulk save, they will have default data. 
+      // We want the user to be able to edit it.
+      // A simple heuristic: if the name is like "Person X", assume it's new and enter edit mode.
+      if (selectedPerson.name.startsWith("Person ") && selectedPerson.name.match(/^Person \d+$/)) {
         setIsEditing(true);
       } else {
         setIsEditing(false); 
       }
+      setIsDirty(false); // Reset dirty state on person change
     } else {
       setName('');
       setNotes('');
@@ -54,12 +63,17 @@ const RosterItemDetail = () => {
       setFirstMet('');
       setFirstMetContext('');
       setIsEditing(false);
+      setIsDirty(false);
     }
   }, [selectedPerson]);
 
+  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>, value: string) => {
+    setter(value);
+    setIsDirty(true);
+  };
+
   const handleSave = async () => {
     if (selectedPerson) {
-      // Prepare details for update, excluding fields not directly edited here
       const detailsToUpdate: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>> = { 
         name, 
         notes,
@@ -69,14 +83,30 @@ const RosterItemDetail = () => {
         firstMet,
         firstMetContext,
       };
-      // The third argument 'selectedPerson.isNew' tells updatePersonDetails if this is the first save for this person entry
-      await updatePersonDetails(selectedPerson.id, detailsToUpdate, !!selectedPerson.isNew); 
-      // updatePersonDetails will handle resetting isNew and isEditing might be set to false based on its success
-      // For now, explicitly set isEditing to false after attempting save.
-      // If it was a new person, the ID might have changed, so useEffect above will re-evaluate.
+      await updatePersonDetails(selectedPerson.id, detailsToUpdate); 
       setIsEditing(false); 
+      setIsDirty(false);
     }
   };
+
+  const handleToggleEditMode = () => {
+    if (isEditing && isDirty) {
+      // Optionally, confirm if user wants to discard changes
+      // For now, just revert to saved state if they cancel editing with dirty fields
+      if (selectedPerson) {
+        setName(selectedPerson.name);
+        setNotes(selectedPerson.notes || '');
+        setCompany(selectedPerson.company || '');
+        setHobbies(selectedPerson.hobbies || '');
+        setBirthday(selectedPerson.birthday || '');
+        setFirstMet(selectedPerson.firstMet || '');
+        setFirstMetContext(selectedPerson.firstMetContext || '');
+        setIsDirty(false);
+      }
+    }
+    setIsEditing(!isEditing);
+  };
+
 
   if (!selectedPersonId) {
     return (
@@ -108,7 +138,7 @@ const RosterItemDetail = () => {
     );
   }
   
-  const canEdit = !isGlobalProcessing;
+  const canEditOrSave = !isGlobalProcessing;
 
   const renderDetailField = (label: string, value: string | undefined, IconComponent?: React.ElementType) => (
     <div className="flex items-start py-1">
@@ -124,23 +154,23 @@ const RosterItemDetail = () => {
     <Card className="h-full flex flex-col shadow-lg overflow-hidden">
       <CardHeader className="bg-muted/30">
         <CardTitle className="font-headline text-xl flex items-center justify-between">
-          {selectedPerson.isNew ? "New Person Details" : "Person Details"}
-          {canEdit && !selectedPerson.isNew && ( // Only show Edit/View toggle if not a new person being initially defined
-            <Button variant="ghost" size="sm" onClick={() => setIsEditing(!isEditing)} aria-label={isEditing ? "Cancel editing" : "Edit details"}>
+          {`Details for ${selectedPerson.name.startsWith("Person ") && selectedPerson.name.match(/^Person \d+$/) && !isEditing ? selectedPerson.name + " (Default)" : name || "Person Details"}`}
+          {canEditOrSave && (
+            <Button variant="ghost" size="sm" onClick={handleToggleEditMode} aria-label={isEditing ? "Cancel editing" : "Edit details"}>
               {isEditing ? <CheckSquare className="h-5 w-5 text-green-500" /> : <Edit3 className="h-5 w-5 text-accent" />}
-              <span className="ml-2 sr-only sm:not-sr-only">{isEditing ? 'View' : 'Edit'}</span>
+              <span className="ml-2 sr-only sm:not-sr-only">{isEditing ? 'View Mode' : 'Edit Mode'}</span>
             </Button>
           )}
         </CardTitle>
         <CardDescription>
-          {selectedPerson.isNew ? `Define details for this new person.` : `View or edit information for ${selectedPerson.name}.`}
+          {isEditing ? `Editing information for ${name || "this person"}.` : `Viewing information for ${selectedPerson.name}.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4 md:p-6 flex-grow overflow-y-auto">
         <div className="aspect-square w-full max-w-[200px] mx-auto rounded-md overflow-hidden shadow-md border bg-muted">
           {(selectedPerson.faceImageUrl && selectedPerson.faceImageUrl !== "https://placehold.co/100x100.png") ? (
             <Image
-              src={selectedPerson.faceImageUrl} // This will be dataURI for new, or storageURL for existing
+              src={selectedPerson.faceImageUrl} 
               alt={`Face of ${selectedPerson.name}`}
               width={200}
               height={200}
@@ -156,8 +186,8 @@ const RosterItemDetail = () => {
 
         <div>
           <Label htmlFor="personName" className="text-xs font-medium text-muted-foreground">Name*</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Input id="personName" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" aria-label="Person's name" placeholder="Enter name (required for saving)"/>
+          {isEditing && canEditOrSave ? (
+            <Input id="personName" value={name} onChange={(e) => handleInputChange(setName, e.target.value)} className="mt-1" aria-label="Person's name" placeholder="Enter name (required)"/>
           ) : (
             <p className="mt-0.5 text-lg font-semibold p-2 rounded-md ">{selectedPerson.name}</p>
           )}
@@ -165,8 +195,8 @@ const RosterItemDetail = () => {
         
         <div>
           <Label htmlFor="personCompany" className="text-xs font-medium text-muted-foreground">Company</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Input id="personCompany" value={company} onChange={(e) => setCompany(e.target.value)} className="mt-1" placeholder="Company name" />
+          {isEditing && canEditOrSave ? (
+            <Input id="personCompany" value={company} onChange={(e) => handleInputChange(setCompany, e.target.value)} className="mt-1" placeholder="Company name" />
           ) : (
              renderDetailField("Company", selectedPerson.company, Building)
           )}
@@ -174,8 +204,8 @@ const RosterItemDetail = () => {
         
         <div>
           <Label htmlFor="personHobbies" className="text-xs font-medium text-muted-foreground">Hobbies</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Textarea id="personHobbies" value={hobbies} onChange={(e) => setHobbies(e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Reading, Hiking, Coding" />
+          {isEditing && canEditOrSave ? (
+            <Textarea id="personHobbies" value={hobbies} onChange={(e) => handleInputChange(setHobbies, e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Reading, Hiking, Coding" />
           ) : (
             renderDetailField("Hobbies", selectedPerson.hobbies, Smile)
           )}
@@ -183,8 +213,8 @@ const RosterItemDetail = () => {
 
         <div>
           <Label htmlFor="personBirthday" className="text-xs font-medium text-muted-foreground">Birthday</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Input id="personBirthday" value={birthday} onChange={(e) => setBirthday(e.target.value)} className="mt-1" placeholder="e.g., January 1st or 1990-01-01" />
+          {isEditing && canEditOrSave ? (
+            <Input id="personBirthday" value={birthday} onChange={(e) => handleInputChange(setBirthday, e.target.value)} className="mt-1" placeholder="e.g., January 1st or 1990-01-01" />
           ) : (
             renderDetailField("Birthday", selectedPerson.birthday, CalendarDays)
           )}
@@ -192,8 +222,8 @@ const RosterItemDetail = () => {
 
         <div>
           <Label htmlFor="personFirstMet" className="text-xs font-medium text-muted-foreground">First Met</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Input id="personFirstMet" value={firstMet} onChange={(e) => setFirstMet(e.target.value)} className="mt-1" placeholder="e.g., At a conference or 2023-05-15" />
+          {isEditing && canEditOrSave ? (
+            <Input id="personFirstMet" value={firstMet} onChange={(e) => handleInputChange(setFirstMet, e.target.value)} className="mt-1" placeholder="e.g., At a conference or 2023-05-15" />
           ) : (
             renderDetailField("First Met", selectedPerson.firstMet, CalendarDays)
           )}
@@ -201,8 +231,8 @@ const RosterItemDetail = () => {
 
         <div>
           <Label htmlFor="personFirstMetContext" className="text-xs font-medium text-muted-foreground">First Met Context</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Textarea id="personFirstMetContext" value={firstMetContext} onChange={(e) => setFirstMetContext(e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Introduced by John at the tech meetup" />
+          {isEditing && canEditOrSave ? (
+            <Textarea id="personFirstMetContext" value={firstMetContext} onChange={(e) => handleInputChange(setFirstMetContext, e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Introduced by John at the tech meetup" />
           ) : (
              renderDetailField("Context", selectedPerson.firstMetContext, Info)
           )}
@@ -210,8 +240,8 @@ const RosterItemDetail = () => {
 
         <div>
           <Label htmlFor="personNotes" className="text-xs font-medium text-muted-foreground">Notes</Label>
-          {(isEditing || selectedPerson.isNew) && canEdit ? (
-            <Textarea id="personNotes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add any relevant notes..." className="mt-1 min-h-[80px]" aria-label="Notes about the person"/>
+          {isEditing && canEditOrSave ? (
+            <Textarea id="personNotes" value={notes} onChange={(e) => handleInputChange(setNotes, e.target.value)} placeholder="Add any relevant notes..." className="mt-1 min-h-[80px]" aria-label="Notes about the person"/>
           ) : (
             <p className="mt-1 text-sm p-2 rounded-md bg-muted/30 min-h-[60px] whitespace-pre-wrap">
               {selectedPerson.notes || <span className="italic text-muted-foreground">No notes added.</span>}
@@ -219,10 +249,10 @@ const RosterItemDetail = () => {
           )}
         </div>
       </CardContent>
-      { (isEditing || selectedPerson.isNew) && canEdit && (
+      { isEditing && canEditOrSave && (
         <CardFooter className="bg-muted/30 border-t pt-4">
-          <Button onClick={handleSave} className="w-full sm:w-auto" disabled={isGlobalProcessing || !name.trim()} title={!name.trim() ? "Name is required to save" : "Save changes"}>
-            <Save className="mr-2 h-4 w-4" /> {selectedPerson.isNew ? "Save New Person" : "Save Changes"}
+          <Button onClick={handleSave} className="w-full sm:w-auto" disabled={isGlobalProcessing || !name.trim() || !isDirty} title={!name.trim() ? "Name is required to save" : (!isDirty ? "No changes to save" : "Save changes")}>
+            <Save className="mr-2 h-4 w-4" /> Save Changes
           </Button>
         </CardFooter>
       )}
