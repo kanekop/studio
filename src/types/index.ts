@@ -31,7 +31,7 @@ export interface Person {
   faceAppearances: FaceAppearance[]; // Array of all instances where this person's face was identified
   
   addedBy: string; // UID of the user who added this person
-  rosterIds: string[]; // Array of 'people' document IDs belonging to this roster
+  rosterIds: string[]; // Array of 'roster' document IDs this person belongs to
   
   company?: string;
   hobbies?: string; 
@@ -99,7 +99,6 @@ export interface FieldMergeChoices {
   birthday: 'person1' | 'person2';
   firstMet: 'person1' | 'person2';
   firstMetContext: 'person1' | 'person2';
-  // Notes are typically concatenated or handled with a specific strategy, not a simple choice.
 }
 
 // Represents a pair of people suggested for merging by the AI.
@@ -126,13 +125,11 @@ export interface Connection {
   updatedAt: any; // Firestore serverTimestamp
 }
 
-// Form data for creating a new connection, processed by the CreateConnectionDialog.
-export interface CreateConnectionFormData {
-  predefinedTypes: string[]; // Array of selected predefined type keys (e.g., "colleague", "parent")
-  customTypes: string; // Comma-separated string from the custom types input field
-  reasons: string; // Raw string from the reasons textarea (to be split into an array later)
-  strength?: string; // String to be parsed to number or null
-  notes?: string;
+// This interface represents the data structure that the CreateConnectionDialog
+// prepares and sends to its onSave callback.
+export interface ProcessedConnectionFormData {
+    types: string[];
+    reasons: string[];
+    strength?: number; // Optional, as slider might not be touched
+    notes?: string;   // Optional
 }
-
-```

@@ -24,7 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 import { 
     Link2, Users, FileText, Save, Sparkles, ArrowRight,
-    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon // Renamed to avoid conflict
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -62,7 +62,7 @@ const commonRelations = [
 
 const hierarchicalRelations = [
   { key: 'parent', label: 'Parent (of Target)', icon: Home }, 
-  { key: 'child', label: 'Child (of Target)', icon: UserCircle }, 
+  { key: 'child', label: 'Child (of Target)', icon: UserIcon }, 
   { key: 'manager', label: 'Manager (of Target)', icon: Users }, 
   { key: 'reports_to', label: 'Reports to (Target)', icon: Users }, 
   { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap },

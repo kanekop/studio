@@ -8,8 +8,8 @@ import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
-import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog'; // Updated Import
-import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types'; // CreateConnectionFormData removed
+import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog';
+import type { Person, FieldMergeChoices, SuggestedMergePair } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
@@ -54,7 +54,7 @@ export default function ManagePeoplePage() {
     clearPeopleSelectionForDeletion,
     deleteSelectedPeople,
     updateGlobalPersonDetails,
-    addConnection, // Context function
+    addConnection,
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -67,7 +67,6 @@ export default function ManagePeoplePage() {
   const [isEditPersonDialogOpen, setIsEditPersonDialogOpen] = useState(false);
   const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false); 
 
-  // State for CreateConnectionDialog
   const [isCreateConnectionDialogOpen, setIsCreateConnectionDialogOpen] = useState(false);
   const [sourcePersonForConnection, setSourcePersonForConnection] = useState<Person | null>(null);
   const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
@@ -135,7 +134,6 @@ export default function ManagePeoplePage() {
   };
 
   const handleConfirmDelete = async () => {
-    // isProcessing is handled by deleteSelectedPeople in context
     await deleteSelectedPeople();
     setIsDeleteSelectionMode(false); 
     setIsDeleteDialogOpen(false);
@@ -158,7 +156,6 @@ export default function ManagePeoplePage() {
     }
   };
 
-  // Handlers for Connection Dialog
   const handleInitiateConnection = (sourcePersonId: string, targetPersonId: string) => {
     if (sourcePersonId === targetPersonId) {
         toast({title: "Cannot connect person to themself", variant: "default"});
@@ -176,17 +173,16 @@ export default function ManagePeoplePage() {
     }
   };
 
-  const handleSaveConnection = async (data: ProcessedConnectionFormData) => { // Updated data type
+  const handleSaveConnection = async (data: ProcessedConnectionFormData) => {
     if (!sourcePersonForConnection || !targetPersonForConnection) return;
     setIsSavingConnection(true);
     
-    // Types and Reasons are now expected as string[] from the dialog
     const connectionId = await addConnection(
       sourcePersonForConnection.id,
       targetPersonForConnection.id,
       data.types, 
       data.reasons,
-      data.strength, // Already a number or undefined from dialog
+      data.strength,
       data.notes
     );
     setIsSavingConnection(false);
@@ -194,7 +190,6 @@ export default function ManagePeoplePage() {
       setIsCreateConnectionDialogOpen(false);
       setSourcePersonForConnection(null);
       setTargetPersonForConnection(null);
-      // Optionally, refetch connections or update UI to show new connection
     }
   };
   
