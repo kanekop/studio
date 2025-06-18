@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person, CreateConnectionFormData as DialogFormData } from '@/types'; // Renamed to avoid conflict
+import type { Person } from '@/types'; 
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,8 +23,8 @@ import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 import { 
-    Link2, Users, FileText, Save, Sparkles, ArrowRightLeft, ArrowRight,
-    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle, Building
+    Link2, Users, FileText, Save, Sparkles, ArrowRight,
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -33,11 +33,11 @@ import { cn } from '@/lib/utils';
 const createConnectionFormSchema = z.object({
   customTypes: z.string().optional(),
   reasons: z.string().optional(),
-  strength: z.string().optional(),
+  strength: z.string().optional(), 
   notes: z.string().optional(),
 });
 
-// This is the type the onSave prop expects, after processing in this dialog
+
 export interface ProcessedConnectionFormData {
     types: string[];
     reasons: string[];
@@ -50,7 +50,7 @@ interface CreateConnectionDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   sourcePerson: Person | null;
   targetPerson: Person | null;
-  onSave: (data: ProcessedConnectionFormData) => Promise<void>; // Expects processed data
+  onSave: (data: ProcessedConnectionFormData) => Promise<void>; 
   isProcessing: boolean;
 }
 
@@ -61,10 +61,10 @@ const commonRelations = [
 ];
 
 const hierarchicalRelations = [
-  { key: 'parent', label: 'Parent (of Target)', icon: Home }, // Source is Parent of Target
-  { key: 'child', label: 'Child (of Target)', icon: UserCircle }, // Source is Child of Target
-  { key: 'manager', label: 'Manager (of Target)', icon: Users }, // Source manages Target
-  { key: 'reports_to', label: 'Reports to (Target)', icon: Users }, // Source reports to Target
+  { key: 'parent', label: 'Parent (of Target)', icon: Home }, 
+  { key: 'child', label: 'Child (of Target)', icon: UserCircle }, 
+  { key: 'manager', label: 'Manager (of Target)', icon: Users }, 
+  { key: 'reports_to', label: 'Reports to (Target)', icon: Users }, 
   { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap },
   { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap },
 ];
@@ -91,8 +91,8 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     handleSubmit,
     reset,
     control,
-    formState: { errors, isDirty: formIsDirty }, // isDirty from react-hook-form
-  } = useForm<z.infer<typeof createConnectionFormSchema>>({ // Use the zod schema for RHF
+    formState: { errors, isDirty: formIsDirty }, 
+  } = useForm<z.infer<typeof createConnectionFormSchema>>({ 
     resolver: zodResolver(createConnectionFormSchema),
     defaultValues: {
         customTypes: "",
@@ -109,12 +109,6 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
       setCurrentStrength(undefined);
     }
   }, [isOpen, reset]);
-
-  const handleTogglePredefinedType = (typeKey: string) => {
-    setSelectedPredefinedTypes(prev => 
-      prev.includes(typeKey) ? prev.filter(t => t !== typeKey) : [...prev, typeKey]
-    );
-  };
   
   const processAndSubmit = async (formData: z.infer<typeof createConnectionFormSchema>) => {
     const customTypesArray = formData.customTypes?.split(',')
@@ -123,12 +117,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     
     const finalTypes = Array.from(new Set([...selectedPredefinedTypes, ...customTypesArray]));
 
-    if (finalTypes.length === 0) {
-        // Consider adding a toast or error message here if types are mandatory
-        // For now, let's assume it's okay to have no types if the user intends so.
-    }
-
-    const reasonsArray = formData.reasons?.split('\n') // Split by newline for multiple reasons
+    const reasonsArray = formData.reasons?.split(/[\n,]+/) 
         .map(r => r.trim())
         .filter(r => r) || [];
 
@@ -172,7 +161,6 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
         <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
           <form onSubmit={handleSubmit(processAndSubmit)} id="create-connection-form" className="space-y-6">
             
-            {/* Predefined Relationship Types */}
             <section>
               <h3 className="text-md font-semibold mb-2 flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary/80" />Relationship Categories</h3>
               
@@ -236,7 +224,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
               <Textarea 
                 id="reasons" 
                 {...register('reasons')} 
-                placeholder="e.g., Worked at Globex Corp (Project Alpha).&#10;University alumni - Class of 2010. (Separate reasons with new lines)" 
+                placeholder="e.g., Worked at Globex Corp (Project Alpha).&#10;University alumni - Class of 2010. (Separate with new lines or commas)" 
                 className="min-h-[80px]" 
                 disabled={isProcessing} 
               />
@@ -259,7 +247,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
                             value={currentStrength !== undefined ? [currentStrength] : []}
                             onValueChange={(value) => {
                                 setCurrentStrength(value[0]);
-                                field.onChange(value[0]?.toString() || ""); // Update RHF form value if needed
+                                field.onChange(value[0]?.toString() || ""); 
                             }}
                             disabled={isProcessing}
                             className="my-3"
@@ -314,5 +302,3 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
 };
 
 export default CreateConnectionDialog;
-
-```
