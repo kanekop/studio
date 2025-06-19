@@ -16,7 +16,7 @@ import type { EditPersonFormData } from '@/components/features/EditPersonDialog'
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_FILE_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-const FIRESTORE_IN_QUERY_LIMIT = 30; // Firestore `in` query limit
+const FIRESTORE_IN_QUERY_LIMIT = 30; 
 
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
@@ -545,6 +545,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           aiName: faceInfo.defaultName,
           notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
           faceAppearances: [newAppearance],
+          primaryFaceAppearancePath: newAppearance.faceImageStoragePath, // Set first appearance as primary by default
           addedBy: currentUser!.uid,
           rosterIds: [currentRosterDocId!],
           createdAt: serverTimestamp(),
@@ -919,12 +920,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     setIsProcessingState(true);
 
-    const targetPersonRef = doc(db, "people", targetPersonId);
-    const sourcePersonRef = doc(db, "people", sourcePersonId);
-    let targetData: Person; 
+    let targetData: Person | null = null; 
 
     try {
       await runTransaction(db, async (transaction) => {
+        const targetPersonRef = doc(db, "people", targetPersonId);
+        const sourcePersonRef = doc(db, "people", sourcePersonId);
         const targetDoc = await transaction.get(targetPersonRef);
         const sourceDoc = await transaction.get(sourcePersonRef);
 
@@ -979,12 +980,44 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           firstMetContext: mergedFirstMetContext || "",
           faceAppearances: mergedFaceAppearances,
           rosterIds: mergedRosterIds,
-          // knownAcquaintances and spouse are intentionally NOT merged here, relying on connections collection
           updatedAt: serverTimestamp()
         });
 
         transaction.delete(sourcePersonRef);
       });
+
+      // Handle connections after the main person merge transaction
+      const connectionsBatch = writeBatch(db);
+      const fromConnectionsQuery = query(collection(db, "connections"), where("fromPersonId", "==", sourcePersonId));
+      const toConnectionsQuery = query(collection(db, "connections"), where("toPersonId", "==", sourcePersonId));
+
+      const [fromConnectionsSnapshot, toConnectionsSnapshot] = await Promise.all([
+        getDocs(fromConnectionsQuery),
+        getDocs(toConnectionsQuery)
+      ]);
+
+      fromConnectionsSnapshot.forEach(connDoc => {
+        const connData = connDoc.data();
+        if (connData.toPersonId === targetPersonId) { // Connection was between source and target
+          connectionsBatch.delete(connDoc.ref);
+        } else {
+          connectionsBatch.update(connDoc.ref, { fromPersonId: targetPersonId, updatedAt: serverTimestamp() });
+        }
+      });
+
+      toConnectionsSnapshot.forEach(connDoc => {
+        const connData = connDoc.data();
+        if (connData.fromPersonId === targetPersonId) { // Connection was between target and source
+          // This might be redundant if already handled by fromConnectionsSnapshot, but safe to include
+          if (!fromConnectionsSnapshot.docs.some(d => d.id === connDoc.id && d.data().toPersonId === targetPersonId)) {
+             connectionsBatch.delete(connDoc.ref);
+          }
+        } else {
+          connectionsBatch.update(connDoc.ref, { toPersonId: targetPersonId, updatedAt: serverTimestamp() });
+        }
+      });
+      await connectionsBatch.commit();
+
 
       const batchForRosterUpdates = writeBatch(db);
       const sourceRosterIdsFromDataSource = allUserPeople.find(p => p.id === sourcePersonId)?.rosterIds || [];
@@ -1002,10 +1035,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetNameAfterMerge = (fieldChoices.name === 'person1' ? targetData!.name : (allUserPeople.find(p=>p.id === sourcePersonId)?.name)) || targetData!.name;
+      const targetNameAfterMerge = (targetData && (fieldChoices.name === 'person1' ? targetData.name : sourceName)) || (targetData?.name || "Merged Person");
 
 
-      toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}.` });
+      toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}. Connections updated.` });
       
       await fetchAllUserPeople(); 
       await fetchUserRosters();
@@ -1135,12 +1168,18 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           }
         }
         
+        const connectionsToDeleteQuery1 = query(collection(db, "connections"), where("fromPersonId", "==", personId));
+        const connectionsToDeleteQuery2 = query(collection(db, "connections"), where("toPersonId", "==", personId));
+        const [connSnapshot1, connSnapshot2] = await Promise.all([getDocs(connectionsToDeleteQuery1), getDocs(connectionsToDeleteQuery2)]);
+        connSnapshot1.forEach(doc => firestoreBatch.delete(doc.ref));
+        connSnapshot2.forEach(doc => firestoreBatch.delete(doc.ref));
+        
         firestoreBatch.delete(personDocRef);
       }
       
       await firestoreBatch.commit();
       successfullyProcessedFirestore = true;
-      toast({ title: "Database Update Complete", description: `Successfully processed ${numPeopleToDelete} person(s) in the database.`});
+      toast({ title: "Database Update Complete", description: `Successfully processed ${numPeopleToDelete} person(s) and their connections in the database.`});
 
     } catch (error: any) {
       console.error(`FRC: Error during Firestore batch deletion:`, error);
@@ -1198,7 +1237,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updatedAt: serverTimestamp()
       };
       
-      await updateDoc(personDocRef, updateData as any); // Cast to any to bypass strict Person type checking if needed
+      await updateDoc(personDocRef, updateData as any);
       toast({ title: "Details Updated", description: `${details.name}'s information has been saved.` });
       await fetchAllUserPeople(); 
       return true;
@@ -1362,3 +1401,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
