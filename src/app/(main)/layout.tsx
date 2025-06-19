@@ -2,7 +2,7 @@
 "use client"; // This needs to be a client component because FaceRosterProvider is a client component
 import React from 'react';
 import { FaceRosterProvider } from '@/contexts/FaceRosterContext';
-import AppHeader from '@/components/features/AppHeader';
+import { AppHeader } from '@/components/features/AppHeader';
 import { Toaster } from "@/components/ui/toaster";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
