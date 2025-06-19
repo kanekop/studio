@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2 } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog';
@@ -11,6 +11,7 @@ import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/comp
 import type { Person, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -56,6 +57,12 @@ export default function ManagePeoplePage() {
     addConnection,
     allUserConnections,
     isLoadingAllUserConnections,
+    peopleSearchQuery,
+    setPeopleSearchQuery,
+    peopleCompanyFilter,
+    setPeopleCompanyFilter,
+    filteredPeople,
+    getUniqueCompanies,
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -73,6 +80,22 @@ export default function ManagePeoplePage() {
   const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
   const [isSavingConnection, setIsSavingConnection] = useState(false);
 
+  // 検索入力用のローカルステート（debounce用）
+  const [localSearchQuery, setLocalSearchQuery] = useState(peopleSearchQuery);
+
+  // 検索クエリのdebounce処理
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      setPeopleSearchQuery(localSearchQuery);
+    }, 300);
+
+    return () => clearTimeout(debounceTimer);
+  }, [localSearchQuery, setPeopleSearchQuery]);
+
+  // コンテキストの検索クエリとローカルステートを同期
+  useEffect(() => {
+    setLocalSearchQuery(peopleSearchQuery);
+  }, [peopleSearchQuery]);
 
   useEffect(() => {
     if (!isMergeSelectionMode) {
@@ -286,6 +309,68 @@ export default function ManagePeoplePage() {
         </div>
       </div>
 
+      {/* 検索・フィルタリングセクション */}
+      <div className="mb-6 flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search by name..."
+            value={localSearchQuery}
+            onChange={(e) => setLocalSearchQuery(e.target.value)}
+            className="pl-10"
+            disabled={generalActionDisabled}
+          />
+        </div>
+
+        <Select
+          value={peopleCompanyFilter || "all"}
+          onValueChange={(value) => setPeopleCompanyFilter(value === "all" ? null : value)}
+          disabled={generalActionDisabled}
+        >
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <SelectValue placeholder="Filter by company..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Companies</SelectItem>
+            {getUniqueCompanies().map(company => (
+              <SelectItem key={company} value={company}>
+                {company}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(peopleSearchQuery || peopleCompanyFilter) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setLocalSearchQuery("");
+              setPeopleSearchQuery("");
+              setPeopleCompanyFilter(null);
+            }}
+            disabled={generalActionDisabled}
+          >
+            <X className="mr-1 h-4 w-4" />
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {/* フィルタリング結果の情報 */}
+      {(peopleSearchQuery || peopleCompanyFilter) && !isLoadingAllUserPeople && (
+        <div className="mb-4 px-2 text-sm text-muted-foreground">
+          Showing {filteredPeople.length} of {allUserPeople.length} people
+          {peopleSearchQuery && (
+            <span> matching "{peopleSearchQuery}"</span>
+          )}
+          {peopleCompanyFilter && (
+            <span> from {peopleCompanyFilter}</span>
+          )}
+        </div>
+      )}
+
       {isMergeSelectionMode && (
         <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md text-center">
           <p className="text-sm text-blue-700 dark:text-blue-300">
@@ -443,9 +528,15 @@ export default function ManagePeoplePage() {
           <p className="font-semibold">No people registered yet.</p>
           <p className="text-sm">Upload images and create rosters to add people to your list.</p>
         </div>
+      ) : filteredPeople.length === 0 ? (
+        <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
+          <Search className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+          <p className="font-semibold">No people found matching your filters.</p>
+          <p className="text-sm">Try adjusting your search query or clearing filters.</p>
+        </div>
       ) : (
         <PeopleList
-          people={allUserPeople}
+          people={filteredPeople}
           allUserConnections={allUserConnections}
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
