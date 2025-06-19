@@ -1,75 +1,124 @@
 "use client";
 import React from 'react';
-import { usePathname } from 'next/navigation';
-import { SmilePlus, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import UserDropdown from './UserDropdown';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
+import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-import { useToast } from '@/hooks/use-toast';
-import Link from 'next/link'; // Import Link
-import { Trash2, Home, LogOut, UserCircle } from 'lucide-react'; // Added Users icon
-import { auth } from '@/lib/firebase';
-import { signOut } from 'firebase/auth';
 
-const AppHeader = () => {
-  const context = useFaceRoster();
-  const { toast } = useToast();
-  const { currentUser, imageDataUrl } = context;
+export function AppHeader() {
+  const { currentUser, loading } = useAuth();
+  const { clearAllData } = useFaceRoster();
 
   const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      // Context's onAuthStateChanged will handle state update and redirection if needed
-    } catch (error) {
-      console.error("Logout error:", error);
-      toast({ title: "Logout Failed", description: "Could not log you out. Please try again.", variant: "destructive" });
-    }
+    await clearAllData();
+    // Next step of logout is handled by onAuthStateChanged in AuthContext
   };
 
-  return (
-    <header className="bg-primary text-primary-foreground p-4 shadow-md sticky top-0 z-40">
-      <div className="container mx-auto flex justify-between items-center">
-        <Link href="/" className="text-2xl font-headline font-bold flex items-center hover:opacity-90 transition-opacity">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2 h-7 w-7">
-            <path d="M12 2a10 10 0 0 0-9.95 9.276c.02.04.038.081.058.122A10.001 10.001 0 0 0 12 22a10 10 0 0 0 10-10c0-.283-.012-.564-.035-.842L21.965 11A10 10 0 0 0 12 2Z" />
-            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-            <path d="M9 9h.01" /><path d="M15 9h.01" />
-          </svg>
-          FaceRoster
-        </Link>
+  const navLinks = [
+    { href: '/', label: 'Home', icon: Home },
+    { href: '/people', label: 'People', icon: Users },
+    { href: '/connections', label: 'Connections', icon: Network },
+  ];
 
-        <div className="flex items-center gap-2">
-          {currentUser && (
-            <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/20">
-              <Link href="/people">
-                <Users className="mr-2 h-4 w-4" /> People List
+  return (
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 items-center">
+        <div className="mr-4 hidden md:flex">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
+            <SmilePlus className="h-6 w-6" />
+            <span className="hidden font-bold sm:inline-block">FaceRoster</span>
+          </Link>
+          <nav className="flex items-center space-x-6 text-sm font-medium">
+            {currentUser && navLinks.map(link => (
+              <Link key={link.href} href={link.href} className="transition-colors hover:text-foreground/80 text-foreground/60">
+                {link.label}
               </Link>
-            </Button>
-          )}
-          {currentUser && imageDataUrl && (
-            <>
-              <Button variant="destructive" onClick={() => context.clearAllData(true)} size="sm">
-                <Trash2 className="mr-2 h-4 w-4" /> Clear Editor
+            ))}
+          </nav>
+        </div>
+
+        {/* Mobile Menu */}
+        <div className="flex items-center md:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle Menu</span>
               </Button>
-            </>
-          )}
-          {currentUser && (
-            <Button variant="ghost" onClick={handleLogout} size="sm" className="text-primary-foreground hover:bg-primary-foreground/20">
-              <LogOut className="mr-2 h-4 w-4" /> Logout
-            </Button>
-          )}
-          {!currentUser && !context.isLoading && (
-            <Button asChild variant="ghost" size="sm" className="text-primary-foreground hover:bg-primary-foreground/20">
-              <Link href="/login">
-                <UserCircle className="mr-2 h-4 w-4" /> Login / Sign Up
-              </Link>
-            </Button>
-          )}
+            </SheetTrigger>
+            <SheetContent side="left">
+              <nav className="grid gap-6 text-lg font-medium">
+                <Link
+                  href="#"
+                  className="group flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-full bg-primary text-lg font-semibold text-primary-foreground md:text-base"
+                >
+                  <SmilePlus className="h-5 w-5 transition-all group-hover:scale-110" />
+                  <span className="sr-only">FaceRoster</span>
+                </Link>
+                {currentUser && navLinks.map(link => (
+                  <Link key={link.href} href={link.href} className="flex items-center gap-4 px-2.5 text-muted-foreground hover:text-foreground">
+                    <link.icon className="h-5 w-5" />
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        <div className="flex flex-1 items-center justify-end space-x-4">
+          <nav className="flex items-center space-x-2">
+            {loading ? (
+              <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+            ) : currentUser ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" size="icon" className="rounded-full">
+                    <UserPlus className="h-5 w-5" />
+                    <span className="sr-only">Toggle user menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleLogout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button asChild>
+                  <Link href="/login">
+                    <LogIn className="mr-2 h-4 w-4" /> Login
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/signup">
+                    <UserPlus className="mr-2 h-4 w-4" /> Sign Up
+                  </Link>
+                </Button>
+              </>
+            )}
+          </nav>
         </div>
       </div>
     </header>
   );
-};
-
-export default AppHeader;
+}

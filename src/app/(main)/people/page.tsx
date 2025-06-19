@@ -31,6 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+import PeopleSearchFilters from '@/components/features/PeopleSearchFilters';
 
 
 export default function ManagePeoplePage() {
@@ -309,67 +310,28 @@ export default function ManagePeoplePage() {
         </div>
       </div>
 
-      {/* 検索・フィルタリングセクション */}
-      <div className="mb-6 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search by name..."
-            value={localSearchQuery}
-            onChange={(e) => setLocalSearchQuery(e.target.value)}
-            className="pl-10"
-            disabled={generalActionDisabled}
-          />
-        </div>
-
-        <Select
-          value={peopleCompanyFilter || "all"}
-          onValueChange={(value) => setPeopleCompanyFilter(value === "all" ? null : value)}
-          disabled={generalActionDisabled}
-        >
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder="Filter by company..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Companies</SelectItem>
-            {getUniqueCompanies().map(company => (
-              <SelectItem key={company} value={company}>
-                {company}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {(peopleSearchQuery || peopleCompanyFilter) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setLocalSearchQuery("");
-              setPeopleSearchQuery("");
-              setPeopleCompanyFilter(null);
-            }}
-            disabled={generalActionDisabled}
-          >
-            <X className="mr-1 h-4 w-4" />
-            Clear filters
-          </Button>
-        )}
+      <div className="mb-6">
+        <PeopleSearchFilters
+          searchQuery={localSearchQuery}
+          onSearchQueryChange={setLocalSearchQuery}
+          companyFilter={peopleCompanyFilter}
+          onCompanyFilterChange={setPeopleCompanyFilter}
+          availableCompanies={getUniqueCompanies()}
+          onClearFilters={() => {
+            setLocalSearchQuery("");
+            setPeopleCompanyFilter("");
+          }}
+        />
       </div>
 
-      {/* フィルタリング結果の情報 */}
-      {(peopleSearchQuery || peopleCompanyFilter) && !isLoadingAllUserPeople && (
-        <div className="mb-4 px-2 text-sm text-muted-foreground">
-          Showing {filteredPeople.length} of {allUserPeople.length} people
-          {peopleSearchQuery && (
-            <span> matching "{peopleSearchQuery}"</span>
-          )}
-          {peopleCompanyFilter && (
-            <span> from {peopleCompanyFilter}</span>
-          )}
+      <div className="mb-4 flex justify-between items-center">
+        <p className="text-sm text-muted-foreground">
+          {isLoadingAllUserPeople ? 'Loading...' : `Showing ${filteredPeople.length} of ${allUserPeople.length} people.`}
+        </p>
+        <div className="flex gap-2">
+          {/* ... Action buttons like Merge, Delete ... */}
         </div>
-      )}
+      </div>
 
       {isMergeSelectionMode && (
         <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md text-center">
@@ -537,16 +499,15 @@ export default function ManagePeoplePage() {
       ) : (
         <PeopleList
           people={filteredPeople}
-          allUserConnections={allUserConnections}
-          isMergeSelectionMode={isMergeSelectionMode}
-          selectedPeopleForMerge={globallySelectedPeopleForMerge}
-          onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
-          isDeleteSelectionMode={isDeleteSelectionMode}
-          selectedPeopleForDelete={selectedPeopleIdsForDeletion}
-          onToggleDeleteSelection={togglePersonSelectionForDeletion}
-          onEditPerson={handleOpenEditPersonDialog}
-          generalActionDisabled={generalActionDisabled}
+          isLoading={isLoadingAllUserPeople}
+          onEditClick={handleOpenEditPersonDialog}
           onInitiateConnection={handleInitiateConnection}
+          selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
+          selectedForMergeIds={globallySelectedPeopleForMerge}
+          onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
+          selectedForDeletionIds={selectedPeopleIdsForDeletion}
+          onToggleDeleteSelection={togglePersonSelectionForDeletion}
+          generalActionDisabled={generalActionDisabled}
         />
       )}
 

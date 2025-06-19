@@ -1,65 +1,74 @@
-
 "use client";
 import React from 'react';
-import type { Person, Connection } from '@/types'; // Added Connection
+import type { Person } from '@/types';
 import PeopleListItem from './PeopleListItem';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from "@/components/ui/card";
 
 interface PeopleListProps {
   people: Person[];
-  allUserConnections: Connection[]; // New prop for all connections
-  isMergeSelectionMode?: boolean;
-  selectedPeopleForMerge?: string[];
+  isLoading: boolean;
+  onEditClick: (person: Person) => void;
+  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
+  selectionMode?: 'merge' | 'delete' | 'none';
+  selectedForMergeIds?: string[];
   onToggleMergeSelection?: (personId: string) => void;
-  isDeleteSelectionMode?: boolean;
-  selectedPeopleForDelete?: string[];
+  selectedForDeletionIds?: string[];
   onToggleDeleteSelection?: (personId: string) => void;
-  onEditPerson: (person: Person) => void; 
   generalActionDisabled?: boolean;
-  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void; 
 }
 
-const PeopleList: React.FC<PeopleListProps> = ({ 
+export default function PeopleList({
   people,
-  allUserConnections, // Use this prop
-  isMergeSelectionMode = false,
-  selectedPeopleForMerge = [],
-  onToggleMergeSelection = () => {},
-  isDeleteSelectionMode = false,
-  selectedPeopleForDelete = [],
-  onToggleDeleteSelection = () => {},
-  onEditPerson,
-  generalActionDisabled = false,
+  isLoading,
+  onEditClick,
   onInitiateConnection,
-}) => {
-  if (people.length === 0) {
+  selectionMode = 'none',
+  selectedForMergeIds = [],
+  onToggleMergeSelection,
+  selectedForDeletionIds = [],
+  onToggleDeleteSelection,
+  generalActionDisabled = false
+}: PeopleListProps) {
+  if (isLoading) {
     return (
-      <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md h-full flex items-center justify-center">
-        No people found. Start by adding people through rosters.
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {Array.from({ length: 12 }).map((_, index) => (
+          <Skeleton key={index} className="h-[220px] w-full rounded-lg" />
+        ))}
       </div>
     );
   }
 
+  if (people.length === 0) {
+    return (
+      <Card className="mt-4">
+        <CardContent className="pt-6">
+          <div className="text-center text-muted-foreground">
+            <p className="font-semibold">No people found.</p>
+            <p className="text-sm">Try adjusting your search or filters.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
       {people.map((person) => (
-        <PeopleListItem 
-          key={person.id} 
+        <PeopleListItem
+          key={person.id}
           person={person}
-          allUserConnections={allUserConnections} // Pass all connections down
-          isMergeSelectionMode={isMergeSelectionMode}
-          isSelectedForMerge={selectedPeopleForMerge.includes(person.id)}
-          onToggleMergeSelection={onToggleMergeSelection}
-          isDisabledForMergeSelection={isMergeSelectionMode && selectedPeopleForMerge.length >= 2 && !selectedPeopleForMerge.includes(person.id)}
-          isDeleteSelectionMode={isDeleteSelectionMode}
-          isSelectedForDelete={selectedPeopleForDelete.includes(person.id)}
-          onToggleDeleteSelection={onToggleDeleteSelection}
-          onEdit={() => onEditPerson(person)} 
-          disableActions={generalActionDisabled || (isMergeSelectionMode && selectedPeopleForMerge.length >=2 && !selectedPeopleForMerge.includes(person.id))}
+          onEditClick={() => onEditClick(person)}
           onInitiateConnection={onInitiateConnection}
+          selectionMode={selectionMode}
+          isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? selectedForMergeIds?.includes(person.id) : false}
+          onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
+          isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? selectedForDeletionIds?.includes(person.id) : false}
+          onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
+          generalActionDisabled={generalActionDisabled}
         />
       ))}
     </div>
   );
-};
-
-export default PeopleList;
+}
