@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person } from '@/types'; 
+import type { Person, Connection, ProcessedConnectionFormData } from '@/types'; 
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,8 +23,8 @@ import { Slider } from "@/components/ui/slider";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 import { 
-    Link2, Users, FileText, Save, Sparkles, ArrowRight,
-    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, Clipboard // Changed ClipboardUser to Clipboard
+    Link2, Users, FileText, Save, Sparkles, ArrowRight, FileEdit,
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, Clipboard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -37,19 +37,13 @@ const createConnectionFormSchema = z.object({
 });
 
 
-export interface ProcessedConnectionFormData {
-    types: string[];
-    reasons: string[];
-    strength?: number;
-    notes?: string;
-}
-
 interface CreateConnectionDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  sourcePerson: Person | null;
-  targetPerson: Person | null;
-  onSave: (data: ProcessedConnectionFormData) => Promise<void>; 
+  sourcePerson: Person | null; // Always required for context, even in edit mode
+  targetPerson: Person | null; // Always required for context, even in edit mode
+  editingConnection?: Connection | null; // If present, dialog is in edit mode
+  onSave: (data: ProcessedConnectionFormData, editingConnectionId?: string) => Promise<void>; 
   isProcessing: boolean;
 }
 
@@ -57,14 +51,14 @@ const commonRelations = [
   { key: 'colleague', label: 'Colleague', icon: Briefcase, category: 'common' },
   { key: 'friend', label: 'Friend', icon: Smile, category: 'common' },
   { key: 'acquaintance', label: 'Acquaintance', icon: Handshake, category: 'common' },
-  { key: 'club_member', label: 'Club Member', icon: Users, category: 'common' }, // 🎯 Icon, used Users for now
+  { key: 'club_member', label: 'Club Member', icon: Users, category: 'common' }, 
 ];
 
 const hierarchicalRelations = [
   { key: 'parent', label: 'Parent (of Target)', icon: Home, category: 'hierarchical' }, 
   { key: 'child', label: 'Child (of Target)', icon: UserIcon, category: 'hierarchical' }, 
   { key: 'manager', label: 'Manager (of Target)', icon: Award, category: 'hierarchical' }, 
-  { key: 'reports_to', label: 'Reports to (Target)', icon: Clipboard, category: 'hierarchical' }, // Changed ClipboardUser to Clipboard
+  { key: 'reports_to', label: 'Reports to (Target)', icon: Clipboard, category: 'hierarchical' }, 
   { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap, category: 'hierarchical' },
   { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap, category: 'hierarchical' },
 ];
@@ -72,7 +66,7 @@ const hierarchicalRelations = [
 const specialRelations = [
   { key: 'spouse', label: 'Spouse', icon: Heart, category: 'special' },
   { key: 'partner', label: 'Partner', icon: Gem, category: 'special' },
-  { key: 'family_member', label: 'Family Member', icon: Users2, category: 'special' }, // 👨‍👩‍👧 Icon, used Users2 for now
+  { key: 'family_member', label: 'Family Member', icon: Users2, category: 'special' }, 
 ];
 
 const allPredefinedRelations = [...commonRelations, ...hierarchicalRelations, ...specialRelations];
@@ -90,6 +84,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   onOpenChange,
   sourcePerson,
   targetPerson,
+  editingConnection,
   onSave,
   isProcessing,
 }) => {
@@ -101,6 +96,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     handleSubmit,
     reset,
     control,
+    setValue,
     formState: { errors, isDirty: formIsDirty }, 
   } = useForm<z.infer<typeof createConnectionFormSchema>>({ 
     resolver: zodResolver(createConnectionFormSchema),
@@ -112,13 +108,29 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     }
   });
 
+  const isEditMode = !!editingConnection;
+
   useEffect(() => {
     if (isOpen) {
-      reset({ customTypes: "", reasons: "", strength: "", notes: "" });
-      setSelectedPredefinedTypes([]);
-      setCurrentStrength(undefined);
+      if (isEditMode && editingConnection) {
+        const predefined = editingConnection.types.filter(type => allPredefinedRelations.some(rel => rel.key === type));
+        const custom = editingConnection.types.filter(type => !allPredefinedRelations.some(rel => rel.key === type));
+        
+        setSelectedPredefinedTypes(predefined);
+        reset({
+          customTypes: custom.join(', '),
+          reasons: editingConnection.reasons.join('\n'),
+          strength: editingConnection.strength?.toString() ?? "",
+          notes: editingConnection.notes || "",
+        });
+        setCurrentStrength(editingConnection.strength ?? undefined);
+      } else {
+        reset({ customTypes: "", reasons: "", strength: "", notes: "" });
+        setSelectedPredefinedTypes([]);
+        setCurrentStrength(undefined);
+      }
     }
-  }, [isOpen, reset]);
+  }, [isOpen, editingConnection, isEditMode, reset]);
   
   const processAndSubmit = async (formData: z.infer<typeof createConnectionFormSchema>) => {
     const customTypesArray = formData.customTypes?.split(',')
@@ -139,7 +151,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
         strength: strengthNum,
         notes: formData.notes || "",
     };
-    await onSave(processedData);
+    await onSave(processedData, editingConnection?.id);
   };
   
   const handlePredefinedTypeChange = (newlySelectedOrDeselectedTypes: string[]) => {
@@ -165,9 +177,12 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   };
 
 
-  if (!sourcePerson || !targetPerson) return null;
+  if (!sourcePerson || !targetPerson) return null; // Should ideally not happen if dialog is open
   
-  const isFormActuallyDirty = formIsDirty || selectedPredefinedTypes.length > 0 || currentStrength !== undefined;
+  const isFormActuallyDirty = formIsDirty || 
+                             selectedPredefinedTypes.join(',') !== (editingConnection?.types.filter(type => allPredefinedRelations.some(rel => rel.key === type)).join(',') ?? "") ||
+                             currentStrength !== (editingConnection?.strength ?? undefined);
+
 
   const renderRelationToggleItems = (relations: typeof commonRelations) => (
     <ToggleGroup 
@@ -191,29 +206,41 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     </ToggleGroup>
   );
 
+  const actualSourcePersonName = isEditMode && editingConnection ? 
+                                  (allUserPeople.find(p => p.id === editingConnection.fromPersonId)?.name || sourcePerson.name) 
+                                  : sourcePerson.name;
+  const actualTargetPersonName = isEditMode && editingConnection ? 
+                                  (allUserPeople.find(p => p.id === editingConnection.toPersonId)?.name || targetPerson.name) 
+                                  : targetPerson.name;
+   // Helper to get person names for display, especially in edit mode
+  const displaySourcePersonName = isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.fromPersonId)?.name ?? 'Source' : sourcePerson.name;
+  const displayTargetPersonName = isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.toPersonId)?.name ?? 'Target' : targetPerson.name;
+  const allUserPeople = useMemo(() => isEditMode ? [sourcePerson, targetPerson] : [], [isEditMode, sourcePerson, targetPerson]); // Dummy for now, needs prop
+
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg md:max-w-xl lg:max-w-2xl !max-h-[90vh] !flex !flex-col">
         <DialogHeader className="shrink-0 text-center sm:text-left">
           <DialogTitle className="font-headline text-xl flex items-center justify-center sm:justify-start">
-            <Link2 className="mr-2 h-6 w-6 text-primary" />
-            Create Connection
+            {isEditMode ? <FileEdit className="mr-2 h-6 w-6 text-primary" /> : <Link2 className="mr-2 h-6 w-6 text-primary" />}
+            {isEditMode ? "Edit Connection" : "Create Connection"}
           </DialogTitle>
         </DialogHeader>
         
         <div className="p-3 my-2 rounded-md bg-muted/50 border text-sm shadow-inner">
             <div className="flex items-center justify-center text-foreground font-medium text-base">
-                <span className="flex items-center"><Users className="mr-1.5 h-5 w-5 text-primary"/>{sourcePerson.name}</span>
+                <span className="flex items-center"><Users className="mr-1.5 h-5 w-5 text-primary"/>{displaySourcePersonName}</span>
                 <ArrowRight className="h-5 w-5 text-muted-foreground mx-3"/>
-                <span className="flex items-center">{targetPerson.name}<Users className="ml-1.5 h-5 w-5 text-primary"/></span>
+                <span className="flex items-center">{displayTargetPersonName}<Users className="ml-1.5 h-5 w-5 text-primary"/></span>
             </div>
              <DialogDescription className="text-center sm:text-left mt-1">
-                Define the relationship of <strong className="text-primary">{sourcePerson.name}</strong> towards <strong className="text-primary">{targetPerson.name}</strong>.
+                Define the relationship of <strong className="text-primary">{displaySourcePersonName}</strong> towards <strong className="text-primary">{displayTargetPersonName}</strong>.
             </DialogDescription>
         </div>
 
         <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
-          <form onSubmit={handleSubmit(processAndSubmit)} id="create-connection-form" className="space-y-6">
+          <form onSubmit={handleSubmit(processAndSubmit)} id="connection-form" className="space-y-6">
             
             <section className="space-y-4">
               <h3 className="text-md font-semibold mb-2 flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary/80" />Relationship Categories</h3>
@@ -313,7 +340,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form="create-connection-form" disabled={isProcessing || !isFormActuallyDirty} className="min-w-[100px]">
+          <Button type="submit" form="connection-form" disabled={isProcessing || (!isEditMode && !isFormActuallyDirty && selectedPredefinedTypes.length === 0) || (isEditMode && !isFormActuallyDirty)} className="min-w-[100px]">
             {isProcessing ? (
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -325,7 +352,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
             ) : (
               <>
                 <Save className="mr-1.5 h-4 w-4" />
-                Save Connection
+                {isEditMode ? "Save Changes" : "Save Connection"}
               </>
             )}
           </Button>

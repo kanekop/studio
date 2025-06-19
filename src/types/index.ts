@@ -31,7 +31,7 @@ export interface Person {
   notes?: string; // User-added notes for this person
   
   faceAppearances: FaceAppearance[]; // Array of all instances where this person's face was identified
-  primaryFaceAppearancePath?: string; // Optional: Storage path of the selected primary face image from faceAppearances
+  primaryFaceAppearancePath?: string | null; // Optional: Storage path of the selected primary face image from faceAppearances
   
   addedBy: string; // UID of the user who added this person
   rosterIds: string[]; // Array of 'roster' document IDs this person belongs to
@@ -136,3 +136,4 @@ export interface ProcessedConnectionFormData {
     strength?: number; // Optional, as slider might not be touched
     notes?: string;   // Optional
 }
+

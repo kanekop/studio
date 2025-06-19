@@ -974,11 +974,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         });
         const mergedFaceAppearances = Array.from(mergedFaceAppearancesSet.values());
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
-
+        
         let finalPrimaryFacePath = chosenPrimaryPhotoPath;
         if (!finalPrimaryFacePath && mergedFaceAppearances.length > 0) {
-           finalPrimaryFacePath = mergedFaceAppearances[0].faceImageStoragePath;
+            finalPrimaryFacePath = mergedFaceAppearances[0].faceImageStoragePath;
+        } else if (!finalPrimaryFacePath) {
+            finalPrimaryFacePath = null; 
         }
+
 
         transaction.update(targetPersonRef, {
           name: mergedName,
@@ -989,7 +992,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           firstMet: mergedFirstMet || "",
           firstMetContext: mergedFirstMetContext || "",
           faceAppearances: mergedFaceAppearances,
-          primaryFaceAppearancePath: finalPrimaryFacePath || null,
+          primaryFaceAppearancePath: finalPrimaryFacePath,
           rosterIds: mergedRosterIds,
           updatedAt: serverTimestamp()
         });
@@ -1315,10 +1318,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const updateData = { ...updates, updatedAt: serverTimestamp() };
       await updateDoc(connectionRef, updateData);
       toast({ title: "Connection Updated", description: "The connection details have been saved." });
-      if (allUserPeople.length > 0) {
-         const peopleIds = allUserPeople.map(p => p.id);
-         await fetchAllConnectionsForAllUserPeople(peopleIds);
-      }
+      
+      // Optimistically update local state or refetch
+      setAllUserConnections(prev => 
+        prev.map(conn => conn.id === connectionId ? { ...conn, ...updateData, updatedAt: new Date() } as Connection : conn)
+      );
+      // Or, to ensure full consistency, you could refetch after a short delay if optimistic update is complex
+      // setTimeout(() => fetchAllConnectionsForAllUserPeople(allUserPeople.map(p => p.id)), 500);
+
       return true;
     } catch (error: any) {
       console.error(`FRC: Error updating connection ${connectionId}:`, error);
@@ -1413,3 +1420,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   return context;
 };
     
+
