@@ -273,7 +273,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         {isLoadingImage ? (
           <Skeleton className="w-full aspect-square bg-muted" />
         ) : (
-          <div className="aspect-square w-full relative bg-muted pointer-events-none">
+          <div className="aspect-square w-full relative bg-muted">
             <Image
               src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
               alt={`Face of ${person.name}`}
@@ -287,7 +287,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-3 flex-grow pointer-events-none">
+      <CardContent className="p-3 flex-grow">
         <CardTitle className="text-lg font-semibold truncate" title={person.name}>
           {person.name}
         </CardTitle>
@@ -317,7 +317,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           )}
         </div>
       </CardContent>
-      <CardFooter className="p-3 border-t bg-muted/30 pointer-events-none">
+      <CardFooter className="p-3 border-t bg-muted/30">
         <div className="flex items-center text-xs text-muted-foreground">
           <Layers className="h-3.5 w-3.5 mr-1.5" />
           Appears in {rosterCount} roster{rosterCount === 1 ? '' : 's'}
