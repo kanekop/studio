@@ -18,10 +18,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon, UsersIcon, ThumbsUp, MessageSquare, Star } from 'lucide-react';
+import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon, Users as UsersIcon, Star, MessageSquare } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent } from '@/components/ui/card'; // Added Card and CardContent
 
 const editPersonSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -102,7 +103,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
           direction: conn.fromPersonId === personToEdit.id ? 'outgoing' : 'incoming',
         };
       })
-      .filter(item => item.otherPerson); // Ensure otherPerson was found
+      .filter(item => item.otherPerson); 
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
   if (!personToEdit) return null;
@@ -181,8 +182,18 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
               <Separator />
               {(isLoadingConnections || isLoadingPeople) && !relatedConnections.length ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-10 w-full rounded-md" />
-                  <Skeleton className="h-10 w-full rounded-md" />
+                  {[...Array(3)].map((_, i) => (
+                    <Card key={i} className="bg-muted/30 shadow-sm">
+                      <CardContent className="p-3 space-y-1.5">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <Skeleton className="h-8 w-8 rounded-full" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                        <Skeleton className="h-3 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               ) : relatedConnections.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No connections found for this person.</p>
@@ -193,37 +204,40 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                       <CardContent className="p-3 space-y-1.5">
                         <div className="flex items-center space-x-2 mb-1">
                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={otherPerson?.faceAppearances?.[0]?.faceImageStoragePath ? undefined : "https://placehold.co/40x40.png"} alt={otherPerson?.name}/> {/* Placeholder, image loading would be complex here */}
-                              <AvatarFallback>{otherPerson?.name?.substring(0,1) || 'P'}</AvatarFallback>
+                              <AvatarImage src={otherPerson?.faceAppearances?.[0]?.faceImageStoragePath ? undefined : "https://placehold.co/40x40.png"} alt={otherPerson?.name || 'Person'}/>
+                              <AvatarFallback>{otherPerson?.name?.substring(0,1).toUpperCase() || 'P'}</AvatarFallback>
                             </Avatar>
-                          <p className="font-semibold text-primary-foreground truncate">{otherPerson?.name || 'Unknown Person'}</p>
+                          <p className="font-semibold text-foreground truncate" title={otherPerson?.name || 'Unknown Person'}>{otherPerson?.name || 'Unknown Person'}</p>
                         </div>
                         
                         <div className="text-xs text-muted-foreground space-y-0.5">
                           <p className="flex items-center">
                             <UsersIcon className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
                             Relationship: {direction === 'outgoing' 
-                              ? `Your relation to ${otherPerson?.name || 'them'}` 
-                              : `${otherPerson?.name || 'Their'} relation to you`}
-                             : <strong className="ml-1 text-foreground">{connection.types.join(', ') || 'N/A'}</strong>
+                              ? `${personToEdit.name} → ${otherPerson?.name || 'them'}` 
+                              : `${otherPerson?.name || 'They'} → ${personToEdit.name}`}
+                             : <strong className="ml-1 text-foreground truncate max-w-[150px]" title={connection.types.join(', ')}>{connection.types.join(', ') || 'N/A'}</strong>
                           </p>
                           {connection.reasons && connection.reasons.length > 0 && (
                             <p className="flex items-center">
                               <MessageSquare className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
-                              Reasons: <span className="ml-1 text-foreground truncate">{connection.reasons.join('; ')}</span>
+                              Reasons: <span className="ml-1 text-foreground truncate max-w-[180px]" title={connection.reasons.join('; ')}>{connection.reasons.join('; ')}</span>
                             </p>
                           )}
-                           {connection.strength && (
+                           {connection.strength != null && (
                             <p className="flex items-center">
                               <Star className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
                               Strength: <span className="ml-1 text-foreground">{connection.strength}/5</span>
                             </p>
                           )}
                           {connection.notes && (
-                            <p className="flex items-start">
-                              <FileText className="mr-1.5 h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
-                              Notes: <span className="ml-1 text-foreground whitespace-pre-wrap text-xs">{connection.notes}</span>
-                            </p>
+                            <details className="group">
+                                <summary className="flex items-center cursor-pointer list-none">
+                                    <FileText className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                                    Notes: <span className="ml-1 text-foreground italic group-open:hidden">(Click to view)</span>
+                                </summary>
+                                <p className="ml-[22px] text-foreground whitespace-pre-wrap text-xs bg-background/50 p-1.5 rounded-sm border mt-1">{connection.notes}</p>
+                            </details>
                           )}
                         </div>
                         {/* Placeholder for future edit/delete connection buttons */}
@@ -265,3 +279,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 };
 
 export default EditPersonDialog;
+
+
+    
