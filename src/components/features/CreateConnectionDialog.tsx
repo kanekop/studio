@@ -40,9 +40,10 @@ const createConnectionFormSchema = z.object({
 interface CreateConnectionDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  sourcePerson: Person | null; // Always required for context, even in edit mode
-  targetPerson: Person | null; // Always required for context, even in edit mode
-  editingConnection?: Connection | null; // If present, dialog is in edit mode
+  sourcePerson: Person | null; 
+  targetPerson: Person | null; 
+  allUserPeople: Person[]; // Added prop
+  editingConnection?: Connection | null; 
   onSave: (data: ProcessedConnectionFormData, editingConnectionId?: string) => Promise<void>; 
   isProcessing: boolean;
 }
@@ -84,6 +85,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   onOpenChange,
   sourcePerson,
   targetPerson,
+  allUserPeople, // Use this prop
   editingConnection,
   onSave,
   isProcessing,
@@ -177,7 +179,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   };
 
 
-  if (!sourcePerson || !targetPerson) return null; // Should ideally not happen if dialog is open
+  if (!sourcePerson || !targetPerson) return null; 
   
   const isFormActuallyDirty = formIsDirty || 
                              selectedPredefinedTypes.join(',') !== (editingConnection?.types.filter(type => allPredefinedRelations.some(rel => rel.key === type)).join(',') ?? "") ||
@@ -206,16 +208,13 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     </ToggleGroup>
   );
 
-  const actualSourcePersonName = isEditMode && editingConnection ? 
-                                  (allUserPeople.find(p => p.id === editingConnection.fromPersonId)?.name || sourcePerson.name) 
-                                  : sourcePerson.name;
-  const actualTargetPersonName = isEditMode && editingConnection ? 
-                                  (allUserPeople.find(p => p.id === editingConnection.toPersonId)?.name || targetPerson.name) 
-                                  : targetPerson.name;
-   // Helper to get person names for display, especially in edit mode
-  const displaySourcePersonName = isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.fromPersonId)?.name ?? 'Source' : sourcePerson.name;
-  const displayTargetPersonName = isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.toPersonId)?.name ?? 'Target' : targetPerson.name;
-  const allUserPeople = useMemo(() => isEditMode ? [sourcePerson, targetPerson] : [], [isEditMode, sourcePerson, targetPerson]); // Dummy for now, needs prop
+  const displaySourcePersonName = useMemo(() => 
+    isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.fromPersonId)?.name ?? 'Source' : sourcePerson.name
+  , [isEditMode, editingConnection, allUserPeople, sourcePerson.name]);
+
+  const displayTargetPersonName = useMemo(() =>
+    isEditMode && editingConnection ? allUserPeople.find(p => p.id === editingConnection.toPersonId)?.name ?? 'Target' : targetPerson.name
+  , [isEditMode, editingConnection, allUserPeople, targetPerson.name]);
 
 
   return (
@@ -363,5 +362,3 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
 };
 
 export default CreateConnectionDialog;
-
-    

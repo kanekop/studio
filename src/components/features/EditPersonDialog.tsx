@@ -29,7 +29,7 @@ import { storage } from '@/lib/firebase';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { cn } from '@/lib/utils';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-import CreateConnectionDialog from './CreateConnectionDialog'; // Import CreateConnectionDialog
+import CreateConnectionDialog from './CreateConnectionDialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -121,7 +121,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   onSave,
   isProcessing: isSaveProcessing, 
 }) => {
-  const { deleteConnection, updateConnection, isProcessing: isContextProcessing, addConnection } = useFaceRoster();
+  const { deleteConnection, updateConnection, isProcessing: isContextProcessing } = useFaceRoster();
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isAttemptingDelete, setIsAttemptingDelete] = useState(false);
@@ -238,7 +238,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   };
 
   const handleSaveConnection = async (data: ProcessedConnectionFormData, editingConnectionId?: string) => {
-    if (!editingConnectionId) return; // Should not happen in edit mode
+    if (!editingConnectionId) return; 
     
     setIsAttemptingConnectionSave(true);
     const success = await updateConnection(editingConnectionId, {
@@ -593,12 +593,13 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
          <CreateConnectionDialog
             isOpen={isEditConnectionDialogOpen}
             onOpenChange={(open) => {
-                if (!open && isAttemptingConnectionSave) return; // Prevent closing if saving
+                if (!open && isAttemptingConnectionSave) return; 
                 setIsEditConnectionDialogOpen(open);
                 if (!open) setConnectionToEdit(null);
             }}
-            sourcePerson={allUserPeople.find(p => p.id === connectionToEdit.fromPersonId) || personToEdit /* Fallback, should find */}
-            targetPerson={allUserPeople.find(p => p.id === connectionToEdit.toPersonId) || personToEdit /* Fallback */}
+            sourcePerson={allUserPeople.find(p => p.id === connectionToEdit.fromPersonId) || personToEdit }
+            targetPerson={allUserPeople.find(p => p.id === connectionToEdit.toPersonId) || personToEdit }
+            allUserPeople={allUserPeople} // Pass the full list
             editingConnection={connectionToEdit}
             onSave={handleSaveConnection}
             isProcessing={isAttemptingConnectionSave}
