@@ -80,12 +80,12 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   isOpen,
   onOpenChange,
   onSave,
-  isProcessing: isSaveProcessing, // This is the prop for the main save operation
+  isProcessing: isSaveProcessing, 
 }) => {
-  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster(); // Global processing from context
+  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster(); 
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false); // Local state for delete operation
+  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false); 
 
 
   const {
@@ -162,9 +162,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       setIsAttemptingDelete(true);
       try {
         await deleteConnection(connectionToDelete.id);
-        // Success toast is handled by deleteConnection context function
       } catch (error) {
-        // This catch block might not be strictly necessary if deleteConnection handles its own errors and toasting
         console.error("Error explicitly caught in handleConfirmDeleteConnection:", error);
       } finally {
         setIsAttemptingDelete(false);
@@ -175,20 +173,28 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   };
   
   const handleDeleteDialogInternalCloseAttempt = (openState: boolean) => {
-    // Prevent dialog from closing via Esc or overlay click IF a delete is in progress
     if (isAttemptingDelete && !openState) {
       return; 
     }
-    
-    // Allow normal open/close behavior otherwise
     setIsDeleteConfirmOpen(openState);
-    if (!openState) { // If dialog is closing (either by Cancel or after action)
+    if (!openState) { 
       setConnectionToDelete(null);
-      if (isAttemptingDelete) { // Ensure reset if somehow closed during attempt (e.g. unmount)
+      if (isAttemptingDelete) { 
         setIsAttemptingDelete(false);
       }
     }
   };
+
+  React.useEffect(() => {
+    if (isDeleteConfirmOpen) {
+      const timer = setTimeout(() => {
+        if (!isOpen && isDeleteConfirmOpen) {
+          onOpenChange(true);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isDeleteConfirmOpen, isOpen, onOpenChange]);
 
 
   const relatedConnections = useMemo(() => {
@@ -204,20 +210,18 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
           direction: conn.fromPersonId === personToEdit.id ? 'outgoing' : 'incoming',
         };
       })
-      .filter(item => item.otherPerson); // Ensure otherPerson was found
+      .filter(item => item.otherPerson); 
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
   if (!personToEdit) return null;
 
-  // Combined processing state for disabling UI elements in the main dialog (not the alert dialog)
   const overallIsProcessingForMainDialog = isSaveProcessing || isContextProcessing;
 
 
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
-      // Prevent closing outer dialog if any of its inner async operations are running
-      if (!open && (isSaveProcessing || isAttemptingDelete)) return;
+      if (!open && (isSaveProcessing || isAttemptingDelete || isDeleteConfirmOpen)) return;
       onOpenChange(open);
     }}>
       <DialogContent className="sm:max-w-2xl md:max-w-4xl lg:max-w-5xl !max-h-[90vh] !flex !flex-col">
@@ -231,7 +235,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
         <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
           <form onSubmit={handleSubmit(onSubmit)} id="edit-person-form">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-4">
-              {/* Column 1: Basic Info Form */}
               <div className="space-y-4 md:col-span-1">
                 <div>
                   <Label htmlFor="name" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
@@ -278,7 +281,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                 </div>
               </div>
 
-              {/* Column 2: Photo Selection */}
               <div className="space-y-4 md:col-span-1">
                 <h3 className="text-lg font-semibold flex items-center text-primary">
                   <ImageIcon className="mr-2 h-5 w-5" />
@@ -352,7 +354,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                 )}
               </div>
 
-              {/* Column 3: Connections */}
               <div className="space-y-4 md:col-span-1">
                 <h3 className="text-lg font-semibold flex items-center text-primary">
                   <LinkIconLucide className="mr-2 h-5 w-5" />
@@ -385,7 +386,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2 mb-1">
                               <Avatar className="h-8 w-8">
-                                  {/* TODO: Use actual otherPerson primary image path for AvatarImage src */}
                                   <AvatarImage src={otherPerson?.primaryFaceAppearancePath ? undefined : (otherPerson?.faceAppearances?.[0]?.faceImageStoragePath ? undefined : "https://placehold.co/40x40.png")} alt={otherPerson?.name || 'Person'}/>
                                   <AvatarFallback>{otherPerson?.name?.substring(0,1).toUpperCase() || 'P'}</AvatarFallback>
                                 </Avatar>
@@ -452,7 +452,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
             </Button>
           </DialogClose>
           <Button type="submit" form="edit-person-form" disabled={overallIsProcessingForMainDialog || !isDirty} className="min-w-[100px]">
-            {isSaveProcessing ? ( // Only main save processing shown here
+            {isSaveProcessing ? ( 
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
