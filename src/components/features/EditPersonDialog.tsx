@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon as LinkIconLucide, Users as UsersIcon, Star, MessageSquare, Image as ImageIcon, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react'; // Renamed LinkIcon to avoid conflict if any
+import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon as LinkIconLucide, Users as UsersIcon, Star, MessageSquare, Image as ImageIcon, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -80,12 +80,12 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   isOpen,
   onOpenChange,
   onSave,
-  isProcessing: isSaveProcessing,
+  isProcessing: isSaveProcessing, // This is the prop for the main save operation
 }) => {
-  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster();
+  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster(); // Global processing from context
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false);
+  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false); // Local state for delete operation
 
 
   const {
@@ -160,24 +160,33 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   const handleConfirmDeleteConnection = async () => {
     if (connectionToDelete) {
       setIsAttemptingDelete(true);
-      await deleteConnection(connectionToDelete.id);
-      setIsAttemptingDelete(false);
-      setConnectionToDelete(null);
-      setIsDeleteConfirmOpen(false); 
+      try {
+        await deleteConnection(connectionToDelete.id);
+        // Success toast is handled by deleteConnection context function
+      } catch (error) {
+        // This catch block might not be strictly necessary if deleteConnection handles its own errors and toasting
+        console.error("Error explicitly caught in handleConfirmDeleteConnection:", error);
+      } finally {
+        setIsAttemptingDelete(false);
+        setIsDeleteConfirmOpen(false); 
+        setConnectionToDelete(null); 
+      }
     }
   };
   
   const handleDeleteDialogInternalCloseAttempt = (openState: boolean) => {
-    if (!openState && isAttemptingDelete) {
-      // If Radix tries to close the dialog (e.g. Esc, overlay click)
-      // while we are in the middle of our delete operation, prevent it.
-      // The dialog will be closed explicitly by handleConfirmDeleteConnection or by Cancel.
-      return;
+    // Prevent dialog from closing via Esc or overlay click IF a delete is in progress
+    if (isAttemptingDelete && !openState) {
+      return; 
     }
+    
+    // Allow normal open/close behavior otherwise
     setIsDeleteConfirmOpen(openState);
-    if (!openState) { // If actually closing (e.g. by user pressing Esc or clicking Cancel)
+    if (!openState) { // If dialog is closing (either by Cancel or after action)
       setConnectionToDelete(null);
-      setIsAttemptingDelete(false); // Reset attempt flag
+      if (isAttemptingDelete) { // Ensure reset if somehow closed during attempt (e.g. unmount)
+        setIsAttemptingDelete(false);
+      }
     }
   };
 
@@ -195,17 +204,21 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
           direction: conn.fromPersonId === personToEdit.id ? 'outgoing' : 'incoming',
         };
       })
-      .filter(item => item.otherPerson);
+      .filter(item => item.otherPerson); // Ensure otherPerson was found
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
   if (!personToEdit) return null;
 
-  const overallIsProcessing = isSaveProcessing || isContextProcessing || isAttemptingDelete;
+  // Combined processing state for disabling UI elements in the main dialog (not the alert dialog)
+  const overallIsProcessingForMainDialog = isSaveProcessing || isContextProcessing;
+
 
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!overallIsProcessing) onOpenChange(open);
+      // Prevent closing outer dialog if any of its inner async operations are running
+      if (!open && (isSaveProcessing || isAttemptingDelete)) return;
+      onOpenChange(open);
     }}>
       <DialogContent className="sm:max-w-2xl md:max-w-4xl lg:max-w-5xl !max-h-[90vh] !flex !flex-col">
         <DialogHeader className="shrink-0">
@@ -224,44 +237,44 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                   <Label htmlFor="name" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <User className="mr-1.5 h-4 w-4" />Name*
                   </Label>
-                  <Input id="name" {...register('name')} placeholder="Full name" disabled={overallIsProcessing} />
+                  <Input id="name" {...register('name')} placeholder="Full name" disabled={overallIsProcessingForMainDialog} />
                   {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
                 </div>
                 <div>
                   <Label htmlFor="company" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <Building className="mr-1.5 h-4 w-4" />Company
                   </Label>
-                  <Input id="company" {...register('company')} placeholder="Company name" disabled={overallIsProcessing} />
+                  <Input id="company" {...register('company')} placeholder="Company name" disabled={overallIsProcessingForMainDialog} />
                 </div>
                 <div>
                   <Label htmlFor="hobbies" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <Smile className="mr-1.5 h-4 w-4" />Hobbies
                   </Label>
-                  <Textarea id="hobbies" {...register('hobbies')} placeholder="e.g., Reading, Hiking, Coding" className="min-h-[60px]" disabled={overallIsProcessing} />
+                  <Textarea id="hobbies" {...register('hobbies')} placeholder="e.g., Reading, Hiking, Coding" className="min-h-[60px]" disabled={overallIsProcessingForMainDialog} />
                 </div>
                 <div>
                   <Label htmlFor="birthday" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <CalendarDays className="mr-1.5 h-4 w-4" />Birthday
                   </Label>
-                  <Input id="birthday" {...register('birthday')} placeholder="e.g., January 1st or 1990-01-01" disabled={overallIsProcessing} />
+                  <Input id="birthday" {...register('birthday')} placeholder="e.g., January 1st or 1990-01-01" disabled={overallIsProcessingForMainDialog} />
                 </div>
                 <div>
                   <Label htmlFor="firstMet" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <CalendarDays className="mr-1.5 h-4 w-4" />First Met Date
                   </Label>
-                  <Input id="firstMet" {...register('firstMet')} placeholder="e.g., At a conference or 2023-05-15" disabled={overallIsProcessing} />
+                  <Input id="firstMet" {...register('firstMet')} placeholder="e.g., At a conference or 2023-05-15" disabled={overallIsProcessingForMainDialog} />
                 </div>
                 <div>
                   <Label htmlFor="firstMetContext" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <Info className="mr-1.5 h-4 w-4" />First Met Context
                   </Label>
-                  <Textarea id="firstMetContext" {...register('firstMetContext')} placeholder="e.g., Introduced by John at the tech meetup" className="min-h-[60px]" disabled={overallIsProcessing} />
+                  <Textarea id="firstMetContext" {...register('firstMetContext')} placeholder="e.g., Introduced by John at the tech meetup" className="min-h-[60px]" disabled={overallIsProcessingForMainDialog} />
                 </div>
                 <div>
                   <Label htmlFor="notes" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
                     <FileText className="mr-1.5 h-4 w-4" />Notes
                   </Label>
-                  <Textarea id="notes" {...register('notes')} placeholder="Any additional notes" className="min-h-[80px]" disabled={overallIsProcessing} />
+                  <Textarea id="notes" {...register('notes')} placeholder="Any additional notes" className="min-h-[80px]" disabled={overallIsProcessingForMainDialog} />
                 </div>
               </div>
 
@@ -284,7 +297,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                         }}
                         value={field.value || personToEdit.faceAppearances?.[0]?.faceImageStoragePath || ""}
                         className="space-y-2"
-                        disabled={overallIsProcessing}
+                        disabled={overallIsProcessingForMainDialog}
                       >
                         <ScrollArea className="max-h-[calc(90vh-250px)] pr-2">
                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -295,14 +308,14 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                 className={cn(
                                   "cursor-pointer rounded-md border-2 border-transparent transition-all hover:opacity-80 relative aspect-square flex items-center justify-center",
                                   field.value === appearance.faceImageStoragePath && "border-primary ring-2 ring-primary",
-                                  overallIsProcessing && "cursor-not-allowed opacity-60"
+                                  overallIsProcessingForMainDialog && "cursor-not-allowed opacity-60"
                                 )}
                               >
                                 <RadioGroupItem
                                   value={appearance.faceImageStoragePath}
                                   id={appearance.faceImageStoragePath}
                                   className="sr-only"
-                                  disabled={overallIsProcessing}
+                                  disabled={overallIsProcessingForMainDialog}
                                 />
                                 {appearance.isLoadingUrl ? (
                                   <Skeleton className="h-full w-full rounded-md" />
@@ -315,7 +328,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                     className="rounded-md"
                                   />
                                 )}
-                                {field.value === appearance.faceImageStoragePath && !overallIsProcessing && (
+                                {field.value === appearance.faceImageStoragePath && !overallIsProcessingForMainDialog && (
                                   <div className="absolute inset-0 bg-primary/30 flex items-center justify-center rounded-md">
                                     <CheckCircle2 className="h-8 w-8 text-primary-foreground" />
                                   </div>
@@ -372,6 +385,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2 mb-1">
                               <Avatar className="h-8 w-8">
+                                  {/* TODO: Use actual otherPerson primary image path for AvatarImage src */}
                                   <AvatarImage src={otherPerson?.primaryFaceAppearancePath ? undefined : (otherPerson?.faceAppearances?.[0]?.faceImageStoragePath ? undefined : "https://placehold.co/40x40.png")} alt={otherPerson?.name || 'Person'}/>
                                   <AvatarFallback>{otherPerson?.name?.substring(0,1).toUpperCase() || 'P'}</AvatarFallback>
                                 </Avatar>
@@ -382,7 +396,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                 size="icon"
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                                 onClick={() => handleInitiateDeleteConnection(connection)}
-                                disabled={overallIsProcessing}
+                                disabled={isAttemptingDelete || isContextProcessing || overallIsProcessingForMainDialog}
                                 aria-label={`Delete connection with ${otherPerson?.name || 'this person'}`}
                                 title={`Delete connection`}
                               >
@@ -433,12 +447,12 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 
         <DialogFooter className="shrink-0 pt-4 border-t mt-auto">
           <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={overallIsProcessing}>
+            <Button type="button" variant="outline" disabled={overallIsProcessingForMainDialog}>
               Cancel
             </Button>
           </DialogClose>
-          <Button type="submit" form="edit-person-form" disabled={overallIsProcessing || !isDirty} className="min-w-[100px]">
-            {isSaveProcessing ? (
+          <Button type="submit" form="edit-person-form" disabled={overallIsProcessingForMainDialog || !isDirty} className="min-w-[100px]">
+            {isSaveProcessing ? ( // Only main save processing shown here
               <>
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -473,7 +487,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
             <AlertDialogFooter>
               <AlertDialogCancel 
                 disabled={isAttemptingDelete || isContextProcessing} 
-                onClick={() => { /* Already handled by onOpenChange if user clicks cancel */ }}
               >
                 Cancel
               </AlertDialogCancel>
