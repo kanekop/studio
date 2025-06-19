@@ -41,8 +41,8 @@ interface FaceRosterContextType {
   isLoadingMergeSuggestions: boolean;
   peopleSortOption: PeopleSortOptionValue;
   selectedPeopleIdsForDeletion: string[];
-  allUserConnections: Connection[]; // Changed from personConnections
-  isLoadingAllUserConnections: boolean; // Changed from isLoadingPersonConnections
+  allUserConnections: Connection[]; 
+  isLoadingAllUserConnections: boolean; 
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -55,7 +55,7 @@ interface FaceRosterContextType {
   fetchUserRosters: () => Promise<void>;
   loadRosterForEditing: (rosterId: string) => Promise<void>;
   deleteRoster: (rosterId: string) => Promise<void>;
-  fetchAllUserPeople: () => Promise<void>; // This will trigger connection fetching
+  fetchAllUserPeople: () => Promise<void>; 
   toggleGlobalPersonSelectionForMerge: (personId: string) => void;
   clearGlobalMergeSelection: () => void;
   performGlobalPeopleMerge: (
@@ -72,7 +72,6 @@ interface FaceRosterContextType {
   updateGlobalPersonDetails: (personId: string, details: EditPersonFormData) => Promise<boolean>;
   
   addConnection: (fromPersonId: string, toPersonId: string, types: string[], reasons: string[], strength?: number, notes?: string) => Promise<string | null>;
-  // fetchConnectionsForPerson removed, replaced by allUserConnections logic
   updateConnection: (connectionId: string, updates: Partial<Omit<Connection, 'id' | 'fromPersonId' | 'toPersonId' | 'createdAt'>>) => Promise<boolean>;
   deleteConnection: (connectionId: string) => Promise<boolean>;
 }
@@ -297,7 +296,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (currentUser) {
         fetchUserRosters();
-        fetchAllUserPeople(); // This will now also trigger fetching connections
+        fetchAllUserPeople(); 
     }
   }, [currentUser, peopleSortOption, fetchUserRosters, fetchAllUserPeople]);
 
@@ -541,7 +540,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           faceImageStoragePath: faceInfo.faceImageStoragePath,
           originalRegion: faceInfo.originalRegion,
         };
-        const newPersonDataForDb: Omit<Person, 'id'> = {
+        const newPersonDataForDb: Omit<Person, 'id' | 'knownAcquaintances' | 'spouse'> = {
           name: faceInfo.defaultName,
           aiName: faceInfo.defaultName,
           notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
@@ -585,7 +584,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (newPeopleForUI.length > 0) {
         setSelectedPersonId(newPeopleForUI[0].id);
         await fetchUserRosters();
-        await fetchAllUserPeople(); // This will trigger connection fetching
+        await fetchAllUserPeople(); 
         toast({ title: "Roster Updated", description: `${newPeopleForUI.length} new person/people saved to the roster.` });
       } else if (drawnRegions.length > 0) {
         toast({ title: "Save Incomplete", description: "Some new people could not be saved due to image processing or upload errors.", variant: "destructive" });
@@ -980,6 +979,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           firstMetContext: mergedFirstMetContext || "",
           faceAppearances: mergedFaceAppearances,
           rosterIds: mergedRosterIds,
+          // knownAcquaintances and spouse are intentionally NOT merged here, relying on connections collection
           updatedAt: serverTimestamp()
         });
 
@@ -1187,7 +1187,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsProcessingState(true);
     try {
       const personDocRef = doc(db, "people", personId);
-      const updateData: Partial<Person> & { updatedAt: any } = {
+      const updateData: Partial<Omit<Person, 'id'| 'knownAcquaintances' | 'spouse'>> & { updatedAt: any } = {
         name: details.name,
         company: details.company || "",
         hobbies: details.hobbies || "",
@@ -1198,7 +1198,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updatedAt: serverTimestamp()
       };
       
-      await updateDoc(personDocRef, updateData);
+      await updateDoc(personDocRef, updateData as any); // Cast to any to bypass strict Person type checking if needed
       toast({ title: "Details Updated", description: `${details.name}'s information has been saved.` });
       await fetchAllUserPeople(); 
       return true;
@@ -1237,7 +1237,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       };
       const docRef = await addDoc(collection(db, "connections"), connectionData);
       toast({ title: "Connection Added", description: "The new connection has been saved." });
-      if (allUserPeople.length > 0) { // Refetch connections if people are loaded
+      if (allUserPeople.length > 0) { 
         const peopleIds = allUserPeople.map(p => p.id);
         await fetchAllConnectionsForAllUserPeople(peopleIds);
       }
@@ -1362,4 +1362,3 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-

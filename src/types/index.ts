@@ -40,8 +40,8 @@ export interface Person {
   birthday?: string; 
   firstMet?: string; 
   firstMetContext?: string;
-  knownAcquaintances?: string[]; 
-  spouse?: string | null; 
+  knownAcquaintances?: string[]; // DEPRECATED: Use connections collection
+  spouse?: string | null; // DEPRECATED: Use connections collection
 
   createdAt: Timestamp | any; // Firestore serverTimestamp for creation (any for FieldValue)
   updatedAt: Timestamp | any; // Firestore serverTimestamp for last update (any for FieldValue)
