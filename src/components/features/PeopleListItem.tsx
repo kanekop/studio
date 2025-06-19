@@ -1,21 +1,21 @@
-
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image'; // Keep as default NextImage import
-import type { Person, Connection } from '@/types'; 
+import type { Person, Connection } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react'; 
+import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { storage } from '@/lib/firebase'; 
+import { storage } from '@/lib/firebase';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge'; 
+import { Badge } from '@/components/ui/badge';
+import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
 
 interface PeopleListItemProps {
   person: Person;
-  allUserConnections: Connection[]; 
+  allUserConnections: Connection[];
   isMergeSelectionMode?: boolean;
   isSelectedForMerge?: boolean;
   onToggleMergeSelection?: (personId: string) => void;
@@ -23,7 +23,7 @@ interface PeopleListItemProps {
   isDeleteSelectionMode?: boolean;
   isSelectedForDelete?: boolean;
   onToggleDeleteSelection?: (personId: string) => void;
-  onEdit: () => void; 
+  onEdit: () => void;
   disableActions?: boolean;
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
 }
@@ -34,16 +34,16 @@ const PROFESSIONAL_CONNECTION_TYPES = ['manager', 'reports_to', 'subordinate', '
 const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
 
 
-const PeopleListItem: React.FC<PeopleListItemProps> = ({ 
-  person, 
+const PeopleListItem: React.FC<PeopleListItemProps> = ({
+  person,
   allUserConnections,
   isMergeSelectionMode = false,
   isSelectedForMerge = false,
-  onToggleMergeSelection = () => {},
+  onToggleMergeSelection = () => { },
   isDisabledForMergeSelection = false,
   isDeleteSelectionMode = false,
   isSelectedForDelete = false,
-  onToggleDeleteSelection = () => {},
+  onToggleDeleteSelection = () => { },
   onEdit,
   disableActions = false,
   onInitiateConnection,
@@ -129,18 +129,19 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const rosterCount = person.rosterIds?.length || 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) { 
-      return;
-    }
-    if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
+    handleCardClickUtil(e, {
+      onCardClick: () => {
+        if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
 
-    if (isDeleteSelectionMode && onToggleDeleteSelection) {
-      onToggleDeleteSelection(person.id);
-    } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
-      onToggleMergeSelection(person.id);
-    } else if (!isDeleteSelectionMode && !isMergeSelectionMode && !disableActions) {
-      onEdit();
-    }
+        if (isDeleteSelectionMode && onToggleDeleteSelection) {
+          onToggleDeleteSelection(person.id);
+        } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
+          onToggleMergeSelection(person.id);
+        } else if (!isDeleteSelectionMode && !isMergeSelectionMode && !disableActions) {
+          onEdit();
+        }
+      }
+    });
   };
 
   const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
@@ -148,10 +149,10 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     if (isDeleteSelectionMode && onToggleDeleteSelection) {
       onToggleDeleteSelection(person.id);
     } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
-        onToggleMergeSelection(person.id);
+      onToggleMergeSelection(person.id);
     }
   };
-  
+
   const showCheckbox = (isDeleteSelectionMode || isMergeSelectionMode) && !disableActions;
   const isChecked = isDeleteSelectionMode ? isSelectedForDelete : (isMergeSelectionMode ? isSelectedForMerge : false);
   const effectiveDisabledForMergeSelection = isMergeSelectionMode && isDisabledForMergeSelection;
@@ -164,11 +165,11 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     e.dataTransfer.setData("sourcePersonId", person.id);
     e.dataTransfer.effectAllowed = "move";
     setIsBeingDragged(true);
-    document.body.classList.add('dragging-person-card');
+    setDraggingState(true);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); 
+    e.preventDefault();
     if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
       e.dataTransfer.dropEffect = "none";
       return;
@@ -177,16 +178,16 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-     if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
+    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
     const sourcePersonIdDragged = e.dataTransfer.types.includes("sourcepersonid") ? e.dataTransfer.getData("sourcePersonId") : null;
     if (sourcePersonIdDragged && sourcePersonIdDragged !== person.id) {
-        setIsBeingDraggedOver(true);
+      setIsBeingDraggedOver(true);
     }
   };
-  
+
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-        setIsBeingDraggedOver(false);
+      setIsBeingDraggedOver(false);
     }
   };
 
@@ -202,16 +203,16 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       onInitiateConnection(sourcePersonId, targetPersonId);
     }
   };
-  
+
   const handleDragEnd = () => {
     setIsBeingDragged(false);
     setIsBeingDraggedOver(false);
-    document.body.classList.remove('dragging-person-card');
+    setDraggingState(false);
   };
 
 
   return (
-    <Card 
+    <Card
       draggable={!disableActions && !isDeleteSelectionMode && !isMergeSelectionMode}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
@@ -224,7 +225,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         ((isMergeSelectionMode || isDeleteSelectionMode) && !disableActions) && "cursor-pointer",
         (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-offset-2 ring-blue-500 border-blue-500",
         (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-offset-2 ring-destructive border-destructive",
-        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70", 
+        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70",
         (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed",
         isBeingDragged && "opacity-50 border-2 border-dashed border-primary scale-95 shadow-xl z-50",
         isBeingDraggedOver && !isBeingDragged && "ring-2 ring-offset-2 ring-green-500 border-green-500 scale-105 bg-green-500/10"
@@ -233,10 +234,10 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       role={showCheckbox ? "button" : "listitem"}
       aria-pressed={showCheckbox ? isChecked : undefined}
       tabIndex={0}
-      onKeyDown={(e) => { 
-        if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button, [role="checkbox"]')) ) {
-          e.preventDefault(); 
-          handleCardClick(e as any); 
+      onKeyDown={(e) => {
+        if ((e.key === ' ' || e.key === 'Enter') && !((e.target as HTMLElement).closest('button, [role="checkbox"]'))) {
+          e.preventDefault();
+          handleCardClick(e as any);
         }
       }}
     >
@@ -247,24 +248,24 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
             onCheckedChange={handleCheckboxChange}
             disabled={effectiveDisabledForMergeSelection && !isChecked}
             aria-label={`Select ${person.name}`}
-            className={cn("h-5 w-5", 
-                isDeleteSelectionMode && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
-                isMergeSelectionMode && isChecked && "border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+            className={cn("h-5 w-5",
+              isDeleteSelectionMode && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
+              isMergeSelectionMode && isChecked && "border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
             )}
           />
         </div>
       )}
       {!isMergeSelectionMode && !isDeleteSelectionMode && (
         <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-1 right-1 z-10 h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            disabled={disableActions}
-            aria-label={`Edit ${person.name}`}
-            title={`Edit ${person.name}`}
-          >
-            <Pencil className="h-4 w-4" />
+          variant="ghost"
+          size="icon"
+          className="absolute top-1 right-1 z-10 h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          disabled={disableActions}
+          aria-label={`Edit ${person.name}`}
+          title={`Edit ${person.name}`}
+        >
+          <Pencil className="h-4 w-4" />
         </Button>
       )}
 
@@ -280,7 +281,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
               sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover"
               data-ai-hint="person portrait"
-              draggable="false" 
+              draggable="false"
               priority={false} // Set to false or remove if not above the fold
             />
           </div>
@@ -293,7 +294,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         {person.company && (
           <p className="text-xs text-muted-foreground truncate" title={person.company}>{person.company}</p>
         )}
-         <div className="mt-2 flex flex-wrap gap-1.5 items-center text-xs text-muted-foreground">
+        <div className="mt-2 flex flex-wrap gap-1.5 items-center text-xs text-muted-foreground">
           {connectionCounts.general > 0 && (
             <span className="flex items-center p-1 bg-muted rounded-sm" title={`${connectionCounts.general} general connection(s)`}>
               <Users className="h-3.5 w-3.5 mr-1 text-sky-600" /> {connectionCounts.general}
@@ -327,4 +328,3 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
-    

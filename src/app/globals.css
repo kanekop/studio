@@ -8,32 +8,42 @@ body {
 
 @layer base {
   :root {
-    --background: 276 100% 95%; /* Very light purple (#F3E8FF) */
-    --foreground: 270 60% 15%; /* Darker purple for text on light background */
-    --card: 276 80% 98%; /* Slightly off-background for cards */
+    --background: 276 100% 95%;
+    /* Very light purple (#F3E8FF) */
+    --foreground: 270 60% 15%;
+    /* Darker purple for text on light background */
+    --card: 276 80% 98%;
+    /* Slightly off-background for cards */
     --card-foreground: 270 60% 15%;
     --popover: 276 80% 98%;
     --popover-foreground: 270 60% 15%;
-    --primary: 288 48% 50%; /* Light purple (#A855BA) */
-    --primary-foreground: 0 0% 100%; /* White for text on primary */
-    --secondary: 288 40% 65%; /* A lighter shade of primary for secondary elements */
+    --primary: 288 48% 50%;
+    /* Light purple (#A855BA) */
+    --primary-foreground: 0 0% 100%;
+    /* White for text on primary */
+    --secondary: 288 40% 65%;
+    /* A lighter shade of primary for secondary elements */
     --secondary-foreground: 0 0% 100%;
     --muted: 276 50% 90%;
     --muted-foreground: 270 40% 45%;
-    --accent: 170 73% 64%; /* Soft blue (#5EEAD4) */
-    --accent-foreground: 270 60% 15%; /* Dark text on accent */
+    --accent: 170 73% 64%;
+    /* Soft blue (#5EEAD4) */
+    --accent-foreground: 270 60% 15%;
+    /* Dark text on accent */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 288 30% 75%;
     --input: 288 40% 90%;
-    --ring: 288 48% 50%; /* Primary color for rings */
+    --ring: 288 48% 50%;
+    /* Primary color for rings */
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 276 80% 92%; /* Adjusted for theme */
+    --sidebar-background: 276 80% 92%;
+    /* Adjusted for theme */
     --sidebar-foreground: 270 60% 15%;
     --sidebar-primary: 288 48% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -42,6 +52,7 @@ body {
     --sidebar-border: 288 30% 70%;
     --sidebar-ring: 288 48% 50%;
   }
+
   .dark {
     /* Dark theme adjustments can be made here if needed,
        for now, focusing on the light theme as per proposal */
@@ -79,7 +90,63 @@ body {
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ドラッグ中のグローバルスタイル */
+body.is-dragging {
+  cursor: move !important;
+}
+
+body.is-dragging * {
+  cursor: move !important;
+}
+
+/* ダイアログのz-index管理 */
+[data-radix-popper-content-wrapper] {
+  z-index: 50;
+}
+
+/* メインダイアログ */
+[role="dialog"][data-state="open"] {
+  z-index: 50;
+}
+
+/* 子ダイアログ（削除確認など） */
+[role="alertdialog"][data-state="open"] {
+  z-index: 60;
+}
+
+/* ダイアログのオーバーレイ */
+[data-radix-dialog-overlay] {
+  z-index: 49;
+}
+
+[data-radix-alert-dialog-overlay] {
+  z-index: 59;
+}
+
+/* ドラッグ中のカードのz-index */
+.dragging-person-card {
+  z-index: 100;
+}
+
+/* ダイアログ内のポップオーバー（セレクトボックスなど） */
+[role="dialog"] [data-radix-popper-content-wrapper],
+[role="alertdialog"] [data-radix-popper-content-wrapper] {
+  z-index: 70;
+}
+
+/* トランジション中のダイアログの処理 */
+[data-state="closed"] {
+  pointer-events: none;
+}
+
+/* ダイアログ背景のクリック防止 */
+[data-radix-dismissable-layer] {
+  position: fixed;
+  inset: 0;
 }
