@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useEffect, useState } from 'react';
 import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
@@ -6,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2 } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
-import MergePeopleDialog from '@/components/features/MergePeopleDialog'; 
+import MergePeopleDialog from '@/components/features/MergePeopleDialog';
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
 import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog';
 import type { Person, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
@@ -34,15 +33,15 @@ import { useToast } from '@/hooks/use-toast';
 
 
 export default function ManagePeoplePage() {
-  const { 
-    allUserPeople, 
-    isLoadingAllUserPeople, 
+  const {
+    allUserPeople,
+    isLoadingAllUserPeople,
     currentUser,
     globallySelectedPeopleForMerge,
     toggleGlobalPersonSelectionForMerge,
     clearGlobalMergeSelection,
     performGlobalPeopleMerge,
-    isProcessing, 
+    isProcessing,
     fetchMergeSuggestions,
     mergeSuggestions,
     clearMergeSuggestions,
@@ -67,7 +66,7 @@ export default function ManagePeoplePage() {
 
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
   const [isEditPersonDialogOpen, setIsEditPersonDialogOpen] = useState(false);
-  const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false); 
+  const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false);
 
   const [isCreateConnectionDialogOpen, setIsCreateConnectionDialogOpen] = useState(false);
   const [sourcePersonForConnection, setSourcePersonForConnection] = useState<Person | null>(null);
@@ -79,9 +78,9 @@ export default function ManagePeoplePage() {
     if (!isMergeSelectionMode) {
       clearGlobalMergeSelection();
     }
-    if (isMergeSelectionMode && isDeleteSelectionMode) { 
-        setIsDeleteSelectionMode(false);
-        clearPeopleSelectionForDeletion();
+    if (isMergeSelectionMode && isDeleteSelectionMode) {
+      setIsDeleteSelectionMode(false);
+      clearPeopleSelectionForDeletion();
     }
   }, [isMergeSelectionMode, clearGlobalMergeSelection, isDeleteSelectionMode, clearPeopleSelectionForDeletion]);
 
@@ -89,22 +88,22 @@ export default function ManagePeoplePage() {
     if (!isDeleteSelectionMode) {
       clearPeopleSelectionForDeletion();
     }
-     if (isDeleteSelectionMode && isMergeSelectionMode) { 
-        setIsMergeSelectionMode(false);
-        clearGlobalMergeSelection();
+    if (isDeleteSelectionMode && isMergeSelectionMode) {
+      setIsMergeSelectionMode(false);
+      clearGlobalMergeSelection();
     }
   }, [isDeleteSelectionMode, clearPeopleSelectionForDeletion, isMergeSelectionMode, clearGlobalMergeSelection]);
 
   const handleToggleMergeMode = () => {
     setIsMergeSelectionMode(!isMergeSelectionMode);
-    if (!isMergeSelectionMode) setIsDeleteSelectionMode(false); 
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false); 
+    if (!isMergeSelectionMode) setIsDeleteSelectionMode(false);
+    setPersonToEdit(null); setIsEditPersonDialogOpen(false);
   };
 
   const handleToggleDeleteMode = () => {
     setIsDeleteSelectionMode(!isDeleteSelectionMode);
-    if (!isDeleteSelectionMode) setIsMergeSelectionMode(false); 
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false); 
+    if (!isDeleteSelectionMode) setIsMergeSelectionMode(false);
+    setPersonToEdit(null); setIsEditPersonDialogOpen(false);
   };
 
   const handleInitiateMergeFromSelection = () => {
@@ -114,39 +113,41 @@ export default function ManagePeoplePage() {
   };
 
   const handleInitiateMergeFromSuggestion = (suggestion: SuggestedMergePair) => {
-    clearGlobalMergeSelection(); 
+    clearGlobalMergeSelection();
     toggleGlobalPersonSelectionForMerge(suggestion.person1Id);
     toggleGlobalPersonSelectionForMerge(suggestion.person2Id);
-    setIsMergeSelectionMode(true); 
+    setIsMergeSelectionMode(true);
     setIsDeleteSelectionMode(false);
     setPersonToEdit(null); setIsEditPersonDialogOpen(false);
     setTimeout(() => {
-        setIsMergeDialogOpen(true);
+      setIsMergeDialogOpen(true);
     }, 0);
   };
-  
+
   const handleConfirmMergeFromDialog = async (
-    targetPersonId: string, 
-    sourcePersonId: string, 
+    targetPersonId: string,
+    sourcePersonId: string,
     fieldChoices: FieldMergeChoices,
-    chosenPrimaryPhotoPath: string | null 
+    chosenPrimaryPhotoPath: string | null
   ) => {
     await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices, chosenPrimaryPhotoPath);
     setIsMergeDialogOpen(false);
-    setIsMergeSelectionMode(false); 
+    setIsMergeSelectionMode(false);
   };
 
   const handleConfirmDelete = async () => {
     await deleteSelectedPeople();
-    setIsDeleteSelectionMode(false); 
+    setIsDeleteSelectionMode(false);
     setIsDeleteDialogOpen(false);
   };
 
   const handleOpenEditPersonDialog = (person: Person) => {
+    console.log('handleOpenEditPersonDialog called with person:', person);
     setIsMergeSelectionMode(false);
     setIsDeleteSelectionMode(false);
     setPersonToEdit(person);
     setIsEditPersonDialogOpen(true);
+    console.log('isEditPersonDialogOpen set to true');
   };
 
   const handleSavePersonDetails = async (personId: string, data: EditPersonFormData) => {
@@ -161,8 +162,8 @@ export default function ManagePeoplePage() {
 
   const handleInitiateConnection = (sourcePersonId: string, targetPersonId: string) => {
     if (sourcePersonId === targetPersonId) {
-        toast({title: "Cannot connect person to themself", variant: "default"});
-        return;
+      toast({ title: "Cannot connect person to themself", variant: "default" });
+      return;
     }
     const source = allUserPeople.find(p => p.id === sourcePersonId);
     const target = allUserPeople.find(p => p.id === targetPersonId);
@@ -172,18 +173,18 @@ export default function ManagePeoplePage() {
       setTargetPersonForConnection(target);
       setIsCreateConnectionDialogOpen(true);
     } else {
-      toast({title: "Error", description: "Could not find persons to connect.", variant: "destructive"});
+      toast({ title: "Error", description: "Could not find persons to connect.", variant: "destructive" });
     }
   };
 
   const handleSaveConnection = async (data: ProcessedConnectionFormData) => {
     if (!sourcePersonForConnection || !targetPersonForConnection) return;
     setIsSavingConnection(true);
-    
+
     const connectionId = await addConnection(
       sourcePersonForConnection.id,
       targetPersonForConnection.id,
-      data.types, 
+      data.types,
       data.reasons,
       data.strength,
       data.notes
@@ -195,7 +196,7 @@ export default function ManagePeoplePage() {
       setTargetPersonForConnection(null);
     }
   };
-  
+
   const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections || isLoadingAllUserPeople;
@@ -214,7 +215,7 @@ export default function ManagePeoplePage() {
         <div className="flex flex-wrap gap-2 items-center">
           <Select value={peopleSortOption} onValueChange={(value) => setPeopleSortOption(value as PeopleSortOptionValue)} disabled={generalActionDisabled}>
             <SelectTrigger className="w-auto sm:w-[200px] text-sm">
-              <ListFilter className="mr-2 h-4 w-4"/>
+              <ListFilter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Sort by..." />
             </SelectTrigger>
             <SelectContent>
@@ -224,10 +225,10 @@ export default function ManagePeoplePage() {
               <SelectItem value="name_desc">Name (Z-A)</SelectItem>
             </SelectContent>
           </Select>
-         
-          <Button 
-            variant="outline" 
-            onClick={fetchMergeSuggestions} 
+
+          <Button
+            variant="outline"
+            onClick={fetchMergeSuggestions}
             disabled={generalActionDisabled || isLoadingMergeSuggestions || allUserPeople.length < 2 || isDeleteSelectionMode}
             title={isDeleteSelectionMode ? "Finish deletion first" : "Find merge suggestions"}
           >
@@ -245,9 +246,9 @@ export default function ManagePeoplePage() {
               </>
             )}
           </Button>
-          
-          <Button 
-            variant={isMergeSelectionMode ? "default" : "outline"} 
+
+          <Button
+            variant={isMergeSelectionMode ? "default" : "outline"}
             onClick={handleToggleMergeMode}
             disabled={generalActionDisabled || allUserPeople.length < 2 || isDeleteSelectionMode}
             className={isMergeSelectionMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
@@ -264,11 +265,11 @@ export default function ManagePeoplePage() {
             )}
           </Button>
 
-          <Button 
-            variant={isDeleteSelectionMode ? "default" : "outline"} 
+          <Button
+            variant={isDeleteSelectionMode ? "default" : "outline"}
             onClick={handleToggleDeleteMode}
             disabled={generalActionDisabled || allUserPeople.length < 1 || isMergeSelectionMode}
-             className={isDeleteSelectionMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
+            className={isDeleteSelectionMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
             title={isMergeSelectionMode ? "Finish merging first" : (isDeleteSelectionMode ? "Cancel Deletion" : "Select to Delete")}
           >
             {isDeleteSelectionMode ? (
@@ -288,11 +289,11 @@ export default function ManagePeoplePage() {
       {isMergeSelectionMode && (
         <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md text-center">
           <p className="text-sm text-blue-700 dark:text-blue-300">
-            Merge Mode: Select exactly two people from the list to merge. 
+            Merge Mode: Select exactly two people from the list to merge.
             The first selected will be the primary.
           </p>
           {globallySelectedPeopleForMerge.length > 0 && (
-             <Button 
+            <Button
               onClick={handleInitiateMergeFromSelection}
               disabled={!canManuallyMerge}
               size="sm"
@@ -310,9 +311,9 @@ export default function ManagePeoplePage() {
             Delete Mode: Select one or more people from the list to delete.
           </p>
           {selectedPeopleIdsForDeletion.length > 0 && (
-             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
-                <Button 
+                <Button
                   variant="destructive"
                   size="sm"
                   className="mt-2"
@@ -325,7 +326,7 @@ export default function ManagePeoplePage() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete {selectedPeopleIdsForDeletion.length} selected person(s)? 
+                    Are you sure you want to delete {selectedPeopleIdsForDeletion.length} selected person(s)?
                     This will remove them from all rosters and delete their associated face images. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -340,8 +341,8 @@ export default function ManagePeoplePage() {
           )}
         </div>
       )}
-      
-      {!isMergeSelectionMode && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
+
+      {!isMergeSelectionMode && !isDeleteSelectionMode && (
         <div className="mb-4 p-3 bg-green-500/5 border border-green-500/20 rounded-md text-center">
           <p className="text-sm text-green-700 dark:text-green-300 flex items-center justify-center">
             <Link2 className="mr-2 h-4 w-4" />
@@ -350,7 +351,7 @@ export default function ManagePeoplePage() {
         </div>
       )}
 
-      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && !isEditPersonDialogOpen && (
+      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && (
         <Card className="mb-6 shadow-md">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -381,13 +382,13 @@ export default function ManagePeoplePage() {
                       <div>
                         <p className="font-medium text-sm">
                           Merge <strong className="text-accent">{suggestion.person1Name}</strong> (ID: ...{suggestion.person1Id.slice(-4)})
-                          <br/>with <strong className="text-accent">{suggestion.person2Name}</strong> (ID: ...{suggestion.person2Id.slice(-4)})?
+                          <br />with <strong className="text-accent">{suggestion.person2Name}</strong> (ID: ...{suggestion.person2Id.slice(-4)})?
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">Reason: {suggestion.reason}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Confidence: <span className="font-medium">{suggestion.confidence || 'N/A'}</span></p>
                       </div>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => handleInitiateMergeFromSuggestion(suggestion)}
                         disabled={generalActionDisabled || isDeleteSelectionMode}
@@ -403,25 +404,25 @@ export default function ManagePeoplePage() {
           </CardContent>
         </Card>
       )}
-      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && !isEditPersonDialogOpen &&(
-         <div className="mb-6 p-4 text-center text-muted-foreground">
-            <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Looking for merge suggestions...
+      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && (
+        <div className="mb-6 p-4 text-center text-muted-foreground">
+          <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Looking for merge suggestions...
         </div>
       )}
-       {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 1 && !isDeleteSelectionMode && !isEditPersonDialogOpen &&(
-         <Card className="mb-6 shadow-sm border-dashed">
-            <CardContent className="p-6 text-center">
-                <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3"/>
-                <p className="text-sm text-muted-foreground">
-                    No merge suggestions found by the AI. <br/>
-                    You can still select people manually to merge them.
-                </p>
-            </CardContent>
-         </Card>
+      {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 1 && !isDeleteSelectionMode && (
+        <Card className="mb-6 shadow-sm border-dashed">
+          <CardContent className="p-6 text-center">
+            <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">
+              No merge suggestions found by the AI. <br />
+              You can still select people manually to merge them.
+            </p>
+          </CardContent>
+        </Card>
       )}
 
 
@@ -443,8 +444,8 @@ export default function ManagePeoplePage() {
           <p className="text-sm">Upload images and create rosters to add people to your list.</p>
         </div>
       ) : (
-        <PeopleList 
-          people={allUserPeople} 
+        <PeopleList
+          people={allUserPeople}
           allUserConnections={allUserConnections}
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
@@ -452,7 +453,7 @@ export default function ManagePeoplePage() {
           isDeleteSelectionMode={isDeleteSelectionMode}
           selectedPeopleForDelete={selectedPeopleIdsForDeletion}
           onToggleDeleteSelection={togglePersonSelectionForDeletion}
-          onEditPerson={handleOpenEditPersonDialog} 
+          onEditPerson={handleOpenEditPersonDialog}
           generalActionDisabled={generalActionDisabled}
           onInitiateConnection={handleInitiateConnection}
         />
@@ -468,19 +469,17 @@ export default function ManagePeoplePage() {
         />
       )}
 
-      {isEditPersonDialogOpen && personToEdit && (
-        <EditPersonDialog
-          personToEdit={personToEdit}
-          allUserPeople={allUserPeople}
-          allUserConnections={allUserConnections}
-          isLoadingConnections={isLoadingAllUserConnections}
-          isLoadingPeople={isLoadingAllUserPeople}
-          isOpen={isEditPersonDialogOpen}
-          onOpenChange={setIsEditPersonDialogOpen}
-          onSave={handleSavePersonDetails}
-          isProcessing={isSavingPersonDetails}
-        />
-      )}
+      <EditPersonDialog
+        personToEdit={personToEdit}
+        allUserPeople={allUserPeople}
+        allUserConnections={allUserConnections}
+        isLoadingConnections={isLoadingAllUserConnections}
+        isLoadingPeople={isLoadingAllUserPeople}
+        isOpen={isEditPersonDialogOpen}
+        onOpenChange={setIsEditPersonDialogOpen}
+        onSave={handleSavePersonDetails}
+        isProcessing={isSavingPersonDetails}
+      />
 
       {sourcePersonForConnection && targetPersonForConnection && (
         <CreateConnectionDialog
@@ -497,4 +496,3 @@ export default function ManagePeoplePage() {
 }
 
 
-    

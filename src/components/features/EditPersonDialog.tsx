@@ -282,8 +282,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       .filter(item => item.otherPerson);
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
-  if (!personToEdit) return null;
-
   const overallIsProcessing = isSaveProcessing || isContextProcessing || isDeletingConnection || isAttemptingConnectionSave;
 
   const renderFieldChoice = (
@@ -334,7 +332,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
           <DialogHeader className="shrink-0">
             <DialogTitle className="font-headline text-xl flex items-center">
               <User className="mr-2 h-6 w-6 text-primary" />
-              Edit Details for {personToEdit.name}
+              Edit Details for {personToEdit?.name || ''}
             </DialogTitle>
           </DialogHeader>
 
@@ -369,7 +367,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                             field.onChange(value);
                             setValue('primaryFaceAppearancePath', value, { shouldDirty: true });
                           }}
-                          value={field.value || personToEdit.faceAppearances?.[0]?.faceImageStoragePath || ""}
+                          value={field.value || personToEdit?.faceAppearances?.[0]?.faceImageStoragePath || ""}
                           className="space-y-2"
                           disabled={overallIsProcessing}
                         >
@@ -505,8 +503,8 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                 <p className="flex items-center">
                                   <UsersIcon className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
                                   Relationship: {direction === 'outgoing'
-                                    ? `${personToEdit.name} → ${otherPerson?.name || 'them'}`
-                                    : `${otherPerson?.name || 'They'} → ${personToEdit.name}`}
+                                    ? `${personToEdit?.name || 'Person'} → ${otherPerson?.name || 'them'}`
+                                    : `${otherPerson?.name || 'They'} → ${personToEdit?.name || 'Person'}`}
                                   : <strong className="ml-1 text-foreground truncate max-w-[150px]" title={connection.types.join(', ')}>
                                     {connection.types.join(', ') || 'N/A'}
                                   </strong>
@@ -599,8 +597,8 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
             setIsEditConnectionDialogOpen(open);
             if (!open) setConnectionToEdit(null);
           }}
-          sourcePerson={allUserPeople.find(p => p.id === connectionToEdit.fromPersonId) || personToEdit}
-          targetPerson={allUserPeople.find(p => p.id === connectionToEdit.toPersonId) || personToEdit}
+          sourcePerson={allUserPeople.find(p => p.id === connectionToEdit.fromPersonId) || personToEdit || allUserPeople[0]}
+          targetPerson={allUserPeople.find(p => p.id === connectionToEdit.toPersonId) || personToEdit || allUserPeople[0]}
           allUserPeople={allUserPeople}
           editingConnection={connectionToEdit}
           onSave={handleSaveConnection}
