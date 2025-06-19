@@ -218,7 +218,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoadingAllUserConnections(false);
     }
-  }, [currentUser, db, toast]);
+  }, [currentUser, toast]);
 
 
   const fetchAllUserPeople = useCallback(async () => {
@@ -278,7 +278,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsLoadingAllUserPeople(false);
     }
-  }, [currentUser, db, peopleSortOption, fetchAllConnectionsForAllUserPeople]);
+  }, [currentUser, peopleSortOption, fetchAllConnectionsForAllUserPeople, toast]);
 
 
   useEffect(() => {
@@ -544,7 +544,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           faceImageStoragePath: faceInfo.faceImageStoragePath,
           originalRegion: faceInfo.originalRegion,
         };
-        const newPersonDataForDb: Omit<Person, 'id'> = { // Omit id, knownAcquaintances, spouse
+        const newPersonDataForDb: Omit<Person, 'id' | 'knownAcquaintances' | 'spouse'> = {
           name: faceInfo.defaultName,
           aiName: faceInfo.defaultName,
           notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
@@ -920,7 +920,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     targetPersonId: string, 
     sourcePersonId: string, 
     fieldChoices: FieldMergeChoices,
-    chosenPrimaryPhotoPath: string | null
+    chosenPrimaryPhotoPath: string | null 
   ) => {
     if (!db || !currentUser) {
       toast({ title: "Merge Error", description: "User not authenticated or database unavailable.", variant: "destructive" });
@@ -975,7 +975,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const mergedFaceAppearances = Array.from(mergedFaceAppearancesSet.values());
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
 
-        // Use the chosenPrimaryPhotoPath from the dialog. Fallback if it's somehow null.
         let finalPrimaryFacePath = chosenPrimaryPhotoPath;
         if (!finalPrimaryFacePath && mergedFaceAppearances.length > 0) {
            finalPrimaryFacePath = mergedFaceAppearances[0].faceImageStoragePath;
@@ -1413,7 +1412,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
-
-    
-
     
