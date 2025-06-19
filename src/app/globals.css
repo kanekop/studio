@@ -51,6 +51,11 @@ body {
     --sidebar-accent-foreground: 270 60% 15%;
     --sidebar-border: 288 30% 70%;
     --sidebar-ring: 288 48% 50%;
+    --z-dropdown: 100;
+    --z-overlay: 200;
+    --z-modal: 300;
+    --z-popover: 400;
+    --z-tooltip: 500;
   }
 
   .dark {
@@ -83,6 +88,11 @@ body {
     --sidebar-accent-foreground: 270 60% 10%;
     --sidebar-border: 270 15% 20%;
     --sidebar-ring: 288 48% 60%;
+    --z-dropdown: 100;
+    --z-overlay: 200;
+    --z-modal: 300;
+    --z-popover: 400;
+    --z-tooltip: 500;
   }
 }
 
@@ -107,37 +117,37 @@ body.is-dragging * {
 
 /* ダイアログのz-index管理 */
 [data-radix-popper-content-wrapper] {
-  z-index: 50;
+  z-index: var(--z-dropdown, 100) !important;
 }
 
 /* メインダイアログ */
 [role="dialog"][data-state="open"] {
-  z-index: 50;
+  z-index: var(--z-modal, 300);
 }
 
 /* 子ダイアログ（削除確認など） */
 [role="alertdialog"][data-state="open"] {
-  z-index: 60;
+  z-index: calc(var(--z-modal, 300) + 10);
 }
 
 /* ダイアログのオーバーレイ */
 [data-radix-dialog-overlay] {
-  z-index: 49;
+  z-index: calc(var(--z-overlay, 200) - 1);
 }
 
 [data-radix-alert-dialog-overlay] {
-  z-index: 59;
+  z-index: calc(var(--z-modal, 300) + 9);
 }
 
 /* ドラッグ中のカードのz-index */
 .dragging-person-card {
-  z-index: 100;
+  z-index: 150;
 }
 
 /* ダイアログ内のポップオーバー（セレクトボックスなど） */
 [role="dialog"] [data-radix-popper-content-wrapper],
 [role="alertdialog"] [data-radix-popper-content-wrapper] {
-  z-index: 70;
+  z-index: var(--z-popover, 400) !important;
 }
 
 /* トランジション中のダイアログの処理 */
@@ -149,4 +159,19 @@ body.is-dragging * {
 [data-radix-dismissable-layer] {
   position: fixed;
   inset: 0;
+}
+
+/* ヘッダーのz-index */
+header {
+  z-index: 40;
+}
+
+/* Selectドロップダウンの特別な処理 */
+[data-radix-select-content] {
+  z-index: var(--z-dropdown, 100) !important;
+}
+
+/* Select Triggerがアクティブな時のz-index */
+[data-radix-select-trigger][data-state="open"] {
+  z-index: calc(var(--z-dropdown, 100) - 1);
 }
