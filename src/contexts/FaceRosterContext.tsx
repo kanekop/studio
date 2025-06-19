@@ -61,7 +61,8 @@ interface FaceRosterContextType {
   performGlobalPeopleMerge: (
     targetPersonId: string, 
     sourcePersonId: string, 
-    fieldChoices: FieldMergeChoices
+    fieldChoices: FieldMergeChoices,
+    chosenPrimaryPhotoPath: string | null 
   ) => Promise<void>;
   fetchMergeSuggestions: () => Promise<void>;
   clearMergeSuggestions: () => void;
@@ -543,12 +544,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           faceImageStoragePath: faceInfo.faceImageStoragePath,
           originalRegion: faceInfo.originalRegion,
         };
-        const newPersonDataForDb: Omit<Person, 'id' | 'knownAcquaintances' | 'spouse'> = {
+        const newPersonDataForDb: Omit<Person, 'id'> = { // Omit id, knownAcquaintances, spouse
           name: faceInfo.defaultName,
           aiName: faceInfo.defaultName,
           notes: '', company: '', hobbies: '', birthday: '', firstMet: '', firstMetContext: '',
           faceAppearances: [newAppearance],
-          primaryFaceAppearancePath: newAppearance.faceImageStoragePath, // Set first appearance as primary by default
+          primaryFaceAppearancePath: newAppearance.faceImageStoragePath, 
           addedBy: currentUser!.uid,
           rosterIds: [currentRosterDocId!],
           createdAt: serverTimestamp(),
@@ -852,7 +853,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 batch.update(personRef, {
                   faceAppearances: remainingAppearances,
                   rosterIds: remainingRosterIds,
-                  // If primary was the one deleted, clear it or pick a new default
                   primaryFaceAppearancePath: (personData.primaryFaceAppearancePath === appearanceToDelete?.faceImageStoragePath) 
                                               ? (remainingAppearances?.[0]?.faceImageStoragePath || null) 
                                               : personData.primaryFaceAppearancePath,
@@ -919,16 +919,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const performGlobalPeopleMerge = useCallback(async (
     targetPersonId: string, 
     sourcePersonId: string, 
-    fieldChoices: FieldMergeChoices
+    fieldChoices: FieldMergeChoices,
+    chosenPrimaryPhotoPath: string | null
   ) => {
     if (!db || !currentUser) {
       toast({ title: "Merge Error", description: "User not authenticated or database unavailable.", variant: "destructive" });
       return;
     }
     setIsProcessingState(true);
-
-    let targetData: Person | null = null; 
-    let sourceDataForPhoto: Person | null = null;
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -941,9 +939,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           throw new Error("One or both selected people could not be found for merging.");
         }
 
-        targetData = targetDoc.data() as Person; 
+        const targetData = targetDoc.data() as Person; 
         const sourceData = sourceDoc.data() as Person;
-        sourceDataForPhoto = sourceData; // Keep for photo logic
         
         const getValue = (fieldKey: keyof FieldMergeChoices, tVal: string | undefined, sVal: string | undefined): string | undefined => {
             const choice = fieldChoices[fieldKey];
@@ -978,11 +975,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const mergedFaceAppearances = Array.from(mergedFaceAppearancesSet.values());
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
 
-        let finalPrimaryFacePath = fieldChoices.name === 'person1' ? targetData.primaryFaceAppearancePath : sourceData.primaryFaceAppearancePath;
+        // Use the chosenPrimaryPhotoPath from the dialog. Fallback if it's somehow null.
+        let finalPrimaryFacePath = chosenPrimaryPhotoPath;
         if (!finalPrimaryFacePath && mergedFaceAppearances.length > 0) {
            finalPrimaryFacePath = mergedFaceAppearances[0].faceImageStoragePath;
         }
-
 
         transaction.update(targetPersonRef, {
           name: mergedName,
@@ -1001,7 +998,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         transaction.delete(sourcePersonRef);
       });
 
-      // Handle connections after the main person merge transaction
       const connectionsBatch = writeBatch(db);
       const fromConnectionsQuery = query(collection(db, "connections"), where("fromPersonId", "==", sourcePersonId));
       const toConnectionsQuery = query(collection(db, "connections"), where("toPersonId", "==", sourcePersonId));
@@ -1013,7 +1009,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       fromConnectionsSnapshot.forEach(connDoc => {
         const connData = connDoc.data();
-        if (connData.toPersonId === targetPersonId) { // Connection was between source and target
+        if (connData.toPersonId === targetPersonId) { 
           connectionsBatch.delete(connDoc.ref);
         } else {
           connectionsBatch.update(connDoc.ref, { fromPersonId: targetPersonId, updatedAt: serverTimestamp() });
@@ -1049,8 +1045,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetNameAfterMerge = (targetData && (fieldChoices.name === 'person1' ? targetData.name : sourceDataForPhoto?.name)) || (targetData?.name || "Merged Person");
-
+      const targetPersonFromAll = allUserPeople.find(p => p.id === targetPersonId);
+      const targetNameAfterMerge = (fieldChoices.name === 'person1' ? targetPersonFromAll?.name : sourceName) || (targetPersonFromAll?.name || "Merged Person");
 
       toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}. Connections updated.` });
       
@@ -1417,5 +1413,7 @@ export const useFaceRoster = (): FaceRosterContextType => {
   }
   return context;
 };
+
+    
 
     

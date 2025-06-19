@@ -1,6 +1,7 @@
+
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Person, FieldMergeChoices } from '@/types';
+import type { Person, FieldMergeChoices, FaceAppearance } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +10,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine, Users } from 'lucide-react';
+import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine, Users, Image as ImageIcon, CheckCircle2 } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import NextImage from 'next/image';
+import { Skeleton } from '@/components/ui/skeleton';
+import { storage } from '@/lib/firebase';
+import { ref as storageRef, getDownloadURL } from 'firebase/storage';
+import { cn } from '@/lib/utils';
 
 interface MergePeopleDialogProps {
   isOpen: boolean;
@@ -19,11 +26,18 @@ interface MergePeopleDialogProps {
   onConfirmMerge: (
     targetPersonId: string,
     sourcePersonId: string,
-    fieldChoices: FieldMergeChoices
+    fieldChoices: FieldMergeChoices,
+    chosenPrimaryPhotoPath: string | null 
   ) => void;
 }
 
 type FieldChoiceKey = keyof FieldMergeChoices;
+
+interface AppearanceWithUrl extends FaceAppearance {
+  displayUrl?: string;
+  isLoadingUrl?: boolean;
+  originalPersonId: string; // To know if it came from person1 or person2
+}
 
 const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
   isOpen,
@@ -40,25 +54,86 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
     firstMet: 'person1',
     firstMetContext: 'person1',
   });
+  const [selectedPrimaryPhotoPath, setSelectedPrimaryPhotoPath] = useState<string | null>(null);
+  const [combinedAppearancesWithUrls, setCombinedAppearancesWithUrls] = useState<AppearanceWithUrl[]>([]);
+  const [isLoadingCombinedImages, setIsLoadingCombinedImages] = useState(false);
+
+  const uniqueCombinedAppearances = useMemo(() => {
+    if (!person1 || !person2) return [];
+    const allApps: AppearanceWithUrl[] = [];
+    const seenPaths = new Set<string>();
+
+    (person1.faceAppearances || []).forEach(app => {
+      if (app.faceImageStoragePath && !seenPaths.has(app.faceImageStoragePath)) {
+        allApps.push({ ...app, originalPersonId: person1.id, isLoadingUrl: true });
+        seenPaths.add(app.faceImageStoragePath);
+      }
+    });
+    (person2.faceAppearances || []).forEach(app => {
+      if (app.faceImageStoragePath && !seenPaths.has(app.faceImageStoragePath)) {
+        allApps.push({ ...app, originalPersonId: person2.id, isLoadingUrl: true });
+        seenPaths.add(app.faceImageStoragePath);
+      }
+    });
+    return allApps;
+  }, [person1, person2]);
+
 
   useEffect(() => {
     if (isOpen && person1 && person2) {
+      // Initialize field choices
       const initialChoices: Partial<FieldMergeChoices> = {};
       (Object.keys(fieldChoices) as FieldChoiceKey[]).forEach(key => {
         const p1Value = person1[key as keyof Person];
         const p2Value = person2[key as keyof Person];
-
-        if (p1Value && typeof p1Value === 'string' && p1Value.trim() !== '') {
-          initialChoices[key] = 'person1';
-        } else if (p2Value && typeof p2Value === 'string' && p2Value.trim() !== '') {
-          initialChoices[key] = 'person2';
-        } else {
-          initialChoices[key] = 'person1'; 
-        }
+        if (p1Value && typeof p1Value === 'string' && p1Value.trim() !== '') initialChoices[key] = 'person1';
+        else if (p2Value && typeof p2Value === 'string' && p2Value.trim() !== '') initialChoices[key] = 'person2';
+        else initialChoices[key] = 'person1';
       });
       setFieldChoices(initialChoices as FieldMergeChoices);
+
+      // Initialize primary photo path
+      let initialPhotoPath: string | null = null;
+      if (person1.primaryFaceAppearancePath) initialPhotoPath = person1.primaryFaceAppearancePath;
+      else if (person2.primaryFaceAppearancePath) initialPhotoPath = person2.primaryFaceAppearancePath;
+      else if (person1.faceAppearances?.[0]?.faceImageStoragePath) initialPhotoPath = person1.faceAppearances[0].faceImageStoragePath;
+      else if (person2.faceAppearances?.[0]?.faceImageStoragePath) initialPhotoPath = person2.faceAppearances[0].faceImageStoragePath;
+      setSelectedPrimaryPhotoPath(initialPhotoPath);
+      
+      // Fetch display URLs for combined face appearances
+      const fetchAppearanceUrls = async () => {
+        if (uniqueCombinedAppearances.length > 0) {
+          setIsLoadingCombinedImages(true);
+          setCombinedAppearancesWithUrls(uniqueCombinedAppearances); // Set with isLoadingUrl = true
+
+          const updatedAppearances = await Promise.all(
+            uniqueCombinedAppearances.map(async (appearance) => {
+              if (appearance.faceImageStoragePath && storage) {
+                try {
+                  const url = await getDownloadURL(storageRef(storage, appearance.faceImageStoragePath));
+                  return { ...appearance, displayUrl: url, isLoadingUrl: false };
+                } catch (error) {
+                  console.error(`Error fetching image URL for ${appearance.faceImageStoragePath}:`, error);
+                  return { ...appearance, displayUrl: "https://placehold.co/100x100.png?text=Error", isLoadingUrl: false };
+                }
+              }
+              return { ...appearance, displayUrl: "https://placehold.co/100x100.png?text=No+Path", isLoadingUrl: false };
+            })
+          );
+          setCombinedAppearancesWithUrls(updatedAppearances);
+          setIsLoadingCombinedImages(false);
+        } else {
+          setCombinedAppearancesWithUrls([]);
+          setIsLoadingCombinedImages(false);
+        }
+      };
+      fetchAppearanceUrls();
+
+    } else if (!isOpen) {
+      setCombinedAppearancesWithUrls([]); // Clear when dialog closes
     }
-  }, [isOpen, person1, person2]);
+  }, [isOpen, person1, person2, uniqueCombinedAppearances]);
+
 
   const handleChoiceChange = (field: FieldChoiceKey, value: 'person1' | 'person2') => {
     setFieldChoices(prev => ({ ...prev, [field]: value }));
@@ -66,7 +141,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 
   const handleSubmit = () => {
     if (person1 && person2) {
-      onConfirmMerge(person1.id, person2.id, fieldChoices);
+      onConfirmMerge(person1.id, person2.id, fieldChoices, selectedPrimaryPhotoPath);
     }
     onOpenChange(false); 
   };
@@ -142,7 +217,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
     const otherPersonsNotes = fieldChoices.name === 'person1' ? p2Notes : p1Notes;
 
     if (otherPersonsNotes) {
-        notes += `${notes ? "\n\n" : ""}Merged from ${otherNameForNotes} (ID: ${otherIdForNotes}):\n${otherPersonsNotes}`;
+        notes += `${notes ? "\n\n" : ""}Merged from ${otherNameForNotes} (ID: ${otherPersonsId}):\n${otherPersonsNotes}`;
     }
     return notes || "No notes will be set.";
   }, [person1, person2, fieldChoices.name]);
@@ -163,8 +238,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
           </p>
         </div>
         
-        {/* スクロール領域 */}
-        <div className="flex-1 overflow-y-auto px-1">
+        <ScrollArea className="flex-1 overflow-y-auto px-1">
           <div className="space-y-4 divide-y divide-border pr-2">
             {renderFieldChoice('name', 'Name', User)}
             {renderFieldChoice('company', 'Company', Building)}
@@ -194,10 +268,68 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
               </div>
             </div>
             
+            <div className="py-3 space-y-2">
+                <Label className="text-base font-semibold flex items-center">
+                    <ImageIcon className="mr-2 h-5 w-5 text-primary" />
+                    Main Display Photo for Merged Profile
+                </Label>
+                {isLoadingCombinedImages && combinedAppearancesWithUrls.length > 0 ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                        {[...Array(Math.min(combinedAppearancesWithUrls.length, 5))].map((_, i) => <Skeleton key={`skel-${i}`} className="h-24 w-full rounded-md" />)}
+                    </div>
+                ) : combinedAppearancesWithUrls.length > 0 ? (
+                    <RadioGroup
+                        value={selectedPrimaryPhotoPath || ""}
+                        onValueChange={(value) => setSelectedPrimaryPhotoPath(value)}
+                        className="space-y-2"
+                    >
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                            {combinedAppearancesWithUrls.map((appearance) => (
+                                <Label
+                                    key={appearance.faceImageStoragePath}
+                                    htmlFor={appearance.faceImageStoragePath + "-merge"}
+                                    className={cn(
+                                        "cursor-pointer rounded-md border-2 border-transparent transition-all hover:opacity-80 relative aspect-square flex items-center justify-center",
+                                        selectedPrimaryPhotoPath === appearance.faceImageStoragePath && "border-primary ring-2 ring-primary"
+                                    )}
+                                >
+                                    <RadioGroupItem
+                                        value={appearance.faceImageStoragePath}
+                                        id={appearance.faceImageStoragePath + "-merge"}
+                                        className="sr-only"
+                                    />
+                                    {appearance.isLoadingUrl ? (
+                                        <Skeleton className="h-full w-full rounded-md" />
+                                    ) : (
+                                        <NextImage
+                                            src={appearance.displayUrl || "https://placehold.co/100x100.png?text=Loading"}
+                                            alt={`Face from Roster ${appearance.rosterId.substring(0,6)} of ${appearance.originalPersonId === person1.id ? person1.name : person2.name}`}
+                                            layout="fill"
+                                            objectFit="cover"
+                                            className="rounded-md"
+                                        />
+                                    )}
+                                    {selectedPrimaryPhotoPath === appearance.faceImageStoragePath && (
+                                        <div className="absolute inset-0 bg-primary/30 flex items-center justify-center rounded-md">
+                                            <CheckCircle2 className="h-6 w-6 text-primary-foreground" />
+                                        </div>
+                                    )}
+                                    <span className="absolute bottom-0.5 left-0.5 right-0.5 bg-black/60 text-white text-[9px] px-1 py-0.5 rounded-sm text-center truncate">
+                                       Orig: {appearance.originalPersonId === person1.id ? person1.name.split(" ")[0] : person2.name.split(" ")[0]}
+                                    </span>
+                                </Label>
+                            ))}
+                        </div>
+                    </RadioGroup>
+                ) : (
+                    <p className="text-sm text-muted-foreground text-center py-3">No face images available from either person.</p>
+                )}
+            </div>
+
             <div className="py-3 space-y-1">
                 <Label className="text-base font-semibold flex items-center">
                     <Users className="mr-2 h-5 w-5 text-primary" />
-                    Appearances & Rosters
+                    Other Appearances & Rosters
                 </Label>
                 <p className="text-sm text-muted-foreground">
                     All unique face appearances and roster associations from both individuals will be combined and saved to the merged profile.
@@ -205,14 +337,14 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
                 <ul className="text-xs text-muted-foreground list-disc list-inside pl-2">
                     <li>Appearances for {person1.name}: {person1.faceAppearances?.length || 0}.</li>
                     <li>Appearances for {person2.name}: {person2.faceAppearances?.length || 0}.</li>
+                    <li>Combined unique appearances: {uniqueCombinedAppearances.length}.</li>
                     <li>{person1.name} is in {person1.rosterIds?.length || 0} roster(s).</li>
                     <li>{person2.name} is in {person2.rosterIds?.length || 0} roster(s).</li>
                 </ul>
             </div>
           </div>
-        </div>
+        </ScrollArea>
         
-        {/* フッター部分（固定） */}
         <div className="shrink-0 border-t pt-4">
           <div className="flex justify-end space-x-2">
             <DialogClose asChild>
@@ -230,3 +362,5 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
 };
 
 export default MergePeopleDialog;
+
+    

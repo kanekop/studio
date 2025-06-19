@@ -128,9 +128,10 @@ export default function ManagePeoplePage() {
   const handleConfirmMergeFromDialog = async (
     targetPersonId: string, 
     sourcePersonId: string, 
-    fieldChoices: FieldMergeChoices
+    fieldChoices: FieldMergeChoices,
+    chosenPrimaryPhotoPath: string | null 
   ) => {
-    await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices);
+    await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices, chosenPrimaryPhotoPath);
     setIsMergeDialogOpen(false);
     setIsMergeSelectionMode(false); 
   };
@@ -494,3 +495,6 @@ export default function ManagePeoplePage() {
     </div>
   );
 }
+
+
+    
