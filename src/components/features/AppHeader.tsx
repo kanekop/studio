@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -12,16 +12,31 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/AuthContext';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { auth } from '@/lib/firebase';
+import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 
 export function AppHeader() {
-  const { currentUser, loading } = useAuth();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const { clearAllData } = useFaceRoster();
 
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const handleLogout = async () => {
-    await clearAllData();
-    // Next step of logout is handled by onAuthStateChanged in AuthContext
+    try {
+      await clearAllData();
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const navLinks = [
