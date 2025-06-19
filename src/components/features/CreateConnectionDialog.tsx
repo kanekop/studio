@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -24,12 +24,11 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 import { 
     Link2, Users, FileText, Save, Sparkles, ArrowRight,
-    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon // Renamed to avoid conflict
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, ClipboardUser
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 
-// Zod schema for internal form validation
 const createConnectionFormSchema = z.object({
   customTypes: z.string().optional(),
   reasons: z.string().optional(),
@@ -55,23 +54,34 @@ interface CreateConnectionDialogProps {
 }
 
 const commonRelations = [
-  { key: 'colleague', label: 'Colleague', icon: Briefcase },
-  { key: 'friend', label: 'Friend', icon: Smile },
-  { key: 'acquaintance', label: 'Acquaintance', icon: Handshake },
+  { key: 'colleague', label: 'Colleague', icon: Briefcase, category: 'common' },
+  { key: 'friend', label: 'Friend', icon: Smile, category: 'common' },
+  { key: 'acquaintance', label: 'Acquaintance', icon: Handshake, category: 'common' },
+  { key: 'club_member', label: 'Club Member', icon: Users, category: 'common' },
 ];
 
 const hierarchicalRelations = [
-  { key: 'parent', label: 'Parent (of Target)', icon: Home }, 
-  { key: 'child', label: 'Child (of Target)', icon: UserIcon }, 
-  { key: 'manager', label: 'Manager (of Target)', icon: Users }, 
-  { key: 'reports_to', label: 'Reports to (Target)', icon: Users }, 
-  { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap },
-  { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap },
+  { key: 'parent', label: 'Parent (of Target)', icon: Home, category: 'hierarchical' }, 
+  { key: 'child', label: 'Child (of Target)', icon: UserIcon, category: 'hierarchical' }, 
+  { key: 'manager', label: 'Manager (of Target)', icon: Award, category: 'hierarchical' }, 
+  { key: 'reports_to', label: 'Reports to (Target)', icon: ClipboardUser, category: 'hierarchical' }, 
+  { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap, category: 'hierarchical' },
+  { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap, category: 'hierarchical' },
 ];
 
 const specialRelations = [
-  { key: 'spouse', label: 'Spouse', icon: Heart },
-  { key: 'partner', label: 'Partner', icon: Gem },
+  { key: 'spouse', label: 'Spouse', icon: Heart, category: 'special' },
+  { key: 'partner', label: 'Partner', icon: Gem, category: 'special' },
+  { key: 'family_member', label: 'Family Member', icon: Users2, category: 'special' },
+];
+
+const allPredefinedRelations = [...commonRelations, ...hierarchicalRelations, ...specialRelations];
+
+const mutuallyExclusivePairs: [string, string][] = [
+  ['parent', 'child'],
+  ['manager', 'reports_to'],
+  ['mentor', 'mentee'],
+  ['spouse', 'partner'], // Assuming spouse and partner are exclusive for the same connection
 ];
 
 
@@ -112,7 +122,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   
   const processAndSubmit = async (formData: z.infer<typeof createConnectionFormSchema>) => {
     const customTypesArray = formData.customTypes?.split(',')
-        .map(t => t.trim())
+        .map(t => t.trim().toLowerCase().replace(/\s+/g, '_')) // Sanitize custom types
         .filter(t => t) || [];
     
     const finalTypes = Array.from(new Set([...selectedPredefinedTypes, ...customTypesArray]));
@@ -131,10 +141,57 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
     };
     await onSave(processedData);
   };
+  
+  const handlePredefinedTypeChange = (newlySelectedOrDeselectedTypes: string[]) => {
+    let currentSelection = [...selectedPredefinedTypes];
+    let finalSelection = [...newlySelectedOrDeselectedTypes]; // This is what ToggleGroup gives us
+
+    // Check if a type was added or removed
+    const typeJustChanged = finalSelection.length > currentSelection.length 
+        ? finalSelection.find(t => !currentSelection.includes(t)) // Type added
+        : currentSelection.find(t => !finalSelection.includes(t)); // Type removed (not directly useful here)
+
+
+    if (typeJustChanged && finalSelection.includes(typeJustChanged)) { // A type was ADDED
+        for (const pair of mutuallyExclusivePairs) {
+            if (pair.includes(typeJustChanged)) { // The added type is part of an exclusive pair
+                const otherInPair = pair.find(type => type !== typeJustChanged);
+                if (otherInPair && finalSelection.includes(otherInPair)) {
+                    // If the other part of the exclusive pair is also selected, remove it
+                    finalSelection = finalSelection.filter(type => type !== otherInPair);
+                }
+            }
+        }
+    }
+    setSelectedPredefinedTypes(finalSelection);
+  };
+
 
   if (!sourcePerson || !targetPerson) return null;
   
   const isFormActuallyDirty = formIsDirty || selectedPredefinedTypes.length > 0 || currentStrength !== undefined;
+
+  const renderRelationToggleItems = (relations: typeof commonRelations) => (
+    <ToggleGroup 
+        type="multiple" 
+        variant="outline" 
+        value={selectedPredefinedTypes} 
+        onValueChange={handlePredefinedTypeChange} 
+        className="flex-wrap justify-start gap-2"
+        disabled={isProcessing}
+    >
+      {relations.map(rel => (
+        <ToggleGroupItem 
+            key={rel.key} 
+            value={rel.key} 
+            aria-label={rel.label} 
+            className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground"
+        >
+          <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
+        </ToggleGroupItem>
+      ))}
+    </ToggleGroup>
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -144,59 +201,38 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
             <Link2 className="mr-2 h-6 w-6 text-primary" />
             Create Connection
           </DialogTitle>
-          <DialogDescription className="text-center sm:text-left">
-            Define the relationship from <strong className="text-accent">{sourcePerson.name}</strong> to <strong className="text-accent">{targetPerson.name}</strong>.
-          </DialogDescription>
         </DialogHeader>
         
-        <div className="p-3 my-2 rounded-md bg-muted/50 border text-sm">
-            <div className="flex items-center justify-center text-foreground">
-                <span className="flex items-center"><Users className="mr-1.5 h-4 w-4 text-primary"/>{sourcePerson.name}</span>
-                <ArrowRight className="h-4 w-4 text-muted-foreground mx-2"/>
-                <span className="flex items-center">{targetPerson.name}<Users className="ml-1.5 h-4 w-4 text-primary"/></span>
+        <div className="p-3 my-2 rounded-md bg-muted/50 border text-sm shadow-inner">
+            <div className="flex items-center justify-center text-foreground font-medium text-base">
+                <span className="flex items-center"><Users className="mr-1.5 h-5 w-5 text-primary"/>{sourcePerson.name}</span>
+                <ArrowRight className="h-5 w-5 text-muted-foreground mx-3"/>
+                <span className="flex items-center">{targetPerson.name}<Users className="ml-1.5 h-5 w-5 text-primary"/></span>
             </div>
-             <p className="text-xs text-muted-foreground text-center mt-1">You are defining the relationship of {sourcePerson.name} towards {targetPerson.name}.</p>
+             <DialogDescription className="text-center sm:text-left mt-1">
+                Define the relationship of <strong className="text-primary">{sourcePerson.name}</strong> towards <strong className="text-primary">{targetPerson.name}</strong>.
+            </DialogDescription>
         </div>
 
         <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
           <form onSubmit={handleSubmit(processAndSubmit)} id="create-connection-form" className="space-y-6">
             
-            <section>
+            <section className="space-y-4">
               <h3 className="text-md font-semibold mb-2 flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary/80" />Relationship Categories</h3>
               
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Common</Label>
-                  <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
-                    {commonRelations.map(rel => (
-                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
-                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </div>
+              <div className="p-3 rounded-md border-l-[3px] border-[#3B82F6] bg-[rgba(59,130,246,0.05)] space-y-2">
+                <Label className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-1 block">Common</Label>
+                {renderRelationToggleItems(commonRelations)}
+              </div>
 
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Hierarchical (Source Person's role to Target Person)</Label>
-                   <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
-                    {hierarchicalRelations.map(rel => (
-                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
-                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </div>
-                
-                <div>
-                  <Label className="text-sm font-medium text-muted-foreground mb-1 block">Special</Label>
-                   <ToggleGroup type="multiple" variant="outline" value={selectedPredefinedTypes} onValueChange={setSelectedPredefinedTypes} className="flex-wrap justify-start gap-2">
-                    {specialRelations.map(rel => (
-                      <ToggleGroupItem key={rel.key} value={rel.key} aria-label={rel.label} className="data-[state=on]:bg-accent/20 data-[state=on]:border-accent data-[state=on]:text-accent-foreground">
-                        <rel.icon className="mr-2 h-4 w-4" /> {rel.label}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                </div>
+              <div className="p-3 rounded-md border-l-[3px] border-[#FB923C] bg-[rgba(251,146,60,0.05)] space-y-2">
+                <Label className="text-sm font-medium text-orange-700 dark:text-orange-400 mb-1 block">Hierarchical (Source's role to Target)</Label>
+                {renderRelationToggleItems(hierarchicalRelations)}
+              </div>
+              
+              <div className="p-3 rounded-md border-l-[3px] border-[#EC4899] bg-[rgba(236,72,153,0.05)] space-y-2">
+                <Label className="text-sm font-medium text-pink-700 dark:text-pink-400 mb-1 block">Special</Label>
+                {renderRelationToggleItems(specialRelations)}
               </div>
             </section>
             
