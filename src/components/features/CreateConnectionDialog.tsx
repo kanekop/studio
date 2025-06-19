@@ -24,7 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 import { 
     Link2, Users, FileText, Save, Sparkles, ArrowRight,
-    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, ClipboardUser
+    Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, Clipboard // Changed ClipboardUser to Clipboard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -57,14 +57,14 @@ const commonRelations = [
   { key: 'colleague', label: 'Colleague', icon: Briefcase, category: 'common' },
   { key: 'friend', label: 'Friend', icon: Smile, category: 'common' },
   { key: 'acquaintance', label: 'Acquaintance', icon: Handshake, category: 'common' },
-  { key: 'club_member', label: 'Club Member', icon: Users, category: 'common' },
+  { key: 'club_member', label: 'Club Member', icon: Users, category: 'common' }, // 🎯 Icon, used Users for now
 ];
 
 const hierarchicalRelations = [
   { key: 'parent', label: 'Parent (of Target)', icon: Home, category: 'hierarchical' }, 
   { key: 'child', label: 'Child (of Target)', icon: UserIcon, category: 'hierarchical' }, 
   { key: 'manager', label: 'Manager (of Target)', icon: Award, category: 'hierarchical' }, 
-  { key: 'reports_to', label: 'Reports to (Target)', icon: ClipboardUser, category: 'hierarchical' }, 
+  { key: 'reports_to', label: 'Reports to (Target)', icon: Clipboard, category: 'hierarchical' }, // Changed ClipboardUser to Clipboard
   { key: 'mentor', label: 'Mentor (to Target)', icon: GraduationCap, category: 'hierarchical' },
   { key: 'mentee', label: 'Mentee (of Target)', icon: GraduationCap, category: 'hierarchical' },
 ];
@@ -72,7 +72,7 @@ const hierarchicalRelations = [
 const specialRelations = [
   { key: 'spouse', label: 'Spouse', icon: Heart, category: 'special' },
   { key: 'partner', label: 'Partner', icon: Gem, category: 'special' },
-  { key: 'family_member', label: 'Family Member', icon: Users2, category: 'special' },
+  { key: 'family_member', label: 'Family Member', icon: Users2, category: 'special' }, // 👨‍👩‍👧 Icon, used Users2 for now
 ];
 
 const allPredefinedRelations = [...commonRelations, ...hierarchicalRelations, ...specialRelations];
@@ -81,7 +81,7 @@ const mutuallyExclusivePairs: [string, string][] = [
   ['parent', 'child'],
   ['manager', 'reports_to'],
   ['mentor', 'mentee'],
-  ['spouse', 'partner'], // Assuming spouse and partner are exclusive for the same connection
+  ['spouse', 'partner'], 
 ];
 
 
@@ -122,7 +122,7 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   
   const processAndSubmit = async (formData: z.infer<typeof createConnectionFormSchema>) => {
     const customTypesArray = formData.customTypes?.split(',')
-        .map(t => t.trim().toLowerCase().replace(/\s+/g, '_')) // Sanitize custom types
+        .map(t => t.trim().toLowerCase().replace(/\s+/g, '_')) 
         .filter(t => t) || [];
     
     const finalTypes = Array.from(new Set([...selectedPredefinedTypes, ...customTypesArray]));
@@ -143,21 +143,19 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
   };
   
   const handlePredefinedTypeChange = (newlySelectedOrDeselectedTypes: string[]) => {
-    let currentSelection = [...selectedPredefinedTypes];
-    let finalSelection = [...newlySelectedOrDeselectedTypes]; // This is what ToggleGroup gives us
+    let currentSelectionState = [...selectedPredefinedTypes];
+    let finalSelection = [...newlySelectedOrDeselectedTypes]; 
 
-    // Check if a type was added or removed
-    const typeJustChanged = finalSelection.length > currentSelection.length 
-        ? finalSelection.find(t => !currentSelection.includes(t)) // Type added
-        : currentSelection.find(t => !finalSelection.includes(t)); // Type removed (not directly useful here)
+    const typeJustChanged = finalSelection.length > currentSelectionState.length 
+        ? finalSelection.find(t => !currentSelectionState.includes(t)) 
+        : currentSelectionState.find(t => !finalSelection.includes(t)); 
 
 
-    if (typeJustChanged && finalSelection.includes(typeJustChanged)) { // A type was ADDED
+    if (typeJustChanged && finalSelection.includes(typeJustChanged)) { 
         for (const pair of mutuallyExclusivePairs) {
-            if (pair.includes(typeJustChanged)) { // The added type is part of an exclusive pair
+            if (pair.includes(typeJustChanged)) { 
                 const otherInPair = pair.find(type => type !== typeJustChanged);
                 if (otherInPair && finalSelection.includes(otherInPair)) {
-                    // If the other part of the exclusive pair is also selected, remove it
                     finalSelection = finalSelection.filter(type => type !== otherInPair);
                 }
             }
@@ -338,3 +336,5 @@ const CreateConnectionDialog: React.FC<CreateConnectionDialogProps> = ({
 };
 
 export default CreateConnectionDialog;
+
+    
