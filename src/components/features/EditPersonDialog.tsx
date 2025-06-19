@@ -18,17 +18,17 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon, Users as UsersIcon, Star, MessageSquare, Image as ImageIcon, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react';
+import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon as LinkIconLucide, Users as UsersIcon, Star, MessageSquare, Image as ImageIcon, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react'; // Renamed LinkIcon to avoid conflict if any
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from '@/components/ui/card';
-import NextImage from 'next/image'; 
+import NextImage from 'next/image';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { storage } from '@/lib/firebase';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { cn } from '@/lib/utils';
-import { useFaceRoster } from '@/contexts/FaceRosterContext'; 
+import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,7 +49,7 @@ const editPersonSchema = z.object({
   firstMet: z.string().optional(),
   firstMetContext: z.string().optional(),
   notes: z.string().optional(),
-  primaryFaceAppearancePath: z.string().optional(),
+  primaryFaceAppearancePath: z.string().optional().nullable(),
 });
 
 export type EditPersonFormData = z.infer<typeof editPersonSchema>;
@@ -63,7 +63,7 @@ interface EditPersonDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onSave: (personId: string, data: EditPersonFormData) => Promise<void>;
-  isProcessing: boolean; // This is the general isProcessing from context for save button
+  isProcessing: boolean; 
 }
 
 interface AppearanceWithUrl extends FaceAppearance {
@@ -80,11 +80,12 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   isOpen,
   onOpenChange,
   onSave,
-  isProcessing: isSaveProcessing, 
+  isProcessing: isSaveProcessing,
 }) => {
-  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster(); 
+  const { deleteConnection, isProcessing: isContextProcessing } = useFaceRoster();
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false);
 
 
   const {
@@ -92,7 +93,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
     handleSubmit,
     reset,
     control,
-    setValue, 
+    setValue,
     formState: { errors, isDirty },
   } = useForm<EditPersonFormData>({
     resolver: zodResolver(editPersonSchema),
@@ -110,7 +111,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
         firstMet: personToEdit.firstMet || '',
         firstMetContext: personToEdit.firstMetContext || '',
         notes: personToEdit.notes || '',
-        primaryFaceAppearancePath: personToEdit.primaryFaceAppearancePath || personToEdit.faceAppearances?.[0]?.faceImageStoragePath || '',
+        primaryFaceAppearancePath: personToEdit.primaryFaceAppearancePath || personToEdit.faceAppearances?.[0]?.faceImageStoragePath || null,
       });
 
       const fetchAppearanceUrls = async () => {
@@ -158,10 +159,25 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 
   const handleConfirmDeleteConnection = async () => {
     if (connectionToDelete) {
+      setIsAttemptingDelete(true);
       await deleteConnection(connectionToDelete.id);
+      setIsAttemptingDelete(false);
       setConnectionToDelete(null);
-      setIsDeleteConfirmOpen(false);
-      // The context will update allUserConnections, which should re-render this dialog's list
+      setIsDeleteConfirmOpen(false); 
+    }
+  };
+  
+  const handleDeleteDialogInternalCloseAttempt = (openState: boolean) => {
+    if (!openState && isAttemptingDelete) {
+      // If Radix tries to close the dialog (e.g. Esc, overlay click)
+      // while we are in the middle of our delete operation, prevent it.
+      // The dialog will be closed explicitly by handleConfirmDeleteConnection or by Cancel.
+      return;
+    }
+    setIsDeleteConfirmOpen(openState);
+    if (!openState) { // If actually closing (e.g. by user pressing Esc or clicking Cancel)
+      setConnectionToDelete(null);
+      setIsAttemptingDelete(false); // Reset attempt flag
     }
   };
 
@@ -183,8 +199,8 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
   if (!personToEdit) return null;
-  
-  const overallIsProcessing = isSaveProcessing || isContextProcessing;
+
+  const overallIsProcessing = isSaveProcessing || isContextProcessing || isAttemptingDelete;
 
   return (
     <>
@@ -326,7 +342,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
               {/* Column 3: Connections */}
               <div className="space-y-4 md:col-span-1">
                 <h3 className="text-lg font-semibold flex items-center text-primary">
-                  <LinkIcon className="mr-2 h-5 w-5" />
+                  <LinkIconLucide className="mr-2 h-5 w-5" />
                   Related People
                 </h3>
                 <Separator />
@@ -348,7 +364,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                 ) : relatedConnections.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">No connections found.</p>
                 ) : (
-                  <ScrollArea className="max-h-[calc(90vh-250px)] pr-2"> 
+                  <ScrollArea className="max-h-[calc(90vh-250px)] pr-2">
                     <div className="space-y-3">
                     {relatedConnections.map(({ connection, otherPerson, direction }) => (
                       <Card key={connection.id} className="bg-muted/30 shadow-sm relative group">
@@ -361,9 +377,9 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                 </Avatar>
                               <p className="font-semibold text-foreground truncate" title={otherPerson?.name || 'Unknown Person'}>{otherPerson?.name || 'Unknown Person'}</p>
                             </div>
-                            <Button 
-                                variant="ghost" 
-                                size="icon" 
+                            <Button
+                                variant="ghost"
+                                size="icon"
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                                 onClick={() => handleInitiateDeleteConnection(connection)}
                                 disabled={overallIsProcessing}
@@ -442,7 +458,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
     </Dialog>
 
     {connectionToDelete && (
-        <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialog open={isDeleteConfirmOpen} onOpenChange={handleDeleteDialogInternalCloseAttempt}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center">
@@ -455,13 +471,18 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel disabled={isContextProcessing}>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
-                onClick={handleConfirmDeleteConnection} 
-                disabled={isContextProcessing}
+              <AlertDialogCancel 
+                disabled={isAttemptingDelete || isContextProcessing} 
+                onClick={() => { /* Already handled by onOpenChange if user clicks cancel */ }}
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmDeleteConnection}
+                disabled={isAttemptingDelete || isContextProcessing}
                 className="bg-destructive hover:bg-destructive/90"
               >
-                {isContextProcessing ? "Deleting..." : "Yes, Delete Connection"}
+                {isAttemptingDelete ? "Deleting..." : "Yes, Delete Connection"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
