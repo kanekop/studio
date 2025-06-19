@@ -12,6 +12,60 @@
 - 視覚的な方向性の表現
 - モバイルユーザビリティ
 
+## 実装ガイドライン
+
+### イベント処理の統一
+
+#### ドラッグ&ドロップとクリックイベントの管理
+```typescript
+// イベントユーティリティを使用した統一的な処理
+import { handleCardClick, setDraggingState } from '@/lib/event-utils';
+
+const handleDragStart = (e: React.DragEvent) => {
+  if (disableActions || isSelectionMode) {
+    e.preventDefault();
+    return;
+  }
+  setDraggingState(true);
+  // ドラッグ処理
+};
+
+const handleDragEnd = () => {
+  setDraggingState(false);
+};
+```
+
+#### イベント伝播の制御
+- インタラクティブ要素（ボタン、チェックボックスなど）のクリックはカード全体のクリックとして扱わない
+- `stopPropagation`の使用は最小限に抑え、イベントデリゲーションで処理
+
+### アクセシビリティ要件
+
+#### フォーカス管理
+```typescript
+// ダイアログが開いた時の初期フォーカス
+useEffect(() => {
+  if (isOpen) {
+    // 最初のインタラクティブ要素にフォーカス
+    firstInputRef.current?.focus();
+  }
+}, [isOpen]);
+```
+
+#### キーボードナビゲーション
+- `Tab`/`Shift+Tab`: フォーカス移動
+- `Enter`: 選択/実行
+- `Escape`: ダイアログを閉じる
+- `Space`: チェックボックスやトグルの選択
+
+#### ARIAラベル
+```html
+<div role="dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+  <h2 id="dialog-title">関係性を作成</h2>
+  <p id="dialog-description">人物間の関係を定義してください</p>
+</div>
+```
+
 ## 改善提案
 
 ### 1. 「Club Member」オプションの追加

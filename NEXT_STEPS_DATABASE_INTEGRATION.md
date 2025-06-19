@@ -1,4 +1,3 @@
-
 # FaceRoster アプリケーション仕様書 (改訂版)
 
 ## 1. 概要
@@ -260,6 +259,90 @@ FaceRosterは、ユーザーが画像（会議のスクリーンショットや�
 11. **`connections`コレクションの管理UIの実装 (人物詳細ページなど、コネクションの表示・編集・削除機能)。**
 12. **`people`ドキュメント内の`knownAcquaintances`や`spouse`フィールドを`connections`コレクションへの参照に移行または連携させることを検討。**
 13. **コネクション作成UIの改善（例：スマホでの代替操作、既存コネクションの可視化）。**
+
+## 9. エラーハンドリング戦略
+
+### 9.1 エラーバウンダリの実装
+```typescript
+class DialogErrorBoundary extends React.Component {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // エラーログの送信
+    console.error('Dialog error:', error, errorInfo);
+    // ダイアログを安全に閉じる
+    this.props.onError?.();
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback onRetry={() => this.setState({ hasError: false })} />;
+    }
+    return this.props.children;
+  }
+}
+```
+
+### 9.2 非同期エラーの処理
+- Firestore操作のエラーはtry-catchで捕捉
+- ユーザーへのフィードバックはトーストで表示
+- 重要な操作は再試行オプションを提供
+
+### 9.3 ネットワークエラーの処理
+```typescript
+const handleNetworkError = async (operation: () => Promise<any>) => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error.code === 'unavailable') {
+      toast({
+        title: 'ネットワークエラー',
+        description: 'インターネット接続を確認してください',
+        variant: 'destructive'
+      });
+    }
+    throw error;
+  }
+};
+```
+
+## 10. テスト戦略
+
+### 10.1 ユニットテスト
+- イベントユーティリティ関数のテスト
+- ダイアログ状態管理フックのテスト
+- バリデーション関数のテスト
+
+### 10.2 統合テスト
+- ダイアログの開閉フロー
+- データの保存・更新フロー
+- エラー処理フロー
+
+### 10.3 E2Eテスト
+```typescript
+// Cypress/Playwrightでの例
+describe('EditPersonDialog', () => {
+  it('should open dialog when clicking person card', () => {
+    cy.visit('/people');
+    cy.get('[data-testid="person-card"]').first().click();
+    cy.get('[role="dialog"]').should('be.visible');
+  });
+  
+  it('should prevent closing when child dialog is open', () => {
+    // テストケース
+  });
+});
+```
+
+## 11. パフォーマンス最適化
+
+### 11.1 レンダリング最適化
+- React.memoを使用したコンポーネントのメモ化
+- useMemoとuseCallbackの適切な使用
+- 大きなリストの仮想化
+
+### 11.2 データフェッチの最適化
+- Firestoreクエリの最適化
+- データのキャッシング戦略
+- 画像の遅延読み込み
 
 この仕様書は、アプリケーションの成長に合わせて継続的に更新されるものです。
 

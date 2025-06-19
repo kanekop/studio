@@ -12,6 +12,92 @@ FaceRosterアプリケーションにおける人物間の関係性（コネク�
 - モバイルでの操作性：ドラッグ&ドロップがタッチデバイスで困難（コンテキストメニューで一部対応検討）
 - ~~既存関係の可視性~~ (人物カードへのバッジ表示で一部対応)
 
+## ダイアログ実装ガイドライン
+
+### 1. Radix UIダイアログの基本原則
+
+#### 1.1 開閉制御
+- **推奨**: ダイアログコンポーネントは常にレンダリングし、`open`プロパティで開閉を制御
+- **非推奨**: 条件付きレンダリング（`{isOpen && <Dialog />}`）
+
+```typescript
+// ✅ 推奨
+<EditPersonDialog
+  isOpen={isEditDialogOpen}
+  onOpenChange={setIsEditDialogOpen}
+  // ...他のプロパティ
+/>
+
+// ❌ 非推奨
+{isEditDialogOpen && personToEdit && (
+  <EditPersonDialog />
+)}
+```
+
+#### 1.2 複数ダイアログの管理
+- 親ダイアログと子ダイアログが同時に開く場合の制御
+- z-indexの階層管理（CSS仕様書参照）
+
+```css
+/* ダイアログのz-index階層 */
+[role="dialog"][data-state="open"] { z-index: 50; }      /* メインダイアログ */
+[role="alertdialog"][data-state="open"] { z-index: 60; } /* 確認ダイアログ */
+[data-radix-popper-content-wrapper] { z-index: 70; }     /* ポップオーバー */
+```
+
+### 2. イベントフローの定義
+
+#### 2.1 人物編集フロー
+```mermaid
+graph TD
+    A[人物カードクリック] --> B{モード判定}
+    B -->|通常モード| C[handleOpenEditPersonDialog呼び出し]
+    B -->|マージモード| D[マージ選択処理]
+    B -->|削除モード| E[削除選択処理]
+    C --> F[状態更新]
+    F --> G[EditPersonDialog開く]
+    G --> H{ユーザー操作}
+    H -->|保存| I[データ更新]
+    H -->|キャンセル| J[ダイアログ閉じる]
+    I --> J
+```
+
+#### 2.2 エラー処理フロー
+- ダイアログ内でエラーが発生した場合、ダイアログは開いたまま保持
+- エラーメッセージはトーストで表示
+- 重要な操作（削除など）は確認ダイアログを表示
+
+### 3. 状態管理のベストプラクティス
+
+#### 3.1 ダイアログ状態の一元管理
+```typescript
+// 親コンポーネントでの状態管理
+const [dialogStates, setDialogStates] = useState({
+  editPerson: { isOpen: false, data: null },
+  createConnection: { isOpen: false, data: null },
+  mergePeople: { isOpen: false, data: null },
+  deleteConfirm: { isOpen: false, data: null }
+});
+```
+
+#### 3.2 子ダイアログの状態管理
+- 子ダイアログの状態は親ダイアログ内で管理
+- 親ダイアログが閉じる際の制御
+
+```typescript
+const handleMainDialogOpenChange = (openState: boolean) => {
+  // 子ダイアログが開いている場合は親を閉じない
+  if (!openState && (isChildDialog1Open || isChildDialog2Open)) {
+    return;
+  }
+  onOpenChange(openState);
+};
+```
+
+#### 3.3 非同期操作中の状態管理
+- 保存中、削除中などの処理中状態を管理
+- 処理中はダイアログを閉じない、UIを無効化
+
 ## 提案する新しいUXデザイン
 
 ### 1. ハイブリッド接続方式
