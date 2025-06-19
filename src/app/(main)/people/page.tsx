@@ -55,8 +55,8 @@ export default function ManagePeoplePage() {
     deleteSelectedPeople,
     updateGlobalPersonDetails,
     addConnection,
-    allUserConnections, // New: Get all connections
-    isLoadingAllUserConnections, // New: Loading state for all connections
+    allUserConnections,
+    isLoadingAllUserConnections,
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -197,7 +197,7 @@ export default function ManagePeoplePage() {
   
   const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
-  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections;
+  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections || isLoadingAllUserPeople;
 
 
   const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
@@ -444,7 +444,7 @@ export default function ManagePeoplePage() {
       ) : (
         <PeopleList 
           people={allUserPeople} 
-          allUserConnections={allUserConnections} // Pass connections
+          allUserConnections={allUserConnections}
           isMergeSelectionMode={isMergeSelectionMode}
           selectedPeopleForMerge={globallySelectedPeopleForMerge}
           onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
@@ -470,6 +470,10 @@ export default function ManagePeoplePage() {
       {isEditPersonDialogOpen && personToEdit && (
         <EditPersonDialog
           personToEdit={personToEdit}
+          allUserPeople={allUserPeople}
+          allUserConnections={allUserConnections}
+          isLoadingConnections={isLoadingAllUserConnections}
+          isLoadingPeople={isLoadingAllUserPeople}
           isOpen={isEditPersonDialogOpen}
           onOpenChange={setIsEditPersonDialogOpen}
           onSave={handleSavePersonDetails}

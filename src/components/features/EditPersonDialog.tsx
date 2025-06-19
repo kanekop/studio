@@ -1,10 +1,10 @@
 
 "use client";
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person } from '@/types';
+import type { Person, Connection } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -18,7 +18,10 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { User, Building, Smile, CalendarDays, Info, Save, FileText } from 'lucide-react'; // Added FileText for notes
+import { User, Building, Smile, CalendarDays, Info, Save, FileText, LinkIcon, UsersIcon, ThumbsUp, MessageSquare, Star } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const editPersonSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -34,6 +37,10 @@ export type EditPersonFormData = z.infer<typeof editPersonSchema>;
 
 interface EditPersonDialogProps {
   personToEdit: Person | null;
+  allUserPeople: Person[];
+  allUserConnections: Connection[];
+  isLoadingPeople: boolean;
+  isLoadingConnections: boolean;
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   onSave: (personId: string, data: EditPersonFormData) => Promise<void>;
@@ -42,6 +49,10 @@ interface EditPersonDialogProps {
 
 const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   personToEdit,
+  allUserPeople,
+  allUserConnections,
+  isLoadingPeople,
+  isLoadingConnections,
   isOpen,
   onOpenChange,
   onSave,
@@ -68,7 +79,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
         notes: personToEdit.notes || '',
       });
     } else if (!isOpen) {
-      reset(); // Clear form when dialog closes
+      reset(); 
     }
   }, [personToEdit, isOpen, reset]);
 
@@ -78,11 +89,27 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
     }
   };
 
+  const relatedConnections = useMemo(() => {
+    if (!personToEdit || isLoadingConnections || isLoadingPeople) return [];
+    return allUserConnections
+      .filter(conn => conn.fromPersonId === personToEdit.id || conn.toPersonId === personToEdit.id)
+      .map(conn => {
+        const otherPersonId = conn.fromPersonId === personToEdit.id ? conn.toPersonId : conn.fromPersonId;
+        const otherPerson = allUserPeople.find(p => p.id === otherPersonId);
+        return {
+          connection: conn,
+          otherPerson: otherPerson,
+          direction: conn.fromPersonId === personToEdit.id ? 'outgoing' : 'incoming',
+        };
+      })
+      .filter(item => item.otherPerson); // Ensure otherPerson was found
+  }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
+
   if (!personToEdit) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg md:max-w-xl !max-h-[90vh] !flex !flex-col">
+      <DialogContent className="sm:max-w-2xl md:max-w-3xl !max-h-[90vh] !flex !flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle className="font-headline text-xl flex items-center">
             <User className="mr-2 h-6 w-6 text-primary" />
@@ -91,57 +118,122 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
         </DialogHeader>
         
         <ScrollArea className="flex-1 overflow-y-auto px-1 py-2 pr-3 -mr-2">
-          <form onSubmit={handleSubmit(onSubmit)} id="edit-person-form" className="space-y-4">
-            <div>
-              <Label htmlFor="name" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <User className="mr-1.5 h-4 w-4" />Name*
-              </Label>
-              <Input id="name" {...register('name')} placeholder="Full name" disabled={isProcessing} />
-              {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {/* Left Column: Form */}
+            <form onSubmit={handleSubmit(onSubmit)} id="edit-person-form" className="space-y-4">
+              <div>
+                <Label htmlFor="name" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <User className="mr-1.5 h-4 w-4" />Name*
+                </Label>
+                <Input id="name" {...register('name')} placeholder="Full name" disabled={isProcessing} />
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name.message}</p>}
+              </div>
 
-            <div>
-              <Label htmlFor="company" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Building className="mr-1.5 h-4 w-4" />Company
-              </Label>
-              <Input id="company" {...register('company')} placeholder="Company name" disabled={isProcessing} />
-            </div>
+              <div>
+                <Label htmlFor="company" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <Building className="mr-1.5 h-4 w-4" />Company
+                </Label>
+                <Input id="company" {...register('company')} placeholder="Company name" disabled={isProcessing} />
+              </div>
 
-            <div>
-              <Label htmlFor="hobbies" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Smile className="mr-1.5 h-4 w-4" />Hobbies
-              </Label>
-              <Textarea id="hobbies" {...register('hobbies')} placeholder="e.g., Reading, Hiking, Coding" className="min-h-[60px]" disabled={isProcessing} />
-            </div>
+              <div>
+                <Label htmlFor="hobbies" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <Smile className="mr-1.5 h-4 w-4" />Hobbies
+                </Label>
+                <Textarea id="hobbies" {...register('hobbies')} placeholder="e.g., Reading, Hiking, Coding" className="min-h-[60px]" disabled={isProcessing} />
+              </div>
 
-            <div>
-              <Label htmlFor="birthday" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <CalendarDays className="mr-1.5 h-4 w-4" />Birthday
-              </Label>
-              <Input id="birthday" {...register('birthday')} placeholder="e.g., January 1st or 1990-01-01" disabled={isProcessing} />
-            </div>
+              <div>
+                <Label htmlFor="birthday" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <CalendarDays className="mr-1.5 h-4 w-4" />Birthday
+                </Label>
+                <Input id="birthday" {...register('birthday')} placeholder="e.g., January 1st or 1990-01-01" disabled={isProcessing} />
+              </div>
 
-            <div>
-              <Label htmlFor="firstMet" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <CalendarDays className="mr-1.5 h-4 w-4" />First Met Date
-              </Label>
-              <Input id="firstMet" {...register('firstMet')} placeholder="e.g., At a conference or 2023-05-15" disabled={isProcessing} />
-            </div>
+              <div>
+                <Label htmlFor="firstMet" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <CalendarDays className="mr-1.5 h-4 w-4" />First Met Date
+                </Label>
+                <Input id="firstMet" {...register('firstMet')} placeholder="e.g., At a conference or 2023-05-15" disabled={isProcessing} />
+              </div>
 
-            <div>
-              <Label htmlFor="firstMetContext" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <Info className="mr-1.5 h-4 w-4" />First Met Context
-              </Label>
-              <Textarea id="firstMetContext" {...register('firstMetContext')} placeholder="e.g., Introduced by John at the tech meetup" className="min-h-[60px]" disabled={isProcessing} />
+              <div>
+                <Label htmlFor="firstMetContext" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <Info className="mr-1.5 h-4 w-4" />First Met Context
+                </Label>
+                <Textarea id="firstMetContext" {...register('firstMetContext')} placeholder="e.g., Introduced by John at the tech meetup" className="min-h-[60px]" disabled={isProcessing} />
+              </div>
+              
+              <div>
+                <Label htmlFor="notes" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
+                  <FileText className="mr-1.5 h-4 w-4" />Notes
+                </Label>
+                <Textarea id="notes" {...register('notes')} placeholder="Any additional notes" className="min-h-[80px]" disabled={isProcessing} />
+              </div>
+            </form>
+
+            {/* Right Column: Connections */}
+            <div className="space-y-4 mt-4 md:mt-0">
+              <h3 className="text-lg font-semibold flex items-center text-primary">
+                <LinkIcon className="mr-2 h-5 w-5" />
+                Related People
+              </h3>
+              <Separator />
+              {(isLoadingConnections || isLoadingPeople) && !relatedConnections.length ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full rounded-md" />
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </div>
+              ) : relatedConnections.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No connections found for this person.</p>
+              ) : (
+                <div className="space-y-3 max-h-[400px] md:max-h-none md:flex-grow overflow-y-auto pr-2 -mr-2">
+                  {relatedConnections.map(({ connection, otherPerson, direction }) => (
+                    <Card key={connection.id} className="bg-muted/30 shadow-sm">
+                      <CardContent className="p-3 space-y-1.5">
+                        <div className="flex items-center space-x-2 mb-1">
+                           <Avatar className="h-8 w-8">
+                              <AvatarImage src={otherPerson?.faceAppearances?.[0]?.faceImageStoragePath ? undefined : "https://placehold.co/40x40.png"} alt={otherPerson?.name}/> {/* Placeholder, image loading would be complex here */}
+                              <AvatarFallback>{otherPerson?.name?.substring(0,1) || 'P'}</AvatarFallback>
+                            </Avatar>
+                          <p className="font-semibold text-primary-foreground truncate">{otherPerson?.name || 'Unknown Person'}</p>
+                        </div>
+                        
+                        <div className="text-xs text-muted-foreground space-y-0.5">
+                          <p className="flex items-center">
+                            <UsersIcon className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                            Relationship: {direction === 'outgoing' 
+                              ? `Your relation to ${otherPerson?.name || 'them'}` 
+                              : `${otherPerson?.name || 'Their'} relation to you`}
+                             : <strong className="ml-1 text-foreground">{connection.types.join(', ') || 'N/A'}</strong>
+                          </p>
+                          {connection.reasons && connection.reasons.length > 0 && (
+                            <p className="flex items-center">
+                              <MessageSquare className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                              Reasons: <span className="ml-1 text-foreground truncate">{connection.reasons.join('; ')}</span>
+                            </p>
+                          )}
+                           {connection.strength && (
+                            <p className="flex items-center">
+                              <Star className="mr-1.5 h-3.5 w-3.5 flex-shrink-0" />
+                              Strength: <span className="ml-1 text-foreground">{connection.strength}/5</span>
+                            </p>
+                          )}
+                          {connection.notes && (
+                            <p className="flex items-start">
+                              <FileText className="mr-1.5 h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                              Notes: <span className="ml-1 text-foreground whitespace-pre-wrap text-xs">{connection.notes}</span>
+                            </p>
+                          )}
+                        </div>
+                        {/* Placeholder for future edit/delete connection buttons */}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
-            
-            <div>
-              <Label htmlFor="notes" className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-                <FileText className="mr-1.5 h-4 w-4" />Notes
-              </Label>
-              <Textarea id="notes" {...register('notes')} placeholder="Any additional notes" className="min-h-[80px]" disabled={isProcessing} />
-            </div>
-          </form>
+          </div>
         </ScrollArea>
 
         <DialogFooter className="shrink-0 pt-4 border-t">
