@@ -71,7 +71,8 @@ interface AppearanceWithUrl extends FaceAppearance {
   isLoadingUrl?: boolean;
 }
 
-const DeleteConnectionDialog: React.FC<{
+// Internal component for Delete Connection Confirmation
+const DeleteConnectionConfirmationDialog: React.FC<{
   isOpen: boolean;
   onConfirm: () => Promise<void>;
   onCancel: () => void;
@@ -80,7 +81,7 @@ const DeleteConnectionDialog: React.FC<{
   isDeleting: boolean;
 }> = ({ isOpen, onConfirm, onCancel, sourcePersonName, targetPersonName, isDeleting }) => {
   return (
-    <AlertDialog open={isOpen} onOpenChange={(openState) => { if (!openState) onCancel(); }}>
+    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center">
@@ -110,6 +111,7 @@ const DeleteConnectionDialog: React.FC<{
   );
 };
 
+
 const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   personToEdit,
   allUserPeople,
@@ -122,9 +124,10 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   isProcessing: isSaveProcessing, 
 }) => {
   const { deleteConnection, updateConnection, isProcessing: isContextProcessing } = useFaceRoster();
+  
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
-  const [isAttemptingDelete, setIsAttemptingDelete] = useState(false);
+  const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
+  const [isDeletingConnection, setIsDeletingConnection] = useState(false);
 
   const [connectionToEdit, setConnectionToEdit] = useState<Connection | null>(null);
   const [isEditConnectionDialogOpen, setIsEditConnectionDialogOpen] = useState(false);
@@ -187,9 +190,11 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       reset();
       setFaceAppearancesWithUrls([]);
       setConnectionToDelete(null);
-      setIsDeleteConfirmOpen(false);
+      setIsDeleteConfirmDialogOpen(false);
+      setIsDeletingConnection(false);
       setConnectionToEdit(null);
       setIsEditConnectionDialogOpen(false);
+      setIsAttemptingConnectionSave(false);
     }
   }, [personToEdit, isOpen, reset]);
 
@@ -201,35 +206,28 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 
   const handleInitiateDeleteConnection = (connection: Connection) => {
     setConnectionToDelete(connection);
-    setIsDeleteConfirmOpen(true);
+    setIsDeleteConfirmDialogOpen(true);
   };
 
   const handleConfirmDeleteConnection = async () => {
     if (!connectionToDelete) return;
     
-    setIsAttemptingDelete(true);
+    setIsDeletingConnection(true);
     try {
       await deleteConnection(connectionToDelete.id);
+      setIsDeleteConfirmDialogOpen(false); // Close dialog on success
+      setConnectionToDelete(null);
     } catch (error) {
       console.error("Error deleting connection:", error);
+      // Error toast is handled by context, dialog remains open for user to retry or cancel
     } finally {
-      setIsAttemptingDelete(false);
-      setIsDeleteConfirmOpen(false);
-      setConnectionToDelete(null);
+      setIsDeletingConnection(false);
     }
   };
 
-  const handleDeleteDialogInternalCloseAttempt = (openState: boolean) => {
-    if (isAttemptingDelete && !openState) {
-      return; 
-    }
-    setIsDeleteConfirmOpen(openState);
-    if (!openState) {
-      setConnectionToDelete(null);
-      if (isAttemptingDelete) {
-        setIsAttemptingDelete(false);
-      }
-    }
+  const handleCancelDeleteConnection = () => {
+    setIsDeleteConfirmDialogOpen(false);
+    setConnectionToDelete(null);
   };
 
   const handleInitiateEditConnection = (connection: Connection) => {
@@ -254,18 +252,6 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
     }
   };
 
-  React.useEffect(() => {
-    if (isDeleteConfirmOpen || isEditConnectionDialogOpen) {
-      const timer = setTimeout(() => {
-        if (!isOpen && (isDeleteConfirmOpen || isEditConnectionDialogOpen)) {
-          onOpenChange(true);
-        }
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [isDeleteConfirmOpen, isEditConnectionDialogOpen, isOpen, onOpenChange]);
-
-
   const relatedConnections = useMemo(() => {
     if (!personToEdit || isLoadingConnections || isLoadingPeople) return [];
     
@@ -285,7 +271,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 
   if (!personToEdit) return null;
 
-  const overallIsProcessing = isSaveProcessing || isContextProcessing || isAttemptingDelete || isAttemptingConnectionSave;
+  const overallIsProcessing = isSaveProcessing || isContextProcessing || isDeletingConnection || isAttemptingConnectionSave;
 
   const renderFieldChoice = (
     fieldKey: keyof EditPersonFormData,
@@ -318,13 +304,19 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       </div>
     );
   };
+  
+  const handleMainDialogOpenChange = (openState: boolean) => {
+    // Prevent main dialog from closing if a child dialog (delete or edit connection) is open or an operation is in progress
+    if (!openState && (isDeleteConfirmDialogOpen || isEditConnectionDialogOpen || isSaveProcessing || isDeletingConnection || isAttemptingConnectionSave)) {
+      return;
+    }
+    onOpenChange(openState);
+  };
+
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => {
-        if (!open && (isSaveProcessing || isAttemptingDelete || isDeleteConfirmOpen || isEditConnectionDialogOpen)) return;
-        onOpenChange(open);
-      }}>
+      <Dialog open={isOpen} onOpenChange={handleMainDialogOpenChange}>
         <DialogContent className="sm:max-w-2xl md:max-w-4xl lg:max-w-5xl !max-h-[90vh] !flex !flex-col">
           <DialogHeader className="shrink-0">
             <DialogTitle className="font-headline text-xl flex items-center">
@@ -475,7 +467,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 text-muted-foreground hover:text-accent"
-                                    onClick={(e) => { e.stopPropagation(); handleInitiateEditConnection(connection); }}
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleInitiateEditConnection(connection); }}
                                     disabled={overallIsProcessing}
                                     aria-label={`Edit connection with ${otherPerson?.name || 'this person'}`}
                                     title={`Edit connection`}
@@ -486,7 +478,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                    onClick={(e) => { e.stopPropagation(); handleInitiateDeleteConnection(connection); }}
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleInitiateDeleteConnection(connection); }}
                                     disabled={overallIsProcessing}
                                     aria-label={`Delete connection with ${otherPerson?.name || 'this person'}`}
                                     title={`Delete connection`}
@@ -575,17 +567,13 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       </Dialog>
 
       {connectionToDelete && personToEdit && (
-        <DeleteConnectionDialog
-          isOpen={isDeleteConfirmOpen}
+        <DeleteConnectionConfirmationDialog
+          isOpen={isDeleteConfirmDialogOpen}
           onConfirm={handleConfirmDeleteConnection}
-          onCancel={() => {
-            setIsDeleteConfirmOpen(false);
-            setConnectionToDelete(null);
-            setIsAttemptingDelete(false);
-          }}
+          onCancel={handleCancelDeleteConnection}
           sourcePersonName={allUserPeople.find(p => p.id === connectionToDelete.fromPersonId)?.name || 'Person A'}
           targetPersonName={allUserPeople.find(p => p.id === connectionToDelete.toPersonId)?.name || 'Person B'}
-          isDeleting={isAttemptingDelete}
+          isDeleting={isDeletingConnection}
         />
       )}
 
@@ -593,13 +581,14 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
          <CreateConnectionDialog
             isOpen={isEditConnectionDialogOpen}
             onOpenChange={(open) => {
+                // Prevent closing if its own save operation is in progress
                 if (!open && isAttemptingConnectionSave) return; 
                 setIsEditConnectionDialogOpen(open);
                 if (!open) setConnectionToEdit(null);
             }}
             sourcePerson={allUserPeople.find(p => p.id === connectionToEdit.fromPersonId) || personToEdit }
             targetPerson={allUserPeople.find(p => p.id === connectionToEdit.toPersonId) || personToEdit }
-            allUserPeople={allUserPeople} // Pass the full list
+            allUserPeople={allUserPeople}
             editingConnection={connectionToEdit}
             onSave={handleSaveConnection}
             isProcessing={isAttemptingConnectionSave}
