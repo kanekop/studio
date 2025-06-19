@@ -1,21 +1,21 @@
 
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import Image from 'next/image';
-import type { Person, Connection } from '@/types'; // Added Connection
+import Image from 'next/image'; // Keep as default NextImage import
+import type { Person, Connection } from '@/types'; 
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react'; // Added icons for badges
+import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react'; 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { storage } from '@/lib/firebase'; 
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge'; // For potential future use, current badges are custom
+import { Badge } from '@/components/ui/badge'; 
 
 interface PeopleListItemProps {
   person: Person;
-  allUserConnections: Connection[]; // New prop
+  allUserConnections: Connection[]; 
   isMergeSelectionMode?: boolean;
   isSelectedForMerge?: boolean;
   onToggleMergeSelection?: (personId: string) => void;
@@ -28,7 +28,7 @@ interface PeopleListItemProps {
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
 }
 
-const GENERAL_CONNECTION_TYPES = ['friend', 'colleague', 'club_member', 'associate', 'fellow_member', 'group_member'];
+const GENERAL_CONNECTION_TYPES = ['colleague', 'friend', 'club_member', 'acquaintance', 'fellow_member', 'group_member']; // Added acquaintance
 const FAMILY_CONNECTION_TYPES = ['parent', 'child', 'father', 'mother', 'family_member'];
 const PROFESSIONAL_CONNECTION_TYPES = ['manager', 'reports_to', 'subordinate', 'mentor', 'mentee'];
 const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
@@ -58,16 +58,17 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     setIsLoadingImage(true);
 
     const fetchImage = async () => {
-      const firstAppearance = person.faceAppearances?.[0];
-      if (firstAppearance?.faceImageStoragePath && storage) {
+      const imagePathToFetch = person.primaryFaceAppearancePath || person.faceAppearances?.[0]?.faceImageStoragePath;
+
+      if (imagePathToFetch && storage) {
         try {
-          const imageFileRef = storageRef(storage, firstAppearance.faceImageStoragePath);
+          const imageFileRef = storageRef(storage, imagePathToFetch);
           const url = await getDownloadURL(imageFileRef);
           if (isMounted) {
             setDisplayImageUrl(url);
           }
         } catch (error) {
-          console.error(`Error fetching image for ${person.name} (${firstAppearance.faceImageStoragePath}):`, error);
+          console.error(`Error fetching image for ${person.name} (${imagePathToFetch}):`, error);
           if (isMounted) {
             setDisplayImageUrl("https://placehold.co/150x150.png?text=Error");
           }
@@ -84,7 +85,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 
     fetchImage();
     return () => { isMounted = false; };
-  }, [person]);
+  }, [person]); // Re-fetch if person object changes (e.g., primaryFaceAppearancePath updates)
 
   const connectionCounts = useMemo(() => {
     let general = 0;
@@ -128,7 +129,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const rosterCount = person.rosterIds?.length || 0;
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) { // Prevent click if checkbox or button was target
+    if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) { 
       return;
     }
     if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
@@ -280,6 +281,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
               className="object-cover"
               data-ai-hint="person portrait"
               draggable="false" 
+              priority={false} // Set to false or remove if not above the fold
             />
           </div>
         )}
@@ -325,3 +327,4 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 };
 
 export default PeopleListItem;
+    

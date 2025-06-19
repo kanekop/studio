@@ -184,8 +184,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const fetchedConnectionsMap = new Map<string, Connection>();
 
     try {
+      // Fetch connections in chunks to avoid Firestore limits
+      const idChunks: string[][] = [];
       for (let i = 0; i < peopleIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
-        const chunk = peopleIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT);
+        idChunks.push(peopleIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT));
+      }
+
+      for (const chunk of idChunks) {
         if (chunk.length === 0) continue;
 
         const fromQuery = query(collection(db, "connections"), where("fromPersonId", "in", chunk));
@@ -478,8 +483,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       await imageLoadPromise;
       let personCounter = roster.length;
-  
-      const faceUploadInfos: UploadedFaceInfo[] = [];
   
       const faceProcessingPromises = drawnRegions.map(async (region, index) => {
         personCounter++;
@@ -849,6 +852,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 batch.update(personRef, {
                   faceAppearances: remainingAppearances,
                   rosterIds: remainingRosterIds,
+                  // If primary was the one deleted, clear it or pick a new default
+                  primaryFaceAppearancePath: (personData.primaryFaceAppearancePath === appearanceToDelete?.faceImageStoragePath) 
+                                              ? (remainingAppearances?.[0]?.faceImageStoragePath || null) 
+                                              : personData.primaryFaceAppearancePath,
                   updatedAt: serverTimestamp()
                 });
               } else { 
@@ -921,6 +928,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setIsProcessingState(true);
 
     let targetData: Person | null = null; 
+    let sourceDataForPhoto: Person | null = null;
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -935,6 +943,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
         targetData = targetDoc.data() as Person; 
         const sourceData = sourceDoc.data() as Person;
+        sourceDataForPhoto = sourceData; // Keep for photo logic
         
         const getValue = (fieldKey: keyof FieldMergeChoices, tVal: string | undefined, sVal: string | undefined): string | undefined => {
             const choice = fieldChoices[fieldKey];
@@ -955,7 +964,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const otherPersonsName = fieldChoices.name === 'person1' ? sourceData.name : targetData.name;
         const otherPersonsId = fieldChoices.name === 'person1' ? sourceData.id : targetData.id;
 
-
         if (otherPersonsNotes) {
             mergedNotes += `${mergedNotes ? "\n\n" : ""}Merged from ${otherPersonsName} (ID: ${otherPersonsId}):\n${otherPersonsNotes}`;
         }
@@ -970,6 +978,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const mergedFaceAppearances = Array.from(mergedFaceAppearancesSet.values());
         const mergedRosterIds = Array.from(new Set([...(targetData.rosterIds || []), ...(sourceData.rosterIds || [])]));
 
+        let finalPrimaryFacePath = fieldChoices.name === 'person1' ? targetData.primaryFaceAppearancePath : sourceData.primaryFaceAppearancePath;
+        if (!finalPrimaryFacePath && mergedFaceAppearances.length > 0) {
+           finalPrimaryFacePath = mergedFaceAppearances[0].faceImageStoragePath;
+        }
+
+
         transaction.update(targetPersonRef, {
           name: mergedName,
           notes: mergedNotes,
@@ -979,6 +993,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           firstMet: mergedFirstMet || "",
           firstMetContext: mergedFirstMetContext || "",
           faceAppearances: mergedFaceAppearances,
+          primaryFaceAppearancePath: finalPrimaryFacePath || null,
           rosterIds: mergedRosterIds,
           updatedAt: serverTimestamp()
         });
@@ -1007,8 +1022,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       toConnectionsSnapshot.forEach(connDoc => {
         const connData = connDoc.data();
-        if (connData.fromPersonId === targetPersonId) { // Connection was between target and source
-          // This might be redundant if already handled by fromConnectionsSnapshot, but safe to include
+        if (connData.fromPersonId === targetPersonId) { 
           if (!fromConnectionsSnapshot.docs.some(d => d.id === connDoc.id && d.data().toPersonId === targetPersonId)) {
              connectionsBatch.delete(connDoc.ref);
           }
@@ -1035,7 +1049,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
       const sourceName = allUserPeople.find(p => p.id === sourcePersonId)?.name || "Deleted Person";
-      const targetNameAfterMerge = (targetData && (fieldChoices.name === 'person1' ? targetData.name : sourceName)) || (targetData?.name || "Merged Person");
+      const targetNameAfterMerge = (targetData && (fieldChoices.name === 'person1' ? targetData.name : sourceDataForPhoto?.name)) || (targetData?.name || "Merged Person");
 
 
       toast({ title: "Merge Successful", description: `${sourceName} has been merged into ${targetNameAfterMerge}. Connections updated.` });
@@ -1066,8 +1080,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     try {
       const peopleWithImageDataPromises = allUserPeople.map(async (p) => {
         let faceImageDataUri: string | undefined = undefined;
-        if (p.faceAppearances && p.faceAppearances.length > 0 && p.faceAppearances[0].faceImageStoragePath) {
-          faceImageDataUri = await imageStoragePathToDataURI(p.faceAppearances[0].faceImageStoragePath);
+        const pathToUse = p.primaryFaceAppearancePath || p.faceAppearances?.[0]?.faceImageStoragePath;
+        if (pathToUse) {
+          faceImageDataUri = await imageStoragePathToDataURI(pathToUse);
         }
         return { 
           id: p.id, 
@@ -1194,17 +1209,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     
     if (successfullyProcessedFirestore) {
       let imagesSuccessfullyDeletedCount = 0;
-      for (const path of imagesToDeleteFromStorage) {
+      const uniqueImagesToDelete = Array.from(new Set(imagesToDeleteFromStorage));
+      for (const path of uniqueImagesToDelete) {
         try {
           await deleteObject(storageRefStandard(appFirebaseStorage, path));
           imagesSuccessfullyDeletedCount++;
         } catch (storageError: any) {
           console.warn(`FRC: Failed to delete face image ${path} from Storage:`, storageError.message);
-          
         }
       }
-      if (imagesToDeleteFromStorage.length > 0) {
-          toast({ title: "Image Cleanup Complete", description: `Attempted to delete ${imagesToDeleteFromStorage.length} associated image(s). ${imagesSuccessfullyDeletedCount} successful.`});
+      if (uniqueImagesToDelete.length > 0) {
+          toast({ title: "Image Cleanup Complete", description: `Attempted to delete ${uniqueImagesToDelete.length} associated image(s). ${imagesSuccessfullyDeletedCount} successful.`});
       }
     }
     
@@ -1234,6 +1249,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         firstMet: details.firstMet || "",
         firstMetContext: details.firstMetContext || "",
         notes: details.notes || "",
+        primaryFaceAppearancePath: details.primaryFaceAppearancePath || null,
         updatedAt: serverTimestamp()
       };
       
@@ -1328,7 +1344,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const connectionRef = doc(db, "connections", connectionId);
       await deleteDoc(connectionRef);
       toast({ title: "Connection Deleted", description: "The connection has been removed." });
-      setAllUserConnections(prev => prev.filter(conn => conn.id !== connectionId)); // Optimistic UI update
+      setAllUserConnections(prev => prev.filter(conn => conn.id !== connectionId)); 
       return true;
     } catch (error: any) {
       console.error(`FRC: Error deleting connection ${connectionId}:`, error);
@@ -1402,3 +1418,4 @@ export const useFaceRoster = (): FaceRosterContextType => {
   return context;
 };
 
+    
