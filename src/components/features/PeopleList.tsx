@@ -30,6 +30,11 @@ export default function PeopleList({
   onToggleDeleteSelection,
   generalActionDisabled = false
 }: PeopleListProps) {
+  // Safe array access with fallback
+  const safePeople = people || [];
+  const safeSelectedForMergeIds = selectedForMergeIds || [];
+  const safeSelectedForDeletionIds = selectedForDeletionIds || [];
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
@@ -40,7 +45,7 @@ export default function PeopleList({
     );
   }
 
-  if (people.length === 0) {
+  if (safePeople.length === 0) {
     return (
       <Card className="mt-4">
         <CardContent className="pt-6">
@@ -55,20 +60,27 @@ export default function PeopleList({
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {people.map((person) => (
-        <PeopleListItem
-          key={person.id}
-          person={person}
-          onEditClick={() => onEditClick(person)}
-          onInitiateConnection={onInitiateConnection}
-          selectionMode={selectionMode}
-          isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? selectedForMergeIds?.includes(person.id) : false}
-          onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
-          isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? selectedForDeletionIds?.includes(person.id) : false}
-          onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
-          generalActionDisabled={generalActionDisabled}
-        />
-      ))}
+      {safePeople.map((person) => {
+        if (!person?.id) {
+          console.warn('Person object missing id:', person);
+          return null;
+        }
+        
+        return (
+          <PeopleListItem
+            key={person.id}
+            person={person}
+            onEditClick={() => onEditClick(person)}
+            onInitiateConnection={onInitiateConnection}
+            selectionMode={selectionMode}
+            isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? safeSelectedForMergeIds.includes(person.id) : false}
+            onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
+            isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? safeSelectedForDeletionIds.includes(person.id) : false}
+            onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
+            generalActionDisabled={generalActionDisabled}
+          />
+        );
+      })}
     </div>
   );
 }

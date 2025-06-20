@@ -168,6 +168,79 @@ Before committing:
 3. Test core flows: image upload, person creation, connection management
 4. Verify Firebase security rules work correctly
 
+## Error Handling & Code Robustness Policy
+
+### Critical Development Principles
+
+**ALL CODE MUST BE DEFENSIVE AND NULL-SAFE**
+
+1. **Never assume data exists**:
+   ```typescript
+   // ❌ WRONG - Will crash if people is undefined
+   const person = people.find(p => p.id === id);
+   
+   // ✅ CORRECT - Safe access with fallback
+   const person = people?.find(p => p.id === id) || null;
+   ```
+
+2. **Always check loading states**:
+   ```typescript
+   // ❌ WRONG - Shows content before data loads
+   if (connections.length === 0) return <EmptyState />;
+   
+   // ✅ CORRECT - Consider loading state
+   if (isLoading) return <LoadingState />;
+   if (!connections || connections.length === 0) return <EmptyState />;
+   ```
+
+3. **Validate all external data**:
+   ```typescript
+   // ❌ WRONG - Direct access to nested properties
+   const name = user.profile.name;
+   
+   // ✅ CORRECT - Safe nested access
+   const name = user?.profile?.name || 'Unknown';
+   ```
+
+4. **Use strict TypeScript**:
+   - Enable `strict: true` in tsconfig.json
+   - Use `?` for optional properties
+   - Define union types for possible null/undefined states
+   - Use type guards for runtime validation
+
+5. **Handle async operations properly**:
+   ```typescript
+   // ✅ CORRECT - Always wrap in try-catch
+   const handleAction = async () => {
+     try {
+       setLoading(true);
+       await performOperation();
+       toast.success('Success');
+     } catch (error) {
+       console.error('Operation failed:', error);
+       toast.error('Operation failed');
+     } finally {
+       setLoading(false);
+     }
+   };
+   ```
+
+6. **Implement proper error boundaries**:
+   - Use React Error Boundaries for component-level errors
+   - Provide meaningful fallback UIs
+   - Log errors for debugging
+
+### Code Review Checklist
+
+Before committing any code, verify:
+- [ ] All array access uses optional chaining (`?.`)
+- [ ] All object property access is null-safe
+- [ ] Loading states are properly handled
+- [ ] Error boundaries are in place for critical components
+- [ ] TypeScript strict mode warnings are resolved
+- [ ] All async operations have try-catch blocks
+- [ ] User feedback is provided for error states
+
 ## Notes
 
 - Firebase config is hardcoded (no .env file needed)

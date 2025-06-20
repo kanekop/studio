@@ -185,10 +185,16 @@ export default function ManagePeoplePage() {
   };
 
   const handleInitiateConnection = (sourcePersonId: string, targetPersonId: string) => {
+    if (!allUserPeople || allUserPeople.length === 0) {
+      toast({ title: "Error", description: "People data not available.", variant: "destructive" });
+      return;
+    }
+    
     if (sourcePersonId === targetPersonId) {
       toast({ title: "Cannot connect person to themself", variant: "default" });
       return;
     }
+    
     const source = allUserPeople.find(p => p.id === sourcePersonId);
     const target = allUserPeople.find(p => p.id === targetPersonId);
 
@@ -221,13 +227,13 @@ export default function ManagePeoplePage() {
     }
   };
 
-  const canManuallyMerge = globallySelectedPeopleForMerge.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
-  const canDeleteSelected = selectedPeopleIdsForDeletion.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
+  const canManuallyMerge = globallySelectedPeopleForMerge?.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
+  const canDeleteSelected = selectedPeopleIdsForDeletion?.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections || isLoadingAllUserPeople;
 
-
-  const person1ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[0]) || null;
-  const person2ForDialog = allUserPeople.find(p => p.id === globallySelectedPeopleForMerge[1]) || null;
+  // Safe access to people data for dialog
+  const person1ForDialog = allUserPeople?.find(p => p.id === globallySelectedPeopleForMerge?.[0]) || null;
+  const person2ForDialog = allUserPeople?.find(p => p.id === globallySelectedPeopleForMerge?.[1]) || null;
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -253,7 +259,7 @@ export default function ManagePeoplePage() {
           <Button
             variant="outline"
             onClick={fetchMergeSuggestions}
-            disabled={generalActionDisabled || isLoadingMergeSuggestions || allUserPeople.length < 2 || isDeleteSelectionMode}
+            disabled={generalActionDisabled || isLoadingMergeSuggestions || (allUserPeople?.length || 0) < 2 || isDeleteSelectionMode}
             title={isDeleteSelectionMode ? "Finish deletion first" : "Find merge suggestions"}
           >
             {isLoadingMergeSuggestions ? (
@@ -274,7 +280,7 @@ export default function ManagePeoplePage() {
           <Button
             variant={isMergeSelectionMode ? "default" : "outline"}
             onClick={handleToggleMergeMode}
-            disabled={generalActionDisabled || allUserPeople.length < 2 || isDeleteSelectionMode}
+            disabled={generalActionDisabled || (allUserPeople?.length || 0) < 2 || isDeleteSelectionMode}
             className={isMergeSelectionMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
             title={isDeleteSelectionMode ? "Finish deletion first" : (isMergeSelectionMode ? "Cancel Merge Selection" : "Select to Merge Manually")}
           >
@@ -292,7 +298,7 @@ export default function ManagePeoplePage() {
           <Button
             variant={isDeleteSelectionMode ? "default" : "outline"}
             onClick={handleToggleDeleteMode}
-            disabled={generalActionDisabled || allUserPeople.length < 1 || isMergeSelectionMode}
+            disabled={generalActionDisabled || (allUserPeople?.length || 0) < 1 || isMergeSelectionMode}
             className={isDeleteSelectionMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
             title={isMergeSelectionMode ? "Finish merging first" : (isDeleteSelectionMode ? "Cancel Deletion" : "Select to Delete")}
           >
@@ -316,7 +322,7 @@ export default function ManagePeoplePage() {
           onSearchQueryChange={setLocalSearchQuery}
           companyFilter={peopleCompanyFilter}
           onCompanyFilterChange={setPeopleCompanyFilter}
-          availableCompanies={getUniqueCompanies()}
+          availableCompanies={getUniqueCompanies?.() || []}
           onClearFilters={() => {
             setLocalSearchQuery("");
             setPeopleCompanyFilter("");
@@ -326,7 +332,7 @@ export default function ManagePeoplePage() {
 
       <div className="mb-4 flex justify-between items-center">
         <p className="text-sm text-muted-foreground">
-          {isLoadingAllUserPeople ? 'Loading...' : `Showing ${filteredPeople.length} of ${allUserPeople.length} people.`}
+          {isLoadingAllUserPeople ? 'Loading...' : `Showing ${filteredPeople?.length || 0} of ${allUserPeople?.length || 0} people.`}
         </p>
         <div className="flex gap-2">
           {/* ... Action buttons like Merge, Delete ... */}
@@ -339,14 +345,14 @@ export default function ManagePeoplePage() {
             Merge Mode: Select exactly two people from the list to merge.
             The first selected will be the primary.
           </p>
-          {globallySelectedPeopleForMerge.length > 0 && (
+          {(globallySelectedPeopleForMerge?.length || 0) > 0 && (
             <Button
               onClick={handleInitiateMergeFromSelection}
               disabled={!canManuallyMerge}
               size="sm"
               className="mt-2 bg-green-600 hover:bg-green-700 text-white"
             >
-              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge.length})
+              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge?.length || 0})
             </Button>
           )}
         </div>
@@ -357,7 +363,7 @@ export default function ManagePeoplePage() {
           <p className="text-sm text-orange-700 dark:text-orange-300">
             Delete Mode: Select one or more people from the list to delete.
           </p>
-          {selectedPeopleIdsForDeletion.length > 0 && (
+          {(selectedPeopleIdsForDeletion?.length || 0) > 0 && (
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
                 <Button
@@ -366,14 +372,14 @@ export default function ManagePeoplePage() {
                   className="mt-2"
                   disabled={!canDeleteSelected}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedPeopleIdsForDeletion.length})
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedPeopleIdsForDeletion?.length || 0})
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
                   <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Are you sure you want to delete {selectedPeopleIdsForDeletion.length} selected person(s)?
+                    Are you sure you want to delete {selectedPeopleIdsForDeletion?.length || 0} selected person(s)?
                     This will remove them from all rosters and delete their associated face images. This action cannot be undone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -398,7 +404,7 @@ export default function ManagePeoplePage() {
         </div>
       )}
 
-      {mergeSuggestions.length > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && (
+      {(mergeSuggestions?.length || 0) > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && (
         <Card className="mb-6 shadow-md">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
@@ -423,7 +429,7 @@ export default function ManagePeoplePage() {
           <CardContent>
             <ScrollArea className="max-h-[300px] pr-3">
               <div className="space-y-3">
-                {mergeSuggestions.map((suggestion, index) => (
+                {mergeSuggestions?.map((suggestion, index) => (
                   <div key={`${suggestion.person1Id}-${suggestion.person2Id}-${index}`} className="p-3 border rounded-md bg-card/80 hover:shadow-sm">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                       <div>
@@ -460,7 +466,7 @@ export default function ManagePeoplePage() {
           Looking for merge suggestions...
         </div>
       )}
-      {!isLoadingMergeSuggestions && mergeSuggestions.length === 0 && allUserPeople.length > 1 && !isDeleteSelectionMode && (
+      {!isLoadingMergeSuggestions && (mergeSuggestions?.length || 0) === 0 && (allUserPeople?.length || 0) > 1 && !isDeleteSelectionMode && (
         <Card className="mb-6 shadow-sm border-dashed">
           <CardContent className="p-6 text-center">
             <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
@@ -473,7 +479,7 @@ export default function ManagePeoplePage() {
       )}
 
 
-      {isLoadingAllUserPeople || (isLoadingAllUserConnections && allUserPeople.length > 0) ? (
+      {isLoadingAllUserPeople || (isLoadingAllUserConnections && (allUserPeople?.length || 0) > 0) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="flex flex-col space-y-3 p-4 border rounded-lg">
@@ -484,13 +490,13 @@ export default function ManagePeoplePage() {
             </div>
           ))}
         </div>
-      ) : allUserPeople.length === 0 ? (
+      ) : (allUserPeople?.length || 0) === 0 ? (
         <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
           <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <p className="font-semibold">No people registered yet.</p>
           <p className="text-sm">Upload images and create rosters to add people to your list.</p>
         </div>
-      ) : filteredPeople.length === 0 ? (
+      ) : (filteredPeople?.length || 0) === 0 ? (
         <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
           <Search className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
           <p className="font-semibold">No people found matching your filters.</p>
@@ -498,14 +504,14 @@ export default function ManagePeoplePage() {
         </div>
       ) : (
         <PeopleList
-          people={filteredPeople}
+          people={filteredPeople || []}
           isLoading={isLoadingAllUserPeople}
           onEditClick={handleOpenEditPersonDialog}
           onInitiateConnection={handleInitiateConnection}
           selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
-          selectedForMergeIds={globallySelectedPeopleForMerge}
+          selectedForMergeIds={globallySelectedPeopleForMerge || []}
           onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
-          selectedForDeletionIds={selectedPeopleIdsForDeletion}
+          selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
           onToggleDeleteSelection={togglePersonSelectionForDeletion}
           generalActionDisabled={generalActionDisabled}
         />
@@ -523,8 +529,8 @@ export default function ManagePeoplePage() {
 
       <EditPersonDialog
         personToEdit={personToEdit}
-        allUserPeople={allUserPeople}
-        allUserConnections={allUserConnections}
+        allUserPeople={allUserPeople || []}
+        allUserConnections={allUserConnections || []}
         isLoadingConnections={isLoadingAllUserConnections}
         isLoadingPeople={isLoadingAllUserPeople}
         isOpen={isEditPersonDialogOpen}

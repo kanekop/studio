@@ -12,20 +12,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
+import { useFaceRoster } from '@/contexts/FaceRosterContext';
 
 interface PeopleListItemProps {
   person: Person;
-  allUserConnections: Connection[];
-  isMergeSelectionMode?: boolean;
-  isSelectedForMerge?: boolean;
-  onToggleMergeSelection?: (personId: string) => void;
-  isDisabledForMergeSelection?: boolean;
-  isDeleteSelectionMode?: boolean;
-  isSelectedForDelete?: boolean;
-  onToggleDeleteSelection?: (personId: string) => void;
-  onEdit: () => void;
-  disableActions?: boolean;
+  onEditClick: () => void;
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
+  selectionMode?: 'merge' | 'delete' | 'none';
+  isSelectedForMerge?: boolean;
+  onToggleMergeSelection?: () => void;
+  isSelectedForDeletion?: boolean;
+  onToggleDeleteSelection?: () => void;
+  generalActionDisabled?: boolean;
 }
 
 const GENERAL_CONNECTION_TYPES = ['colleague', 'friend', 'club_member', 'acquaintance', 'fellow_member', 'group_member']; // Added acquaintance
@@ -36,18 +34,16 @@ const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
 
 const PeopleListItem: React.FC<PeopleListItemProps> = ({
   person,
-  allUserConnections,
-  isMergeSelectionMode = false,
-  isSelectedForMerge = false,
-  onToggleMergeSelection = () => { },
-  isDisabledForMergeSelection = false,
-  isDeleteSelectionMode = false,
-  isSelectedForDelete = false,
-  onToggleDeleteSelection = () => { },
-  onEdit,
-  disableActions = false,
+  onEditClick,
   onInitiateConnection,
+  selectionMode = 'none',
+  isSelectedForMerge = false,
+  onToggleMergeSelection,
+  isSelectedForDeletion = false,
+  onToggleDeleteSelection,
+  generalActionDisabled = false,
 }) => {
+  const { allUserConnections } = useFaceRoster();
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
@@ -93,8 +89,8 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
     let professional = 0;
     let partner = 0;
 
-    const relevantConnections = allUserConnections.filter(
-      conn => conn.fromPersonId === person.id || conn.toPersonId === person.id
+    const relevantConnections = (allUserConnections || []).filter(
+      conn => conn?.fromPersonId === person?.id || conn?.toPersonId === person?.id
     );
 
     relevantConnections.forEach(conn => {
@@ -103,7 +99,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       let countedProfessional = false;
       let countedPartner = false;
 
-      conn.types.forEach(type => {
+      (conn?.types || []).forEach(type => {
         if (GENERAL_CONNECTION_TYPES.includes(type) && !countedGeneral) {
           general++;
           countedGeneral = true;
@@ -123,7 +119,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       });
     });
     return { general, family, professional, partner };
-  }, [person.id, allUserConnections]);
+  }, [person?.id, allUserConnections]);
 
 
   const rosterCount = person.rosterIds?.length || 0;
@@ -131,38 +127,38 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     handleCardClickUtil(e, {
       onCardClick: () => {
-        if (disableActions && !isDeleteSelectionMode && !isMergeSelectionMode) return;
+        if (generalActionDisabled && selectionMode === 'none') return;
 
-        if (isDeleteSelectionMode && onToggleDeleteSelection) {
-          onToggleDeleteSelection(person.id);
-        } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
-          onToggleMergeSelection(person.id);
-        } else if (!isDeleteSelectionMode && !isMergeSelectionMode && !disableActions) {
-          onEdit();
+        if (selectionMode === 'delete' && onToggleDeleteSelection) {
+          onToggleDeleteSelection();
+        } else if (selectionMode === 'merge' && onToggleMergeSelection) {
+          onToggleMergeSelection();
+        } else if (selectionMode === 'none' && !generalActionDisabled) {
+          onEditClick();
         }
       }
     });
   };
 
   const handleCheckboxChange = (checked: boolean | 'indeterminate') => {
-    if (disableActions) return;
-    if (isDeleteSelectionMode && onToggleDeleteSelection) {
-      onToggleDeleteSelection(person.id);
-    } else if (isMergeSelectionMode && onToggleMergeSelection && !isDisabledForMergeSelection) {
-      onToggleMergeSelection(person.id);
+    if (generalActionDisabled) return;
+    if (selectionMode === 'delete' && onToggleDeleteSelection) {
+      onToggleDeleteSelection();
+    } else if (selectionMode === 'merge' && onToggleMergeSelection) {
+      onToggleMergeSelection();
     }
   };
 
-  const showCheckbox = (isDeleteSelectionMode || isMergeSelectionMode) && !disableActions;
-  const isChecked = isDeleteSelectionMode ? isSelectedForDelete : (isMergeSelectionMode ? isSelectedForMerge : false);
-  const effectiveDisabledForMergeSelection = isMergeSelectionMode && isDisabledForMergeSelection;
+  const showCheckbox = selectionMode !== 'none' && !generalActionDisabled;
+  const isChecked = selectionMode === 'delete' ? isSelectedForDeletion : (selectionMode === 'merge' ? isSelectedForMerge : false);
+  const effectiveDisabledForMergeSelection = selectionMode === 'merge' && generalActionDisabled;
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
+    if (generalActionDisabled || selectionMode !== 'none') {
       e.preventDefault();
       return;
     }
-    e.dataTransfer.setData("sourcePersonId", person.id);
+    e.dataTransfer.setData("sourcePersonId", person?.id || '');
     e.dataTransfer.effectAllowed = "move";
     setIsBeingDragged(true);
     setDraggingState(true);
@@ -170,7 +166,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) {
+    if (generalActionDisabled || selectionMode !== 'none') {
       e.dataTransfer.dropEffect = "none";
       return;
     }
@@ -178,9 +174,9 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   };
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
+    if (generalActionDisabled || selectionMode !== 'none') return;
     const sourcePersonIdDragged = e.dataTransfer.types.includes("sourcepersonid") ? e.dataTransfer.getData("sourcePersonId") : null;
-    if (sourcePersonIdDragged && sourcePersonIdDragged !== person.id) {
+    if (sourcePersonIdDragged && sourcePersonIdDragged !== person?.id) {
       setIsBeingDraggedOver(true);
     }
   };
@@ -194,10 +190,10 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsBeingDraggedOver(false);
-    if (disableActions || isDeleteSelectionMode || isMergeSelectionMode) return;
+    if (generalActionDisabled || selectionMode !== 'none') return;
 
     const sourcePersonId = e.dataTransfer.getData("sourcePersonId");
-    const targetPersonId = person.id;
+    const targetPersonId = person?.id;
 
     if (sourcePersonId && targetPersonId && sourcePersonId !== targetPersonId) {
       onInitiateConnection(sourcePersonId, targetPersonId);
@@ -213,7 +209,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
 
   return (
     <Card
-      draggable={!disableActions && !isDeleteSelectionMode && !isMergeSelectionMode}
+      draggable={!generalActionDisabled && selectionMode === 'none'}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
@@ -222,10 +218,10 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       onDragEnd={handleDragEnd}
       className={cn(
         "flex flex-col h-full shadow-md hover:shadow-lg transition-all duration-200 rounded-lg overflow-hidden relative group",
-        ((isMergeSelectionMode || isDeleteSelectionMode) && !disableActions) && "cursor-pointer",
-        (isSelectedForMerge && isMergeSelectionMode) && "ring-2 ring-offset-2 ring-blue-500 border-blue-500",
-        (isSelectedForDelete && isDeleteSelectionMode) && "ring-2 ring-offset-2 ring-destructive border-destructive",
-        (disableActions || effectiveDisabledForMergeSelection) && !isDeleteSelectionMode && !isMergeSelectionMode && "opacity-70",
+        (selectionMode !== 'none' && !generalActionDisabled) && "cursor-pointer",
+        (isSelectedForMerge && selectionMode === 'merge') && "ring-2 ring-offset-2 ring-blue-500 border-blue-500",
+        (isSelectedForDeletion && selectionMode === 'delete') && "ring-2 ring-offset-2 ring-destructive border-destructive",
+        (generalActionDisabled || effectiveDisabledForMergeSelection) && selectionMode === 'none' && "opacity-70",
         (effectiveDisabledForMergeSelection && !isChecked) && "opacity-60 cursor-not-allowed",
         isBeingDragged && "opacity-50 border-2 border-dashed border-primary scale-95 shadow-xl z-50",
         isBeingDraggedOver && !isBeingDragged && "ring-2 ring-offset-2 ring-green-500 border-green-500 scale-105 bg-green-500/10"
@@ -247,23 +243,23 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
             checked={isChecked}
             onCheckedChange={handleCheckboxChange}
             disabled={effectiveDisabledForMergeSelection && !isChecked}
-            aria-label={`Select ${person.name}`}
+            aria-label={`Select ${person?.name || 'Unknown'}`}
             className={cn("h-5 w-5",
-              isDeleteSelectionMode && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
-              isMergeSelectionMode && isChecked && "border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
+              selectionMode === 'delete' && isChecked && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
+              selectionMode === 'merge' && isChecked && "border-blue-500 data-[state=checked]:bg-blue-500 data-[state=checked]:border-blue-500"
             )}
           />
         </div>
       )}
-      {!isMergeSelectionMode && !isDeleteSelectionMode && (
+      {selectionMode === 'none' && (
         <Button
           variant="ghost"
           size="icon"
           className="absolute top-1 right-1 z-10 h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          disabled={disableActions}
-          aria-label={`Edit ${person.name}`}
-          title={`Edit ${person.name}`}
+          onClick={(e) => { e.stopPropagation(); onEditClick(); }}
+          disabled={generalActionDisabled}
+          aria-label={`Edit ${person?.name || 'Unknown'}`}
+          title={`Edit ${person?.name || 'Unknown'}`}
         >
           <Pencil className="h-4 w-4" />
         </Button>
@@ -276,7 +272,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           <div className="aspect-square w-full relative bg-muted">
             <Image
               src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
-              alt={`Face of ${person.name}`}
+              alt={`Face of ${person?.name || 'Unknown'}`}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="object-cover"
@@ -288,10 +284,10 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
         )}
       </CardHeader>
       <CardContent className="p-3 flex-grow">
-        <CardTitle className="text-lg font-semibold truncate" title={person.name}>
-          {person.name}
+        <CardTitle className="text-lg font-semibold truncate" title={person?.name || 'Unknown'}>
+          {person?.name || 'Unknown'}
         </CardTitle>
-        {person.company && (
+        {person?.company && (
           <p className="text-xs text-muted-foreground truncate" title={person.company}>{person.company}</p>
         )}
         <div className="mt-2 flex flex-wrap gap-1.5 items-center text-xs text-muted-foreground">
