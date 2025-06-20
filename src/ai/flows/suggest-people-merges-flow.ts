@@ -22,7 +22,7 @@ const SuggestMergePersonSchema = z.object({
 
 // Input schema: An array of people
 const SuggestMergeInputSchema = z.array(SuggestMergePersonSchema).describe('A list of people to analyze for potential duplicates, including textual details and optional face images.');
-export type SuggestMergeInput = z.infer<typeof SuggestMergePersonSchema>[];
+export type SuggestMergeInput = z.infer<typeof SuggestMergeInputSchema>;
 
 
 // Output schema for a single suggested pair
@@ -37,7 +37,7 @@ const SuggestedMergePairSchema = z.object({
 
 // Output schema: An array of suggested pairs
 const SuggestMergeOutputSchema = z.array(SuggestedMergePairSchema).describe('A list of suggested merge pairs based on textual and visual analysis.');
-export type SuggestMergeOutput = z.infer<typeof SuggestedMergePairSchema>[];
+export type SuggestMergeOutput = z.infer<typeof SuggestMergeOutputSchema>;
 
 
 // Exported async wrapper function that calls the Genkit flow

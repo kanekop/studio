@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 
 // Describes a rectangular region within an image, using original image coordinates.
 export interface Region {
+  id?: string; // Optional unique ID for regions
   x: number;
   y: number;
   width: number;
@@ -12,14 +13,17 @@ export interface Region {
 // Represents a region being drawn or displayed on the canvas,
 // with coordinates and dimensions relative to the displayed image on canvas.
 export interface DisplayRegion extends Region {
-  id?: string; // Optional temporary unique ID for display purposes
+  id: string; // Required unique ID for display purposes
 }
 
 // Represents a single appearance of a person's face in a specific roster (original image).
 export interface FaceAppearance {
+  id: string; // Unique identifier for this face appearance
   rosterId: string; // ID of the roster (original image) this face was cropped from
   faceImageStoragePath: string; // Path to the cropped face image in Cloud Storage for this appearance
+  faceImagePath?: string; // Alternative property name for backward compatibility
   originalRegion: Region; // The region in the original image (identified by rosterId) coordinates
+  isPrimary?: boolean; // Whether this is the primary appearance for the person
 }
 
 // Represents an individual person identified in the app.
@@ -32,6 +36,7 @@ export interface Person {
   
   faceAppearances: FaceAppearance[]; // Array of all instances where this person's face was identified
   primaryFaceAppearancePath?: string | null; // Optional: Storage path of the selected primary face image from faceAppearances
+  profileImagePath?: string; // Optional: Profile image path
   
   addedBy: string; // UID of the user who added this person
   rosterIds: string[]; // Array of 'roster' document IDs this person belongs to
@@ -39,6 +44,7 @@ export interface Person {
   company?: string;
   hobbies?: string; 
   birthday?: string; 
+  age?: number; // Optional: Person's age
   firstMet?: string; 
   firstMetContext?: string;
   knownAcquaintances?: string[]; // DEPRECATED: Use connections collection
@@ -84,9 +90,12 @@ export interface ImageSet {
   rosterName: string; // User-defined name for this set (e.g., "Q1 Team Meeting")
   
   originalImageStoragePath: string; // Path to the original uploaded image in Cloud Storage
+  originalImagePath?: string; // Alternative property name for backward compatibility
   originalImageDimensions: { width: number; height: number }; // Dimensions of the original image
+  originalImageSize?: { width: number; height: number }; // Alternative property name for backward compatibility
   
   peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
+  people?: EditablePersonInContext[]; // Optional: Embedded people data for this roster
   
   createdAt: Timestamp | any; // Firestore serverTimestamp for creation
   updatedAt: Timestamp | any; // Firestore serverTimestamp for last update
@@ -142,6 +151,7 @@ export interface AdvancedSearchParams {
     name?: string;
     company?: string;
     hobbies?: string[];
+    ageRange?: { min: number | null; max: number | null };
     birthdayRange?: { start: Date; end: Date };
     firstMetRange?: { start: Date; end: Date };
     connectionTypes?: string[];

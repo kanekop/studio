@@ -1,313 +1,244 @@
-# FaceRoster 今後の開発タスクドキュメント作成指示
+# FaceRoster アプリケーション リファクタリング実施プロンプト
 
-## 指示内容
+## 背景と目的
+FaceRosterアプリケーションで頻発する「Peopleクリック時のバグ」（画像が表示されない、エラーが発生する、クリックができない等）を根本から解決するため、アーキテクチャレベルでのリファクタリングを実施してください。
 
-以下の内容を含む開発ロードマップドキュメントを `docs/development/roadmap.md` として作成してください。このドキュメントは、今後の開発方針を明確にし、優先順位に従って機能実装を進めるためのガイドラインとなります。
+## 現在の主要な問題点
 
----
+### 1. FaceRosterContext.tsxの肥大化
+- 3000行を超える巨大なファイル
+- 状態管理、データフェッチ、画像処理、エラーハンドリングなど多くの責務を持つ
+- 単一のisProcessingステートで複数の非同期処理を管理している
 
-# FaceRoster 開発ロードマップ
+### 2. People機能の不安定性  
+- EditPersonDialogを開く際の画像読み込みエラー
+- 人物リストのクリックイベントが効かない場合がある
+- Firebase Storage URLの取得失敗時の処理が不適切
 
-## 概要
+### 3. エラーハンドリングの不統一
+- try-catchブロックでのエラー処理が統一されていない
+- エラーメッセージがユーザーに適切に伝わらない
+- ネットワークエラーと権限エラーの区別がない
 
-このドキュメントは、FaceRosterの今後の開発タスクを優先度順に整理したものです。各タスクには、実装の背景、期待される価値、技術的な考慮事項が含まれています。
+## リファクタリング実施方針
 
-最終更新日: 2025年1月
+### Phase 1: Context分割とカスタムフックの作成
 
-## 優先度の定義
+#### 1.1 FaceRosterContextを機能別に分割
+```
+src/contexts/
+├── AuthContext.tsx          # 認証関連
+├── RosterContext.tsx        # 名簿（Roster）関連
+├── PeopleContext.tsx        # 人物（People）関連  
+├── ConnectionContext.tsx    # 関係性（Connection）関連
+├── UIContext.tsx           # UI状態（ダイアログ、ローディング等）
+└── index.tsx               # 統合Provider
+```
 
-- 🔴 **最重要（Critical）**: ユーザー体験に直接影響し、早急な対応が必要
-- 🟠 **重要（High）**: 主要機能の改善や重要な新機能
-- 🟡 **中重要（Medium）**: ユーザー価値を高める機能
-- 🟢 **中期的（Long-term）**: 将来的な成長のための機能
-- 🔵 **付加価値（Nice-to-have）**: あると良い機能
+#### 1.2 カスタムフックの作成
+```
+src/hooks/
+├── useImageUpload.ts       # 画像アップロード処理
+├── useFirestoreSync.ts     # Firestore同期処理
+├── useStorageImage.ts      # Storage画像取得（エラーハンドリング含む）
+├── useAsyncOperation.ts    # 非同期処理の状態管理
+└── useDialogManager.ts     # ダイアログの開閉管理
+```
 
-## タスク一覧
+### Phase 2: 画像処理の安定化
 
-### 1. 🔴 パフォーマンスの最適化（最重要）
+#### 2.1 useStorageImageフックの実装
+```typescript
+// 画像URLの取得とエラーハンドリングを一元化
+interface UseStorageImageResult {
+  imageUrl: string | null;
+  isLoading: boolean;
+  error: Error | null;
+  retry: () => void;
+}
 
-#### 背景と問題点
-- 大量の人物データ（100人以上）やコネクション表示時にUIが重くなる
-- 画像の読み込みが遅い
-- 初期ロード時間が長い
+const useStorageImage = (storagePath: string | null): UseStorageImageResult => {
+  // 実装内容:
+  // - キャッシュ機構
+  // - リトライロジック
+  // - プレースホルダー画像のフォールバック
+  // - 適切なエラーハンドリング
+};
+```
 
-#### 実装内容
-1. **仮想スクロールの実装**
-   ```typescript
-   // react-windowを使用した人物リストの最適化
-   import { FixedSizeList } from 'react-window';
-   ```
-   - 人物リスト（/people）での実装
-   - コネクションリスト（/connections）での実装
+#### 2.2 画像読み込みエラーの適切な処理
+- Firebase Storage権限エラーの検出と対処
+- ネットワークエラーのリトライ機能
+- 画像が存在しない場合のデフォルト画像表示
 
-2. **画像の最適化**
-   - 遅延読み込みの改善（Intersection Observer API）
-   - 画像のプリロード戦略
-   - WebP形式のサポート
-   - サムネイル生成（Cloud Functions）
+### Phase 3: People機能の安定化
 
-3. **Firestoreクエリの最適化**
-   - 複合インデックスの見直し
-   - バッチ読み込みの最適化
-   - キャッシング戦略の実装
+#### 3.1 EditPersonDialogの改善
+```typescript
+// 画像読み込みを事前に行い、エラーを適切に処理
+const EditPersonDialog = ({ person, isOpen, onOpenChange }) => {
+  // FaceAppearanceの画像を事前にロード
+  const appearances = useFaceAppearanceImages(person.faceAppearances);
+  
+  // メイン画像の安全な取得
+  const primaryImage = usePrimaryImage(person);
+  
+  // エラー状態の管理
+  const { error, clearError } = useErrorHandler();
+  
+  // ダイアログの開閉を確実に制御
+  const dialogManager = useDialogManager();
+};
+```
 
-4. **コンポーネントの最適化**
-   - React.memoの適切な使用
-   - useMemo/useCallbackの見直し
-   - 不要な再レンダリングの防止
+#### 3.2 PeopleListItemのイベント処理改善
+```typescript
+// クリックイベントの確実な処理
+const PeopleListItem = ({ person, onEditClick, ... }) => {
+  // ドラッグ状態とクリックイベントの分離
+  const { isDragging, dragHandlers } = useDragHandlers();
+  
+  // クリックハンドラーの最適化
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isDragging && !isSelectionMode) {
+      onEditClick(person);
+    }
+  }, [person, isDragging, isSelectionMode, onEditClick]);
+  
+  // 画像の安全な取得
+  const { imageUrl } = usePersonImage(person);
+};
+```
 
-#### 期待される成果
-- 初期ロード時間を50%削減
-- 大量データでもスムーズなスクロール
-- メモリ使用量の削減
+### Phase 4: 非同期処理の改善
 
-### 2. 🟠 検索・フィルタリング機能の強化（重要）
+#### 4.1 useAsyncOperationフックの実装
+```typescript
+// 個別の非同期処理を管理
+const useAsyncOperation = <T,>(
+  operation: (...args: any[]) => Promise<T>
+) => {
+  const [state, setState] = useState({
+    isLoading: false,
+    error: null,
+    data: null,
+  });
+  
+  const execute = useCallback(async (...args) => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      const result = await operation(...args);
+      setState({ isLoading: false, error: null, data: result });
+      return result;
+    } catch (error) {
+      setState(prev => ({ ...prev, isLoading: false, error }));
+      throw error;
+    }
+  }, [operation]);
+  
+  return { ...state, execute };
+};
+```
 
-#### 現状の課題
-- 名前検索と会社フィルターのみ
-- 複雑な条件での検索ができない
-- 検索結果のUXが不十分
+### Phase 5: エラーハンドリングの統一
 
-#### 実装内容
-1. **高度な検索機能**
-   ```typescript
-   interface AdvancedSearchParams {
-     name?: string;
-     company?: string;
-     hobbies?: string[];
-     birthdayRange?: { start: Date; end: Date };
-     firstMetRange?: { start: Date; end: Date };
-     connectionTypes?: string[];
-     hasConnections?: boolean;
-   }
-   ```
+#### 5.1 エラー種別の定義
+```typescript
+enum ErrorType {
+  NETWORK = 'NETWORK',
+  PERMISSION = 'PERMISSION',
+  NOT_FOUND = 'NOT_FOUND',
+  VALIDATION = 'VALIDATION',
+  UNKNOWN = 'UNKNOWN'
+}
 
-2. **検索UIの改善**
-   - 検索フィルターパネルの実装
-   - 検索条件の保存機能
-   - 検索履歴の表示
-
-3. **全文検索の実装**
-   - Algoliaまたは自前の検索インデックス
-   - ファジー検索のサポート
-   - 検索結果のハイライト
-
-#### 技術的考慮事項
-- Firestoreの制限を考慮した設計
-- クライアントサイドフィルタリングとの併用
-- パフォーマンスへの影響を最小化
-
-### 3. 🟠 モバイル対応の改善（重要）
-
-#### 現状の問題
-- ドラッグ&ドロップがモバイルで使えない
-- レスポンシブデザインが不完全
-- タッチ操作に最適化されていない
-
-#### 実装内容
-1. **タッチ操作でのコネクション作成**
-   - 長押しメニューの実装
-   - スワイプジェスチャー
-   - モバイル専用のコネクション作成フロー
-
-2. **レスポンシブデザインの完全対応**
-   - ブレークポイントの見直し
-   - モバイルファーストの再設計
-   - タッチターゲットサイズの最適化（最小44x44px）
-
-3. **PWA対応**
-   - Service Workerの実装
-   - オフライン対応
-   - アプリアイコンとスプラッシュスクリーン
-
-### 4. 🟡 データエクスポート/インポート機能（中重要）
-
-#### ビジネス価値
-- GDPR準拠
-- ユーザーデータのポータビリティ
-- バックアップ需要への対応
-
-#### 実装内容
-1. **エクスポート機能**
-   ```typescript
-   interface ExportOptions {
-     format: 'csv' | 'json' | 'pdf';
-     includeConnections: boolean;
-     includeImages: boolean;
-     dateRange?: { start: Date; end: Date };
-   }
-   ```
-
-2. **インポート機能**
-   - CSVインポート（テンプレート提供）
-   - 他システムからの移行サポート
-   - 重複チェックとマージ機能
-
-3. **バックアップ機能**
-   - 定期的な自動バックアップ
-   - バックアップの復元機能
-
-### 5. 🟡 ネットワークビジュアライゼーション（中重要）
-
-#### ユーザー価値
-- 関係性の直感的な理解
-- 隠れたつながりの発見
-- プレゼンテーション用途
-
-#### 実装内容
-1. **グラフビューの実装**
-   - D3.js または vis.js の採用
-   - Force-directed graph
-   - ズーム・パン機能
-
-2. **ビュー切り替え**
-   - リスト表示
-   - グリッド表示
-   - グラフ表示
-
-3. **インタラクティブ機能**
-   - ノードのドラッグ
-   - 関係の強さによる線の太さ
-   - クラスターの自動検出
-
-### 6. 🟢 AI機能の統合（中期的）
-
-#### 将来的な差別化要因
-- 自動化による効率化
-- より高度な人物管理
-
-#### 実装内容
-1. **顔認識の強化**
-   - 新しい写真での自動人物識別
-   - 類似度スコアの表示
-   - 誤認識の修正学習
-
-2. **関係性の自動提案**
-   - 共通の属性からの推測
-   - ソーシャルグラフ分析
-   - 関係パターンの学習
-
-3. **自然言語処理**
-   - 自然言語での検索
-   - メモからの情報抽出
-   - 自動タグ生成
-
-### 7. 🟢 通知・リマインダー機能（便利機能）
-
-#### 実装内容
-1. **イベント通知**
-   - 誕生日リマインダー
-   - 記念日通知
-   - カスタムリマインダー
-
-2. **配信方法**
-   - アプリ内通知
-   - メール通知
-   - プッシュ通知（PWA）
-
-### 8. 🟢 共有・コラボレーション機能（将来機能）
-
-#### 実装内容
-1. **共有機能**
-   - 人物情報の選択的共有
-   - 読み取り専用リンク
-   - 期限付き共有
-
-2. **チーム機能**
-   - ワークスペースの概念
-   - 権限管理（閲覧/編集/管理）
-   - アクティビティログ
-
-### 9. 🔵 統計・分析ダッシュボード（付加価値）
-
-#### 実装内容
-- 人脈の成長グラフ
-- 関係タイプ別の分布
-- 会社別の統計
-- エンゲージメント分析
-
-### 10. 🔵 UI/UXの洗練（継続的改善）
-
-#### 実装内容
-- ダークモード
-- カスタムテーマ
-- アニメーションの改善
-- マイクロインタラクション
-
-## 実装順序の推奨
-
-### Phase 1（1-2ヶ月）
-1. パフォーマンス最適化
-2. 基本的なモバイル対応
-
-### Phase 2（2-3ヶ月）
-3. 検索機能の強化
-4. データエクスポート機能
-
-### Phase 3（3-4ヶ月）
-5. ネットワークビジュアライゼーション
-6. 高度なモバイル対応（PWA）
-
-### Phase 4（4-6ヶ月）
-7. AI機能の基礎実装
-8. 通知機能
-
-### Phase 5（6ヶ月以降）
-9. 共有・コラボレーション
-10. その他の付加価値機能
-
-## 技術的な準備事項
-
-### 必要なライブラリ・ツール
-```json
-{
-  "dependencies": {
-    "react-window": "^1.8.10",
-    "d3": "^7.9.0",
-    "@tanstack/react-virtual": "^3.0.0",
-    "fuse.js": "^7.0.0",
-    "react-intersection-observer": "^9.5.0"
+class AppError extends Error {
+  constructor(
+    message: string,
+    public type: ErrorType,
+    public originalError?: any
+  ) {
+    super(message);
   }
 }
 ```
 
-### インフラの考慮事項
-- Cloud Functions の利用拡大
-- Algolia または Elasticsearch の導入検討
-- CDN の活用
-- 画像最適化サービスの導入
+#### 5.2 統一的なエラーハンドラー
+```typescript
+const useErrorHandler = () => {
+  const { toast } = useToast();
+  
+  const handleError = useCallback((error: Error) => {
+    if (error instanceof AppError) {
+      switch (error.type) {
+        case ErrorType.NETWORK:
+          toast({ 
+            title: "ネットワークエラー",
+            description: "接続を確認してください",
+            action: <RetryButton />
+          });
+          break;
+        case ErrorType.PERMISSION:
+          toast({ 
+            title: "アクセス権限エラー",
+            description: "この操作を実行する権限がありません"
+          });
+          break;
+        // ... 他のエラータイプ
+      }
+    }
+  }, [toast]);
+  
+  return { handleError };
+};
+```
 
-## メトリクスと成功指標
+## 実装手順
 
-### パフォーマンス
-- Initial Load Time < 3秒
-- Time to Interactive < 5秒
-- 1000人のリスト表示で60fps維持
+1. **準備作業**
+   - 現在のコードのバックアップ
+   - テスト環境の準備
+   - 段階的な移行計画の作成
 
-### ユーザーエンゲージメント
-- 検索機能の利用率 > 50%
-- モバイルユーザー比率 > 40%
-- データエクスポート機能の月間利用率 > 10%
+2. **Phase 1実装（1-2日）**
+   - Contextの分割
+   - 基本的なカスタムフックの作成
+   - 既存コンポーネントへの段階的な適用
 
-## リスクと対策
+3. **Phase 2-3実装（2-3日）**
+   - 画像処理の安定化
+   - People機能の改善
+   - 重点的なテスト
 
-### 技術的リスク
-- Firestoreのクエリ制限 → 適切なデータ設計とキャッシング
-- 大量データでのパフォーマンス → 段階的な読み込みと仮想化
+4. **Phase 4-5実装（1-2日）**
+   - 非同期処理の改善
+   - エラーハンドリングの統一
+   - 全体的な動作確認
 
-### ビジネスリスク
-- 機能の複雑化 → シンプルなUXの維持
-- 開発リソース → 優先順位の明確化
+5. **最終調整（1日）**
+   - パフォーマンスチューニング
+   - 不要なコードの削除
+   - ドキュメント更新
 
-## まとめ
+## 成功指標
 
-このロードマップは、FaceRosterを「個人の人脈管理ツール」から「包括的な関係性管理プラットフォーム」へと進化させるための指針です。ユーザーフィードバックとメトリクスに基づいて、定期的に見直しと更新を行います。
+1. **安定性の向上**
+   - Peopleクリック時のエラー発生率が0%
+   - 画像表示の成功率が99%以上
 
----
+2. **保守性の向上**
+   - FaceRosterContext.tsxを500行以下に削減
+   - 各Contextファイルが単一責任原則に従う
 
-## ドキュメント作成時の注意事項
+3. **開発効率の向上**
+   - 新機能追加時の影響範囲が明確
+   - テストが書きやすい構造
 
-1. このドキュメントは生きたドキュメントとして、定期的に更新してください
-2. 各タスクの実装開始時には、より詳細な技術設計書を作成してください
-3. 実装完了したタスクには完了日を記録し、別セクションに移動してください
-4. 新しい要求や問題が発生した場合は、適切な優先度で追加してください
+## 注意事項
+
+- **段階的な移行**: 一度に全てを変更せず、機能ごとに段階的に移行する
+- **後方互換性**: 既存の機能を壊さないよう、十分なテストを行う
+- **エラー監視**: 本番環境でのエラーを監視し、問題があれば迅速に対応する
+
+このリファクタリングにより、FaceRosterアプリケーションの安定性と保守性が大幅に向上し、今後の機能追加も容易になります。
