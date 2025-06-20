@@ -12,7 +12,7 @@ import { Connection, Person } from '@/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
 
 export default function ManageConnectionsPage() {
-    const { allUserConnections, people, isLoadingAllUserConnections, deleteConnection } = useFaceRoster();
+    const { allUserConnections, people, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
     const { openDialog } = useDialogManager();
     
     const [searchQuery, setSearchQuery] = useState('');
@@ -40,12 +40,12 @@ export default function ManageConnectionsPage() {
 
     // 人物情報を取得するヘルパー関数
     const getPersonInfo = (personId: string): Person | null => {
-        return people.find(p => p.id === personId) || null;
+        return people?.find(p => p.id === personId) || null;
     };
 
     // フィルタリングされたコネクション
     const filteredConnections = useMemo(() => {
-        if (!allUserConnections) return [];
+        if (!allUserConnections || !people) return [];
 
         return allUserConnections.filter(connection => {
             // 検索クエリでフィルタリング
@@ -156,7 +156,7 @@ export default function ManageConnectionsPage() {
             </Card>
 
             {/* コネクション一覧 */}
-            {isLoadingAllUserConnections ? (
+            {isLoadingAllUserConnections || isLoadingAllUserPeople ? (
                 <Card>
                     <CardContent className="p-8 text-center">
                         <div className="text-muted-foreground">読み込み中...</div>
