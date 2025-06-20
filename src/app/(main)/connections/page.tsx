@@ -12,7 +12,7 @@ import { Connection, Person } from '@/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
 
 export default function ManageConnectionsPage() {
-    const { allUserConnections, people, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
+    const { allUserConnections, allUserPeople, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
     const { openDialog } = useDialogManager();
     
     const [searchQuery, setSearchQuery] = useState('');
@@ -41,12 +41,12 @@ export default function ManageConnectionsPage() {
 
     // 人物情報を取得するヘルパー関数
     const getPersonInfo = (personId: string): Person | null => {
-        return people?.find(p => p.id === personId) || null;
+        return allUserPeople?.find(p => p.id === personId) || null;
     };
 
     // フィルタリングとソート機能
     const filteredAndSortedConnections = useMemo(() => {
-        if (!allUserConnections || !people) return [];
+        if (!allUserConnections || !allUserPeople) return [];
 
         // フィルタリング
         let filtered = allUserConnections.filter(connection => {
@@ -110,7 +110,7 @@ export default function ManageConnectionsPage() {
         });
 
         return filtered;
-    }, [allUserConnections, people, searchQuery, typeFilter, strengthFilter, sortBy]);
+    }, [allUserConnections, allUserPeople, searchQuery, typeFilter, strengthFilter, sortBy]);
 
     const handleEditConnection = (connection: Connection) => {
         openDialog('createConnection', { editingConnection: connection });
@@ -128,7 +128,7 @@ export default function ManageConnectionsPage() {
 
     const handleCreateNewConnection = () => {
         // 人物が2人以上いる場合のみ新規作成を許可
-        if ((people?.length || 0) < 2) {
+        if ((allUserPeople?.length || 0) < 2) {
             alert('コネクションを作成するには最低2人の人物が必要です。');
             return;
         }
@@ -148,7 +148,7 @@ export default function ManageConnectionsPage() {
                     </div>
                     <Button 
                         onClick={handleCreateNewConnection}
-                        disabled={isLoadingAllUserPeople || (people?.length || 0) < 2}
+                        disabled={isLoadingAllUserPeople || (allUserPeople?.length || 0) < 2}
                         className="flex items-center gap-2"
                     >
                         <Plus className="h-4 w-4" />
