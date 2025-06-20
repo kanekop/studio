@@ -101,7 +101,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
     if (e.button !== 0) return; // Only left click
     const pos = getMousePos(e);
     setStartPoint(pos);
-    setCurrentRect({ ...pos, width: 0, height: 0 });
+    setCurrentRect({ id: 'current', ...pos, width: 0, height: 0 });
     setIsDrawing(true);
   };
 
@@ -111,6 +111,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
     const width = pos.x - startPoint.x;
     const height = pos.y - startPoint.y;
     setCurrentRect({
+      id: 'current',
       x: width > 0 ? startPoint.x : pos.x,
       y: height > 0 ? startPoint.y : pos.y,
       width: Math.abs(width),

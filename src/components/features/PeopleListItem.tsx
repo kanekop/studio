@@ -5,13 +5,12 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
-import { storage } from '@/lib/firebase';
-import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useStorageImage } from '@/hooks/useStorageImage.improved';
 import OptimizedImage from '@/components/ui/optimized-image';
 import MobileLongPressMenu from './MobileLongPressMenu';
 
@@ -47,54 +46,17 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   allUserPeople = [],
 }) => {
   const { allUserConnections } = useFaceRoster();
-  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
-  // 画像URLキャッシュ（メモリリーク防止のため）
-  const imageUrlCache = useMemo(() => new Map<string, string>(), []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchImage = async () => {
-      const imagePathToFetch = person.primaryFaceAppearancePath || person.faceAppearances?.[0]?.faceImageStoragePath;
-
-      if (imagePathToFetch && storage) {
-        // キャッシュをチェック
-        if (imageUrlCache.has(imagePathToFetch)) {
-          if (isMounted) {
-            setDisplayImageUrl(imageUrlCache.get(imagePathToFetch)!);
-          }
-          return;
-        }
-
-        try {
-          const imageFileRef = storageRef(storage, imagePathToFetch);
-          const url = await getDownloadURL(imageFileRef);
-          if (isMounted) {
-            // キャッシュに保存
-            imageUrlCache.set(imagePathToFetch, url);
-            setDisplayImageUrl(url);
-          }
-        } catch (error) {
-          console.error(`Error fetching image for ${person.name} (${imagePathToFetch}):`, error);
-          if (isMounted) {
-            const errorUrl = "https://placehold.co/300x300.png?text=Error";
-            imageUrlCache.set(imagePathToFetch, errorUrl);
-            setDisplayImageUrl(errorUrl);
-          }
-        }
-      } else {
-        if (isMounted) {
-          setDisplayImageUrl("https://placehold.co/300x300.png?text=No+Image");
-        }
-      }
-    };
-
-    fetchImage();
-    return () => { isMounted = false; };
-  }, [person, imageUrlCache]); // Re-fetch if person object changes (e.g., primaryFaceAppearancePath updates)
+  // 改善版useStorageImageを使用
+  const imagePath = person.primaryFaceAppearancePath || person.faceAppearances?.[0]?.faceImageStoragePath;
+  const { url: displayImageUrl, isLoading: isImageLoading, error: imageError } = useStorageImage(imagePath, {
+    fallbackUrl: "https://placehold.co/300x300.png?text=No+Image",
+    enableCache: true,
+    retryCount: 2,
+    timeout: 10000
+  });
 
   const connectionCounts = useMemo(() => {
     let general = 0;
@@ -280,18 +242,22 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
 
       <CardHeader className="p-0">
         <div className="aspect-square w-full relative bg-muted">
-          <OptimizedImage
-            src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
-            alt={`Face of ${person?.name || 'Unknown'}`}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            objectFit="cover"
-            priority={false}
-            placeholder="blur"
-            loading="lazy"
-            fallbackSrc="https://placehold.co/300x300.png?text=No+Image"
-            className="rounded-t-lg"
-          />
+          {isImageLoading ? (
+            <Skeleton className="w-full h-full rounded-t-lg" />
+          ) : (
+            <OptimizedImage
+              src={displayImageUrl || "https://placehold.co/300x300.png?text=No+Image"}
+              alt={`Face of ${person?.name || 'Unknown'}`}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              objectFit="cover"
+              priority={false}
+              placeholder="blur"
+              loading="lazy"
+              fallbackSrc="https://placehold.co/300x300.png?text=No+Image"
+              className="rounded-t-lg"
+            />
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-3 flex-grow">

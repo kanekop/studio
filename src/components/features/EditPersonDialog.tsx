@@ -27,7 +27,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { storage } from '@/lib/firebase';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { cn } from '@/lib/utils';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { usePeople, useConnections } from '@/contexts';
 import CreateConnectionDialog from './CreateConnectionDialog';
 import {
   AlertDialog,
@@ -122,7 +122,8 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   onSave,
   isProcessing: isSaveProcessing,
 }) => {
-  const { deleteConnection, updateConnection, isProcessing: isContextProcessing } = useFaceRoster();
+  const { updateGlobalPersonDetails } = usePeople();
+  const { deleteConnection, updateConnection } = useConnections();
 
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
@@ -282,7 +283,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       .filter(item => item.otherPerson);
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
-  const overallIsProcessing = isSaveProcessing || isContextProcessing || isDeletingConnection || isAttemptingConnectionSave;
+  const overallIsProcessing = isSaveProcessing || isDeletingConnection || isAttemptingConnectionSave;
 
   const renderFieldChoice = (
     fieldKey: keyof EditPersonFormData,

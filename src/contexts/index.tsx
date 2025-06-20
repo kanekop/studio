@@ -2,9 +2,13 @@
 import React from 'react';
 import { AuthProvider } from './AuthContext';
 import { UIProvider } from './UIContext';
+import { ImageProvider } from './ImageContext';
+import { SearchFilterProvider } from './SearchFilterContext';
 import { PeopleProvider } from './PeopleContext';
 import { ConnectionProvider } from './ConnectionContext';
 import { RosterProvider } from './RosterContext';
+import { PeopleMergeProvider } from './PeopleMergeContext';
+import { PeopleDeletionProvider } from './PeopleDeletionContext';
 
 export interface AppProvidersProps {
   children: React.ReactNode;
@@ -14,13 +18,21 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
   return (
     <AuthProvider>
       <UIProvider>
-        <PeopleProvider>
-          <ConnectionProvider>
-            <RosterProvider>
-              {children}
-            </RosterProvider>
-          </ConnectionProvider>
-        </PeopleProvider>
+        <ImageProvider>
+          <SearchFilterProvider>
+            <ConnectionProvider>
+              <PeopleProvider>
+                <PeopleMergeProvider>
+                  <PeopleDeletionProvider>
+                    <RosterProvider>
+                      {children}
+                    </RosterProvider>
+                  </PeopleDeletionProvider>
+                </PeopleMergeProvider>
+              </PeopleProvider>
+            </ConnectionProvider>
+          </SearchFilterProvider>
+        </ImageProvider>
       </UIProvider>
     </AuthProvider>
   );
@@ -29,9 +41,13 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
 // Re-export all hooks for easy access
 export { useAuth } from './AuthContext';
 export { useUI } from './UIContext';
+export { useImage } from './ImageContext';
+export { useSearchFilter } from './SearchFilterContext';
 export { usePeople } from './PeopleContext';
 export { useConnections } from './ConnectionContext';
 export { useRoster } from './RosterContext';
+export { usePeopleMerge } from './PeopleMergeContext';
+export { usePeopleDeletion } from './PeopleDeletionContext';
 
 // Re-export utility hooks
 export { useAsyncOperation } from '@/hooks/useAsyncOperation';

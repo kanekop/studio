@@ -51,11 +51,14 @@ body {
     --sidebar-accent-foreground: 270 60% 15%;
     --sidebar-border: 288 30% 70%;
     --sidebar-ring: 288 48% 50%;
+    --z-base: 1;
     --z-dropdown: 100;
     --z-overlay: 200;
     --z-modal: 300;
+    --z-modal-overlay: 299;
     --z-popover: 400;
     --z-tooltip: 500;
+    --z-notification: 600;
   }
 
   .dark {
@@ -88,11 +91,14 @@ body {
     --sidebar-accent-foreground: 270 60% 10%;
     --sidebar-border: 270 15% 20%;
     --sidebar-ring: 288 48% 60%;
+    --z-base: 1;
     --z-dropdown: 100;
     --z-overlay: 200;
     --z-modal: 300;
+    --z-modal-overlay: 299;
     --z-popover: 400;
     --z-tooltip: 500;
+    --z-notification: 600;
   }
 }
 
@@ -132,7 +138,7 @@ body.is-dragging * {
 
 /* ダイアログのオーバーレイ */
 [data-radix-dialog-overlay] {
-  z-index: calc(var(--z-overlay, 200) - 1);
+  z-index: var(--z-modal-overlay, 299);
 }
 
 [data-radix-alert-dialog-overlay] {

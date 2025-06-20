@@ -209,7 +209,7 @@ export const RosterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     imageDisplaySize: { width: number; height: number }
   ): DisplayRegion => {
     if (!originalImageSize) {
-      return { ...originalRegion };
+      return { id: originalRegion.id || 'default', ...originalRegion };
     }
 
     const scaleX = imageDisplaySize.width / originalImageSize.width;

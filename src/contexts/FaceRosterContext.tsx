@@ -669,6 +669,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       successfullyUploadedFaces.forEach(faceInfo => {
         const newAppearance: FaceAppearance = {
+          id: `appearance_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           rosterId: currentRosterDocId!,
           faceImageStoragePath: faceInfo.faceImageStoragePath,
           originalRegion: faceInfo.originalRegion,
