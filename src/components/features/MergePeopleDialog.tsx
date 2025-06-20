@@ -217,7 +217,7 @@ const MergePeopleDialog: React.FC<MergePeopleDialogProps> = ({
     const otherPersonsNotes = fieldChoices.name === 'person1' ? p2Notes : p1Notes;
 
     if (otherPersonsNotes) {
-        notes += `${notes ? "\n\n" : ""}Merged from ${otherNameForNotes} (ID: ${otherPersonsId}):\n${otherPersonsNotes}`;
+        notes += `${notes ? "\n\n" : ""}Merged from ${otherNameForNotes} (ID: ${otherIdForNotes}):\n${otherPersonsNotes}`;
     }
     return notes || "No notes will be set.";
   }, [person1, person2, fieldChoices.name]);

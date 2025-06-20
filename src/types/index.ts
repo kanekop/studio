@@ -1,5 +1,5 @@
 
-import type { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 
 // Describes a rectangular region within an image, using original image coordinates.
 export interface Region {
@@ -12,7 +12,7 @@ export interface Region {
 // Represents a region being drawn or displayed on the canvas,
 // with coordinates and dimensions relative to the displayed image on canvas.
 export interface DisplayRegion extends Region {
-  // id?: string; // Potentially, if display regions need temporary unique IDs before becoming Persons
+  id?: string; // Optional temporary unique ID for display purposes
 }
 
 // Represents a single appearance of a person's face in a specific roster (original image).
@@ -147,5 +147,13 @@ export interface AdvancedSearchParams {
     connectionTypes?: string[];
     hasConnections?: boolean;
     notes?: string;
+}
+
+// Local storage state for app persistence
+export interface StoredAppState {
+    people?: Person[];
+    rosters?: ImageSet[];
+    connections?: Connection[];
+    lastSyncTimestamp?: number;
 }
 

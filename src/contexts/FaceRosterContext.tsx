@@ -1,6 +1,6 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { User as FirebaseUser } from 'firebase/auth';
+import { User as FirebaseUser } from 'firebase/auth';
 import { auth, db, storage as appFirebaseStorage } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRefStandard, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage';
@@ -181,10 +181,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setUserRosters(fetchedRosters);
     } catch (error) {
       console.error("FRC: Error fetching user rosters:", error);
-      if (error instanceof FirestoreError && error.code === 'failed-precondition' && error.message.includes('query requires an index')) {
-        toast({ title: "Database Index Required", description: `A database index is needed for rosters. Error: ${error.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000 });
-      } else if (error instanceof FirestoreError) {
-        toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Error: ${error.message} (Code: ${error.code})`, variant: "destructive" });
+      const err = error as FirestoreError;
+      if (err.code === 'failed-precondition' && err.message?.includes('query requires an index')) {
+        toast({ title: "Database Index Required", description: `A database index is needed for rosters. Error: ${err.message}. The console may provide a link to create it.`, variant: "destructive", duration: 15000 });
+      } else if (err.code) {
+        toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Error: ${err.message} (Code: ${err.code})`, variant: "destructive" });
       } else {
         toast({ title: "Error Loading Rosters", description: `Could not fetch your saved rosters. Error: ${(error as Error).message}`, variant: "destructive" });
       }
@@ -1222,7 +1223,17 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const flowInput: SuggestMergeInput = await Promise.all(peopleWithImageDataPromises);
 
       const suggestions = await suggestPeopleMerges(flowInput);
-      setMergeSuggestions(suggestions);
+      const validSuggestions = suggestions.filter(s => 
+        s.person1Id && s.person1Name && s.person2Id && s.person2Name && s.reason
+      ).map(s => ({
+        person1Id: s.person1Id!,
+        person1Name: s.person1Name!,
+        person2Id: s.person2Id!,
+        person2Name: s.person2Name!,
+        reason: s.reason!,
+        confidence: s.confidence
+      }));
+      setMergeSuggestions(validSuggestions);
 
       if (suggestions.length === 0) {
         toast({ title: "No Merge Suggestions", description: "The AI found no potential duplicates based on current criteria." });

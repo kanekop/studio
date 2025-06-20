@@ -113,11 +113,12 @@ export default function MobileLongPressMenu({
   }, [longPressTimer]);
 
   const handleConnectToPerson = (targetPersonId: string) => {
+    if (!('id' in safePerson) || !safePerson.id || typeof safePerson.id !== 'string') return;
     onInitiateConnection(safePerson.id, targetPersonId);
     setIsConnectionDialogOpen(false);
   };
 
-  const availableConnections = safeAllPeople.filter(p => p.id !== safePerson.id);
+  const availableConnections = safeAllPeople.filter(p => p.id !== ('id' in safePerson ? safePerson.id : ''));
 
   // 通常のドロップダウンメニュー（デスクトップ用）
   const DropdownMenuComponent = (
@@ -189,7 +190,7 @@ export default function MobileLongPressMenu({
               コネクション作成
             </DialogTitle>
             <p className="text-sm text-muted-foreground">
-              {safePerson.name}とつなげる相手を選択してください
+              {('name' in safePerson && typeof safePerson.name === 'string' ? safePerson.name : '不明な人')}とつなげる相手を選択してください
             </p>
           </DialogHeader>
           

@@ -274,7 +274,7 @@ export default function ManageConnectionsPage() {
     }, [allUserConnections, allUserPeople, allFirestoreConnections, showAllConnections, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
 
     const handleEditConnection = (connection: Connection) => {
-        openDialog('createConnection', { editingConnection: connection });
+        openDialog('connection');
     };
 
     // 堅牢な削除ハンドラー
@@ -330,7 +330,7 @@ export default function ManageConnectionsPage() {
         }
         
         try {
-            openDialog('createConnection', {});
+            openDialog('connection');
         } catch (error) {
             console.error('Dialog open error:', error);
             toast({
