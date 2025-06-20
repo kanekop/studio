@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Network, Search, Filter, Users, Heart, Briefcase, Home, Edit, Trash2 } from 'lucide-react';
+import { Network, Search, Filter, Users, Heart, Briefcase, Home, Edit, Trash2, Plus, ArrowUpDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ export default function ManageConnectionsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('all');
     const [strengthFilter, setStrengthFilter] = useState<string>('all');
+    const [sortBy, setSortBy] = useState<string>('created_desc');
 
     // コネクションの種類で分類するためのヘルパー関数
     const getConnectionCategory = (types: string[]) => {
@@ -43,11 +44,12 @@ export default function ManageConnectionsPage() {
         return people?.find(p => p.id === personId) || null;
     };
 
-    // フィルタリングされたコネクション
-    const filteredConnections = useMemo(() => {
+    // フィルタリングとソート機能
+    const filteredAndSortedConnections = useMemo(() => {
         if (!allUserConnections || !people) return [];
 
-        return allUserConnections.filter(connection => {
+        // フィルタリング
+        let filtered = allUserConnections.filter(connection => {
             // 検索クエリでフィルタリング
             if (searchQuery) {
                 const fromPerson = getPersonInfo(connection.fromPersonId);
@@ -82,7 +84,33 @@ export default function ManageConnectionsPage() {
 
             return true;
         });
-    }, [allUserConnections, people, searchQuery, typeFilter, strengthFilter]);
+
+        // ソート処理
+        filtered.sort((a, b) => {
+            switch (sortBy) {
+                case 'created_asc':
+                    return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+                case 'created_desc':
+                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+                case 'strength_desc':
+                    return (b.strength || 0) - (a.strength || 0);
+                case 'strength_asc':
+                    return (a.strength || 0) - (b.strength || 0);
+                case 'name_asc':
+                    const aFromPerson = getPersonInfo(a.fromPersonId);
+                    const bFromPerson = getPersonInfo(b.fromPersonId);
+                    return (aFromPerson?.name || '').localeCompare(bFromPerson?.name || '');
+                case 'name_desc':
+                    const aFromPersonDesc = getPersonInfo(a.fromPersonId);
+                    const bFromPersonDesc = getPersonInfo(b.fromPersonId);
+                    return (bFromPersonDesc?.name || '').localeCompare(aFromPersonDesc?.name || '');
+                default:
+                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+            }
+        });
+
+        return filtered;
+    }, [allUserConnections, people, searchQuery, typeFilter, strengthFilter, sortBy]);
 
     const handleEditConnection = (connection: Connection) => {
         openDialog('createConnection', { editingConnection: connection });
@@ -98,6 +126,15 @@ export default function ManageConnectionsPage() {
         }
     };
 
+    const handleCreateNewConnection = () => {
+        // 人物が2人以上いる場合のみ新規作成を許可
+        if ((people?.length || 0) < 2) {
+            alert('コネクションを作成するには最低2人の人物が必要です。');
+            return;
+        }
+        openDialog('createConnection', {});
+    };
+
     return (
         <div className="container mx-auto py-8 px-4">
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -105,8 +142,18 @@ export default function ManageConnectionsPage() {
                     <Network className="inline-block mr-3 h-8 w-8" />
                     Manage Connections
                 </h1>
-                <div className="text-sm text-muted-foreground">
-                    {filteredConnections.length} connections found
+                <div className="flex items-center gap-4">
+                    <div className="text-sm text-muted-foreground">
+                        {filteredAndSortedConnections.length} connections found
+                    </div>
+                    <Button 
+                        onClick={handleCreateNewConnection}
+                        disabled={isLoadingAllUserPeople || (people?.length || 0) < 2}
+                        className="flex items-center gap-2"
+                    >
+                        <Plus className="h-4 w-4" />
+                        新規作成
+                    </Button>
                 </div>
             </div>
 
@@ -119,7 +166,7 @@ export default function ManageConnectionsPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
@@ -151,6 +198,20 @@ export default function ManageConnectionsPage() {
                                 <SelectItem value="weak">弱い関係 (0-1)</SelectItem>
                             </SelectContent>
                         </Select>
+                        <Select value={sortBy} onValueChange={setSortBy}>
+                            <SelectTrigger>
+                                <ArrowUpDown className="mr-2 h-4 w-4" />
+                                <SelectValue placeholder="並び順" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="created_desc">作成日（新しい順）</SelectItem>
+                                <SelectItem value="created_asc">作成日（古い順）</SelectItem>
+                                <SelectItem value="name_asc">人物名（昇順）</SelectItem>
+                                <SelectItem value="name_desc">人物名（降順）</SelectItem>
+                                <SelectItem value="strength_desc">関係の強さ（強い順）</SelectItem>
+                                <SelectItem value="strength_asc">関係の強さ（弱い順）</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
                 </CardContent>
             </Card>
@@ -162,7 +223,7 @@ export default function ManageConnectionsPage() {
                         <div className="text-muted-foreground">読み込み中...</div>
                     </CardContent>
                 </Card>
-            ) : filteredConnections.length === 0 ? (
+            ) : filteredAndSortedConnections.length === 0 ? (
                 <Card>
                     <CardContent className="p-8 text-center">
                         <div className="text-muted-foreground">
@@ -174,7 +235,7 @@ export default function ManageConnectionsPage() {
                 </Card>
             ) : (
                 <div className="space-y-4">
-                    {filteredConnections.map((connection) => {
+                    {filteredAndSortedConnections.map((connection) => {
                         const fromPerson = getPersonInfo(connection.fromPersonId);
                         const toPerson = getPersonInfo(connection.toPersonId);
                         const category = getConnectionCategory(connection.types);
