@@ -330,7 +330,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     // 会社によるフィルタリング
-    if (peopleCompanyFilter && peopleCompanyFilter !== 'all') {
+    if (peopleCompanyFilter && peopleCompanyFilter !== '__all__' && peopleCompanyFilter !== '') {
       filtered = filtered.filter(person =>
         person.company === peopleCompanyFilter
       );

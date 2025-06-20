@@ -28,7 +28,10 @@ export default function PeopleSearchFilters({
     availableCompanies,
     onClearFilters
 }: PeopleSearchFiltersProps) {
-    const hasActiveFilters = searchQuery || companyFilter;
+    const safeSearchQuery = searchQuery || '';
+    const safeCompanyFilter = companyFilter || '';
+    const safeAvailableCompanies = availableCompanies || [];
+    const hasActiveFilters = safeSearchQuery || safeCompanyFilter;
 
     return (
         <div className="space-y-4">
@@ -38,7 +41,7 @@ export default function PeopleSearchFilters({
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                         placeholder="名前、メール、メモなどで検索..."
-                        value={searchQuery}
+                        value={safeSearchQuery}
                         onChange={(e) => onSearchQueryChange(e.target.value)}
                         className="pl-9"
                     />
@@ -46,15 +49,18 @@ export default function PeopleSearchFilters({
 
                 {/* フィルター */}
                 <div className="flex gap-2">
-                    <Select value={companyFilter} onValueChange={onCompanyFilterChange}>
+                    <Select 
+                        value={safeCompanyFilter || '__all__'} 
+                        onValueChange={(value) => onCompanyFilterChange(value === '__all__' ? '' : value)}
+                    >
                         <SelectTrigger className="w-[200px]">
                             <SelectValue placeholder="会社で絞り込み" />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="">すべての会社</SelectItem>
-                            {availableCompanies.map((company) => (
-                                <SelectItem key={company} value={company}>
-                                    {company}
+                            <SelectItem value="__all__">すべての会社</SelectItem>
+                            {safeAvailableCompanies.map((company) => (
+                                <SelectItem key={company} value={company || '__unknown__'}>
+                                    {company || '不明'}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -76,18 +82,18 @@ export default function PeopleSearchFilters({
             {/* アクティブフィルター表示 */}
             {hasActiveFilters && (
                 <div className="flex flex-wrap gap-2">
-                    {searchQuery && (
+                    {safeSearchQuery && (
                         <Badge variant="secondary" className="gap-2">
-                            検索: {searchQuery}
+                            検索: {safeSearchQuery}
                             <X
                                 className="h-3 w-3 cursor-pointer"
                                 onClick={() => onSearchQueryChange("")}
                             />
                         </Badge>
                     )}
-                    {companyFilter && (
+                    {safeCompanyFilter && (
                         <Badge variant="secondary" className="gap-2">
-                            会社: {companyFilter}
+                            会社: {safeCompanyFilter}
                             <X
                                 className="h-3 w-3 cursor-pointer"
                                 onClick={() => onCompanyFilterChange("")}
