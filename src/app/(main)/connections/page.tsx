@@ -1,24 +1,30 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Network, Search, Filter, Users, Heart, Briefcase, Home, Edit, Trash2, Plus, ArrowUpDown } from 'lucide-react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { Network, Search, Filter, Users, Heart, Briefcase, Home, Edit, Trash2, Plus, ArrowUpDown, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { Connection, Person } from '@/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
+import { useToast } from '@/hooks/use-toast';
+import type { Timestamp } from 'firebase/firestore';
 
 export default function ManageConnectionsPage() {
     const { allUserConnections, allUserPeople, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
     const { openDialog } = useDialogManager();
+    const { toast } = useToast();
     
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<string>('all');
     const [strengthFilter, setStrengthFilter] = useState<string>('all');
     const [sortBy, setSortBy] = useState<string>('created_desc');
+    const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     // コネクションの種類で分類するためのヘルパー関数
     const getConnectionCategory = (types: string[]) => {
@@ -39,101 +45,244 @@ export default function ManageConnectionsPage() {
         }
     };
 
-    // 人物情報を取得するヘルパー関数
-    const getPersonInfo = (personId: string): Person | null => {
-        return allUserPeople?.find(p => p.id === personId) || null;
-    };
+    // 人物データのMapキャッシュ化（パフォーマンス改善）
+    const peopleMap = useMemo(() => {
+        const map = new Map<string, Person>();
+        allUserPeople?.forEach(person => {
+            if (person?.id) {
+                map.set(person.id, person);
+            }
+        });
+        return map;
+    }, [allUserPeople]);
 
-    // フィルタリングとソート機能
+    // 安全な人物情報取得関数
+    const getPersonInfo = useCallback((personId: string | null | undefined): Person | null => {
+        if (!personId || typeof personId !== 'string') return null;
+        return peopleMap.get(personId) || null;
+    }, [peopleMap]);
+
+    // Timestamp安全フォーマット関数
+    const formatTimestamp = useCallback((timestamp: Timestamp | any): string => {
+        try {
+            if (timestamp && typeof timestamp.toDate === 'function') {
+                return timestamp.toDate().toLocaleDateString();
+            }
+            if (timestamp && timestamp.seconds) {
+                return new Date(timestamp.seconds * 1000).toLocaleDateString();
+            }
+            return '不明';
+        } catch (error) {
+            console.warn('Timestamp format error:', error);
+            return '不明';
+        }
+    }, []);
+
+    // 安全な文字列検索関数
+    const safeStringIncludes = useCallback((str: string | null | undefined, search: string): boolean => {
+        if (!str || typeof str !== 'string') return false;
+        return str.toLowerCase().includes(search.toLowerCase());
+    }, []);
+
+    // 堅牢なフィルタリングとソート機能
     const filteredAndSortedConnections = useMemo(() => {
-        if (!allUserConnections || !allUserPeople) return [];
+        try {
+            setError(null);
+            
+            if (!Array.isArray(allUserConnections) || !Array.isArray(allUserPeople)) {
+                return [];
+            }
 
-        // フィルタリング
-        let filtered = allUserConnections.filter(connection => {
-            // 検索クエリでフィルタリング
-            if (searchQuery) {
+            // 有効なコネクションのみをフィルタリング（両方の人物が存在する）
+            const validConnections = allUserConnections.filter(connection => {
+                if (!connection?.id || !connection?.fromPersonId || !connection?.toPersonId) {
+                    return false;
+                }
+                
                 const fromPerson = getPersonInfo(connection.fromPersonId);
                 const toPerson = getPersonInfo(connection.toPersonId);
-                const searchLower = searchQuery.toLowerCase();
                 
-                const matchesSearch = 
-                    fromPerson?.name.toLowerCase().includes(searchLower) ||
-                    toPerson?.name.toLowerCase().includes(searchLower) ||
-                    connection.types.some(type => type.toLowerCase().includes(searchLower)) ||
-                    connection.reasons?.some(reason => reason.toLowerCase().includes(searchLower));
-                
-                if (!matchesSearch) return false;
-            }
+                return fromPerson && toPerson;
+            });
 
-            // タイプでフィルタリング
-            if (typeFilter !== 'all') {
-                const category = getConnectionCategory(connection.types);
-                if (category !== typeFilter) return false;
-            }
+            // 検索・フィルタリング処理
+            let filtered = validConnections.filter(connection => {
+                try {
+                    // 検索クエリでフィルタリング
+                    if (searchQuery && searchQuery.trim()) {
+                        const fromPerson = getPersonInfo(connection.fromPersonId);
+                        const toPerson = getPersonInfo(connection.toPersonId);
+                        const searchTerm = searchQuery.trim();
+                        
+                        const matchesSearch = 
+                            safeStringIncludes(fromPerson?.name, searchTerm) ||
+                            safeStringIncludes(toPerson?.name, searchTerm) ||
+                            (Array.isArray(connection.types) && connection.types.some(type => 
+                                safeStringIncludes(type, searchTerm)
+                            )) ||
+                            (Array.isArray(connection.reasons) && connection.reasons.some(reason => 
+                                safeStringIncludes(reason, searchTerm)
+                            ));
+                        
+                        if (!matchesSearch) return false;
+                    }
 
-            // 強さでフィルタリング
-            if (strengthFilter !== 'all') {
-                const strength = connection.strength || 0;
-                switch (strengthFilter) {
-                    case 'strong': return strength >= 4;
-                    case 'medium': return strength >= 2 && strength < 4;
-                    case 'weak': return strength < 2;
-                    default: return true;
+                    // タイプでフィルタリング
+                    if (typeFilter && typeFilter !== 'all') {
+                        if (!Array.isArray(connection.types) || connection.types.length === 0) {
+                            return false;
+                        }
+                        const category = getConnectionCategory(connection.types);
+                        if (category !== typeFilter) return false;
+                    }
+
+                    // 強さでフィルタリング
+                    if (strengthFilter && strengthFilter !== 'all') {
+                        const strength = typeof connection.strength === 'number' ? connection.strength : 0;
+                        switch (strengthFilter) {
+                            case 'strong': return strength >= 4;
+                            case 'medium': return strength >= 2 && strength < 4;
+                            case 'weak': return strength < 2;
+                            default: return true;
+                        }
+                    }
+
+                    return true;
+                } catch (filterError) {
+                    console.warn('Filter error for connection:', connection.id, filterError);
+                    return false;
                 }
-            }
+            });
 
-            return true;
-        });
+            // 安全なソート処理
+            filtered.sort((a, b) => {
+                try {
+                    switch (sortBy) {
+                        case 'created_asc': {
+                            const aTime = a.createdAt?.seconds || 0;
+                            const bTime = b.createdAt?.seconds || 0;
+                            return aTime - bTime;
+                        }
+                        case 'created_desc': {
+                            const aTime = a.createdAt?.seconds || 0;
+                            const bTime = b.createdAt?.seconds || 0;
+                            return bTime - aTime;
+                        }
+                        case 'strength_desc': {
+                            const aStrength = typeof a.strength === 'number' ? a.strength : 0;
+                            const bStrength = typeof b.strength === 'number' ? b.strength : 0;
+                            return bStrength - aStrength;
+                        }
+                        case 'strength_asc': {
+                            const aStrength = typeof a.strength === 'number' ? a.strength : 0;
+                            const bStrength = typeof b.strength === 'number' ? b.strength : 0;
+                            return aStrength - bStrength;
+                        }
+                        case 'name_asc': {
+                            const aFromPerson = getPersonInfo(a.fromPersonId);
+                            const bFromPerson = getPersonInfo(b.fromPersonId);
+                            const aName = aFromPerson?.name || '';
+                            const bName = bFromPerson?.name || '';
+                            return aName.localeCompare(bName);
+                        }
+                        case 'name_desc': {
+                            const aFromPerson = getPersonInfo(a.fromPersonId);
+                            const bFromPerson = getPersonInfo(b.fromPersonId);
+                            const aName = aFromPerson?.name || '';
+                            const bName = bFromPerson?.name || '';
+                            return bName.localeCompare(aName);
+                        }
+                        default: {
+                            const aTime = a.createdAt?.seconds || 0;
+                            const bTime = b.createdAt?.seconds || 0;
+                            return bTime - aTime;
+                        }
+                    }
+                } catch (sortError) {
+                    console.warn('Sort error:', sortError);
+                    return 0;
+                }
+            });
 
-        // ソート処理
-        filtered.sort((a, b) => {
-            switch (sortBy) {
-                case 'created_asc':
-                    return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
-                case 'created_desc':
-                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-                case 'strength_desc':
-                    return (b.strength || 0) - (a.strength || 0);
-                case 'strength_asc':
-                    return (a.strength || 0) - (b.strength || 0);
-                case 'name_asc':
-                    const aFromPerson = getPersonInfo(a.fromPersonId);
-                    const bFromPerson = getPersonInfo(b.fromPersonId);
-                    return (aFromPerson?.name || '').localeCompare(bFromPerson?.name || '');
-                case 'name_desc':
-                    const aFromPersonDesc = getPersonInfo(a.fromPersonId);
-                    const bFromPersonDesc = getPersonInfo(b.fromPersonId);
-                    return (bFromPersonDesc?.name || '').localeCompare(aFromPersonDesc?.name || '');
-                default:
-                    return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-            }
-        });
-
-        return filtered;
-    }, [allUserConnections, allUserPeople, searchQuery, typeFilter, strengthFilter, sortBy]);
+            return filtered;
+        } catch (globalError) {
+            console.error('Filtering/sorting error:', globalError);
+            setError('データの処理中にエラーが発生しました。ページを再読み込みしてください。');
+            return [];
+        }
+    }, [allUserConnections, allUserPeople, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
 
     const handleEditConnection = (connection: Connection) => {
         openDialog('createConnection', { editingConnection: connection });
     };
 
-    const handleDeleteConnection = async (connection: Connection) => {
-        if (window.confirm('このコネクションを削除しますか？')) {
-            try {
-                await deleteConnection(connection.id);
-            } catch (error) {
-                console.error('コネクションの削除に失敗しました:', error);
-            }
-        }
-    };
-
-    const handleCreateNewConnection = () => {
-        // 人物が2人以上いる場合のみ新規作成を許可
-        if ((allUserPeople?.length || 0) < 2) {
-            alert('コネクションを作成するには最低2人の人物が必要です。');
+    // 堅牢な削除ハンドラー
+    const handleDeleteConnection = useCallback(async (connection: Connection) => {
+        if (!connection?.id) {
+            toast({
+                title: "エラー",
+                description: "無効なコネクションです",
+                variant: "destructive"
+            });
             return;
         }
-        openDialog('createConnection', {});
-    };
+
+        if (!window.confirm('このコネクションを削除しますか？')) return;
+        
+        setDeletingConnectionId(connection.id);
+        setError(null);
+        
+        try {
+            const success = await deleteConnection(connection.id);
+            if (success) {
+                toast({
+                    title: "削除完了",
+                    description: "コネクションを削除しました"
+                });
+            } else {
+                throw new Error('Delete operation returned false');
+            }
+        } catch (error) {
+            console.error('コネクションの削除エラー:', error);
+            setError('コネクションの削除に失敗しました。再度お試しください。');
+            toast({
+                title: "削除失敗",
+                description: "コネクションの削除に失敗しました",
+                variant: "destructive"
+            });
+        } finally {
+            setDeletingConnectionId(null);
+        }
+    }, [deleteConnection, toast]);
+
+    // 安全な新規作成ハンドラー
+    const handleCreateNewConnection = useCallback(() => {
+        const peopleCount = Array.isArray(allUserPeople) ? allUserPeople.length : 0;
+        
+        if (peopleCount < 2) {
+            toast({
+                title: "作成不可",
+                description: "コネクションを作成するには最低2人の人物が必要です。",
+                variant: "destructive"
+            });
+            return;
+        }
+        
+        try {
+            openDialog('createConnection', {});
+        } catch (error) {
+            console.error('Dialog open error:', error);
+            toast({
+                title: "エラー",
+                description: "ダイアログを開けませんでした",
+                variant: "destructive"
+            });
+        }
+    }, [allUserPeople, openDialog, toast]);
+
+    // データの有効性チェック
+    const hasValidData = Array.isArray(allUserConnections) && Array.isArray(allUserPeople);
+    const isLoading = isLoadingAllUserConnections || isLoadingAllUserPeople;
 
     return (
         <div className="container mx-auto py-8 px-4">
@@ -144,11 +293,11 @@ export default function ManageConnectionsPage() {
                 </h1>
                 <div className="flex items-center gap-4">
                     <div className="text-sm text-muted-foreground">
-                        {filteredAndSortedConnections.length} connections found
+                        {hasValidData ? `${filteredAndSortedConnections.length} connections found` : 'データ準備中...'}
                     </div>
                     <Button 
                         onClick={handleCreateNewConnection}
-                        disabled={isLoadingAllUserPeople || (allUserPeople?.length || 0) < 2}
+                        disabled={isLoading || !hasValidData || (allUserPeople?.length || 0) < 2}
                         className="flex items-center gap-2"
                     >
                         <Plus className="h-4 w-4" />
@@ -156,6 +305,14 @@ export default function ManageConnectionsPage() {
                     </Button>
                 </div>
             </div>
+
+            {/* エラー表示 */}
+            {error && (
+                <Alert variant="destructive" className="mb-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                </Alert>
+            )}
 
             {/* フィルターセクション */}
             <Card className="mb-6">
@@ -217,17 +374,25 @@ export default function ManageConnectionsPage() {
             </Card>
 
             {/* コネクション一覧 */}
-            {isLoadingAllUserConnections || isLoadingAllUserPeople ? (
+            {isLoading ? (
                 <Card>
                     <CardContent className="p-8 text-center">
                         <div className="text-muted-foreground">読み込み中...</div>
+                    </CardContent>
+                </Card>
+            ) : !hasValidData ? (
+                <Card>
+                    <CardContent className="p-8 text-center">
+                        <div className="text-muted-foreground">
+                            データの読み込みに問題があります。ページを再読み込みしてください。
+                        </div>
                     </CardContent>
                 </Card>
             ) : filteredAndSortedConnections.length === 0 ? (
                 <Card>
                     <CardContent className="p-8 text-center">
                         <div className="text-muted-foreground">
-                            {searchQuery || typeFilter !== 'all' || strengthFilter !== 'all' 
+                            {searchQuery?.trim() || typeFilter !== 'all' || strengthFilter !== 'all' 
                                 ? '条件に一致するコネクションが見つかりません' 
                                 : 'まだコネクションが登録されていません'}
                         </div>
@@ -236,9 +401,23 @@ export default function ManageConnectionsPage() {
             ) : (
                 <div className="space-y-4">
                     {filteredAndSortedConnections.map((connection) => {
+                        // 安全なコネクション情報取得
+                        if (!connection?.id) {
+                            console.warn('Invalid connection found:', connection);
+                            return null;
+                        }
+
                         const fromPerson = getPersonInfo(connection.fromPersonId);
                         const toPerson = getPersonInfo(connection.toPersonId);
-                        const category = getConnectionCategory(connection.types);
+                        
+                        // 無効なコネクション（人物が見つからない）をスキップ
+                        if (!fromPerson || !toPerson) {
+                            console.warn('People not found for connection:', connection.id);
+                            return null;
+                        }
+
+                        const category = getConnectionCategory(connection.types || []);
+                        const isDeleting = deletingConnectionId === connection.id;
                         
                         return (
                             <Card key={connection.id} className="hover:shadow-md transition-shadow">
@@ -248,30 +427,32 @@ export default function ManageConnectionsPage() {
                                             <div className="flex items-center gap-3 mb-2">
                                                 {getCategoryIcon(category)}
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{fromPerson?.name || '不明な人物'}</span>
+                                                    <span className="font-medium">{fromPerson.name}</span>
                                                     <span className="text-muted-foreground">→</span>
-                                                    <span className="font-medium">{toPerson?.name || '不明な人物'}</span>
+                                                    <span className="font-medium">{toPerson.name}</span>
                                                 </div>
                                             </div>
                                             
                                             <div className="flex flex-wrap gap-2 mb-2">
-                                                {connection.types.map((type, index) => (
-                                                    <Badge key={index} variant="secondary">{type}</Badge>
+                                                {Array.isArray(connection.types) && connection.types.map((type, index) => (
+                                                    <Badge key={`${connection.id}-type-${index}`} variant="secondary">
+                                                        {type || '不明なタイプ'}
+                                                    </Badge>
                                                 ))}
                                             </div>
                                             
-                                            {connection.reasons && connection.reasons.length > 0 && (
+                                            {Array.isArray(connection.reasons) && connection.reasons.length > 0 && (
                                                 <div className="text-sm text-muted-foreground mb-2">
-                                                    理由: {connection.reasons.join(', ')}
+                                                    理由: {connection.reasons.filter(Boolean).join(', ')}
                                                 </div>
                                             )}
                                             
                                             <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                                {connection.strength !== null && connection.strength !== undefined && (
+                                                {typeof connection.strength === 'number' && (
                                                     <span>強さ: {connection.strength}/5</span>
                                                 )}
                                                 <span>
-                                                    作成: {connection.createdAt?.toDate?.()?.toLocaleDateString() || '不明'}
+                                                    作成: {formatTimestamp(connection.createdAt)}
                                                 </span>
                                             </div>
                                         </div>
@@ -281,6 +462,8 @@ export default function ManageConnectionsPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleEditConnection(connection)}
+                                                disabled={isDeleting}
+                                                title="コネクションを編集"
                                             >
                                                 <Edit className="h-4 w-4" />
                                             </Button>
@@ -288,7 +471,9 @@ export default function ManageConnectionsPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleDeleteConnection(connection)}
+                                                disabled={isDeleting}
                                                 className="text-destructive hover:text-destructive"
+                                                title="コネクションを削除"
                                             >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
