@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRefStandard, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage';
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
+import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair, Connection, AdvancedSearchParams } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
 import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
@@ -45,6 +45,9 @@ interface FaceRosterContextType {
   peopleSearchQuery: string;
   peopleCompanyFilter: string | null;
   filteredPeople: Person[];
+  advancedSearchParams: AdvancedSearchParams;
+  availableHobbies: string[];
+  availableConnectionTypes: string[];
 
   handleImageUpload: (file: File) => Promise<void>;
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
@@ -80,6 +83,10 @@ interface FaceRosterContextType {
   setPeopleSearchQuery: (query: string) => void;
   setPeopleCompanyFilter: (company: string | null) => void;
   getUniqueCompanies: () => string[];
+  setAdvancedSearchParams: (params: AdvancedSearchParams) => void;
+  clearAllSearchFilters: () => void;
+  getAvailableHobbies: () => string[];
+  getAvailableConnectionTypes: () => string[];
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -137,6 +144,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [peopleSearchQuery, setPeopleSearchQueryState] = useState<string>('');
   const [peopleCompanyFilter, setPeopleCompanyFilterState] = useState<string | null>(null);
   const [filteredPeople, setFilteredPeople] = useState<Person[]>([]);
+  const [advancedSearchParams, setAdvancedSearchParamsState] = useState<AdvancedSearchParams>({});
+  const [availableHobbies, setAvailableHobbies] = useState<string[]>([]);
+  const [availableConnectionTypes, setAvailableConnectionTypes] = useState<string[]>([]);
 
   const clearAllData = useCallback((showToast = true) => {
     setImageDataUrl(null);
@@ -317,11 +327,11 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, peopleSortOption, fetchUserRosters, fetchAllUserPeople]);
 
-  // フィルタリングロジック
+  // 拡張されたフィルタリングロジック
   useEffect(() => {
     let filtered = [...allUserPeople];
 
-    // 検索クエリによるフィルタリング（名前の部分一致）
+    // 基本的な名前検索（後方互換性のため維持）
     if (peopleSearchQuery.trim()) {
       const query = peopleSearchQuery.toLowerCase().trim();
       filtered = filtered.filter(person =>
@@ -329,15 +339,101 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
     }
 
-    // 会社によるフィルタリング
+    // 基本的な会社フィルター（後方互換性のため維持）
     if (peopleCompanyFilter && peopleCompanyFilter !== '__all__' && peopleCompanyFilter !== '') {
       filtered = filtered.filter(person =>
         person.company === peopleCompanyFilter
       );
     }
 
+    // 高度な検索パラメータによるフィルタリング
+    const params = advancedSearchParams;
+
+    // 名前での検索（拡張版）
+    if (params.name?.trim()) {
+      const query = params.name.toLowerCase().trim();
+      filtered = filtered.filter(person =>
+        person.name?.toLowerCase().includes(query) || false
+      );
+    }
+
+    // 会社での検索（拡張版）
+    if (params.company && params.company !== '__all__' && params.company !== '') {
+      filtered = filtered.filter(person =>
+        person.company === params.company
+      );
+    }
+
+    // メモでの検索
+    if (params.notes?.trim()) {
+      const query = params.notes.toLowerCase().trim();
+      filtered = filtered.filter(person =>
+        person.notes?.toLowerCase().includes(query) || false
+      );
+    }
+
+    // 趣味でのフィルタリング
+    if (params.hobbies && params.hobbies.length > 0) {
+      filtered = filtered.filter(person => {
+        if (!person.hobbies) return false;
+        const personHobbies = person.hobbies.toLowerCase();
+        return params.hobbies?.some(hobby => 
+          personHobbies.includes(hobby.toLowerCase())
+        ) || false;
+      });
+    }
+
+    // 誕生日範囲でのフィルタリング
+    if (params.birthdayRange) {
+      filtered = filtered.filter(person => {
+        if (!person.birthday) return false;
+        try {
+          const personBirthday = new Date(person.birthday);
+          const { start, end } = params.birthdayRange!;
+          return personBirthday >= start && personBirthday <= end;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // 初対面日範囲でのフィルタリング
+    if (params.firstMetRange) {
+      filtered = filtered.filter(person => {
+        if (!person.firstMet) return false;
+        try {
+          const personFirstMet = new Date(person.firstMet);
+          const { start, end } = params.firstMetRange!;
+          return personFirstMet >= start && personFirstMet <= end;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // コネクションタイプでのフィルタリング
+    if (params.connectionTypes && params.connectionTypes.length > 0) {
+      filtered = filtered.filter(person => {
+        const personConnections = allUserConnections.filter(conn => 
+          conn.fromPersonId === person.id || conn.toPersonId === person.id
+        );
+        return personConnections.some(conn => 
+          conn.types.some(type => params.connectionTypes?.includes(type))
+        );
+      });
+    }
+
+    // コネクション有無でのフィルタリング
+    if (params.hasConnections === true) {
+      filtered = filtered.filter(person => {
+        return allUserConnections.some(conn => 
+          conn.fromPersonId === person.id || conn.toPersonId === person.id
+        );
+      });
+    }
+
     setFilteredPeople(filtered);
-  }, [allUserPeople, peopleSearchQuery, peopleCompanyFilter]);
+  }, [allUserPeople, peopleSearchQuery, peopleCompanyFilter, advancedSearchParams, allUserConnections]);
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!currentUser) {
@@ -1404,6 +1500,44 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return Array.from(companies);
   }, [allUserPeople]);
 
+  const setAdvancedSearchParams = useCallback((params: AdvancedSearchParams) => {
+    setAdvancedSearchParamsState(params);
+  }, []);
+
+  const clearAllSearchFilters = useCallback(() => {
+    setPeopleSearchQueryState('');
+    setPeopleCompanyFilterState(null);
+    setAdvancedSearchParamsState({});
+  }, []);
+
+  const getAvailableHobbies = useCallback(() => {
+    if (!allUserPeople.length) return [];
+    const hobbies = new Set<string>();
+    allUserPeople.forEach(person => {
+      if (person.hobbies) {
+        // 趣味はカンマ区切りで複数入力される可能性があるため分割
+        const personHobbies = person.hobbies.split(',').map(h => h.trim()).filter(h => h);
+        personHobbies.forEach(hobby => hobbies.add(hobby));
+      }
+    });
+    return Array.from(hobbies).sort();
+  }, [allUserPeople]);
+
+  const getAvailableConnectionTypes = useCallback(() => {
+    if (!allUserConnections.length) return [];
+    const types = new Set<string>();
+    allUserConnections.forEach(conn => {
+      conn.types.forEach(type => types.add(type));
+    });
+    return Array.from(types).sort();
+  }, [allUserConnections]);
+
+  // Update available options when data changes
+  useEffect(() => {
+    setAvailableHobbies(getAvailableHobbies());
+    setAvailableConnectionTypes(getAvailableConnectionTypes());
+  }, [allUserPeople, allUserConnections, getAvailableHobbies, getAvailableConnectionTypes]);
+
   return (
     <FaceRosterContext.Provider value={{
       currentUser,
@@ -1430,6 +1564,9 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       peopleSearchQuery,
       peopleCompanyFilter,
       filteredPeople,
+      advancedSearchParams,
+      availableHobbies,
+      availableConnectionTypes,
       handleImageUpload,
       addDrawnRegion,
       clearDrawnRegions,
@@ -1458,6 +1595,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setPeopleSearchQuery,
       setPeopleCompanyFilter,
       getUniqueCompanies,
+      setAdvancedSearchParams,
+      clearAllSearchFilters,
+      getAvailableHobbies,
+      getAvailableConnectionTypes,
     }}>
       {children}
     </FaceRosterContext.Provider>

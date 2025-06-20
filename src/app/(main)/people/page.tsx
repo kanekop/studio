@@ -4,11 +4,12 @@ import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRoster
 import { Button } from '@/components/ui/button';
 import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
+import VirtualizedPeopleList from '@/components/features/VirtualizedPeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog';
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
-import CreateConnectionDialog, { type ProcessedConnectionFormData } from '@/components/features/CreateConnectionDialog';
-import type { Person, FieldMergeChoices, SuggestedMergePair, Connection } from '@/types';
+import CreateConnectionDialog from '@/components/features/CreateConnectionDialog';
+import type { Person, FieldMergeChoices, SuggestedMergePair, Connection, ProcessedConnectionFormData } from '@/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import PeopleSearchFilters from '@/components/features/PeopleSearchFilters';
+import AdvancedPeopleSearchFilters from '@/components/features/AdvancedPeopleSearchFilters';
 
 
 export default function ManagePeoplePage() {
@@ -64,6 +66,11 @@ export default function ManagePeoplePage() {
     setPeopleCompanyFilter,
     filteredPeople,
     getUniqueCompanies,
+    advancedSearchParams,
+    setAdvancedSearchParams,
+    clearAllSearchFilters,
+    availableHobbies,
+    availableConnectionTypes,
   } = useFaceRoster();
   const { toast } = useToast();
 
@@ -81,22 +88,7 @@ export default function ManagePeoplePage() {
   const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
   const [isSavingConnection, setIsSavingConnection] = useState(false);
 
-  // 検索入力用のローカルステート（debounce用）
-  const [localSearchQuery, setLocalSearchQuery] = useState(peopleSearchQuery);
-
-  // 検索クエリのdebounce処理
-  useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      setPeopleSearchQuery(localSearchQuery);
-    }, 300);
-
-    return () => clearTimeout(debounceTimer);
-  }, [localSearchQuery, setPeopleSearchQuery]);
-
-  // コンテキストの検索クエリとローカルステートを同期
-  useEffect(() => {
-    setLocalSearchQuery(peopleSearchQuery);
-  }, [peopleSearchQuery]);
+  // 高度な検索は専用のコンポーネントで管理されるため、ローカルステートは不要
 
   useEffect(() => {
     if (!isMergeSelectionMode) {
@@ -317,16 +309,13 @@ export default function ManagePeoplePage() {
       </div>
 
       <div className="mb-6">
-        <PeopleSearchFilters
-          searchQuery={localSearchQuery}
-          onSearchQueryChange={setLocalSearchQuery}
-          companyFilter={peopleCompanyFilter}
-          onCompanyFilterChange={setPeopleCompanyFilter}
+        <AdvancedPeopleSearchFilters
+          searchParams={advancedSearchParams || {}}
+          onSearchParamsChange={setAdvancedSearchParams}
           availableCompanies={getUniqueCompanies?.() || []}
-          onClearFilters={() => {
-            setLocalSearchQuery("");
-            setPeopleCompanyFilter("");
-          }}
+          availableHobbies={availableHobbies || []}
+          availableConnectionTypes={availableConnectionTypes || []}
+          onClearFilters={clearAllSearchFilters}
         />
       </div>
 
@@ -503,18 +492,36 @@ export default function ManagePeoplePage() {
           <p className="text-sm">Try adjusting your search query or clearing filters.</p>
         </div>
       ) : (
-        <PeopleList
-          people={filteredPeople || []}
-          isLoading={isLoadingAllUserPeople}
-          onEditClick={handleOpenEditPersonDialog}
-          onInitiateConnection={handleInitiateConnection}
-          selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
-          selectedForMergeIds={globallySelectedPeopleForMerge || []}
-          onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
-          selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
-          onToggleDeleteSelection={togglePersonSelectionForDeletion}
-          generalActionDisabled={generalActionDisabled}
-        />
+        (filteredPeople?.length || 0) > 100 ? (
+          <VirtualizedPeopleList
+            people={filteredPeople || []}
+            isLoading={isLoadingAllUserPeople}
+            onEditClick={handleOpenEditPersonDialog}
+            onInitiateConnection={handleInitiateConnection}
+            selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
+            selectedForMergeIds={globallySelectedPeopleForMerge || []}
+            onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
+            selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
+            onToggleDeleteSelection={togglePersonSelectionForDeletion}
+            generalActionDisabled={generalActionDisabled}
+            containerHeight={600}
+            allUserPeople={allUserPeople || []}
+          />
+        ) : (
+          <PeopleList
+            people={filteredPeople || []}
+            isLoading={isLoadingAllUserPeople}
+            onEditClick={handleOpenEditPersonDialog}
+            onInitiateConnection={handleInitiateConnection}
+            selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
+            selectedForMergeIds={globallySelectedPeopleForMerge || []}
+            onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
+            selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
+            onToggleDeleteSelection={togglePersonSelectionForDeletion}
+            generalActionDisabled={generalActionDisabled}
+            allUserPeople={allUserPeople || []}
+          />
+        )
       )}
 
       {person1ForDialog && person2ForDialog && isMergeDialogOpen && (
@@ -547,6 +554,7 @@ export default function ManagePeoplePage() {
           targetPerson={targetPersonForConnection}
           onSave={handleSaveConnection}
           isProcessing={isSavingConnection}
+          allUserPeople={allUserPeople || []}
         />
       )}
     </div>

@@ -137,3 +137,15 @@ export interface ProcessedConnectionFormData {
     notes?: string;   // Optional
 }
 
+// Advanced search parameters for enhanced filtering functionality
+export interface AdvancedSearchParams {
+    name?: string;
+    company?: string;
+    hobbies?: string[];
+    birthdayRange?: { start: Date; end: Date };
+    firstMetRange?: { start: Date; end: Date };
+    connectionTypes?: string[];
+    hasConnections?: boolean;
+    notes?: string;
+}
+

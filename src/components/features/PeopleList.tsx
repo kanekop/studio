@@ -16,6 +16,7 @@ interface PeopleListProps {
   selectedForDeletionIds?: string[];
   onToggleDeleteSelection?: (personId: string) => void;
   generalActionDisabled?: boolean;
+  allUserPeople?: Person[];
 }
 
 export default function PeopleList({
@@ -28,7 +29,8 @@ export default function PeopleList({
   onToggleMergeSelection,
   selectedForDeletionIds = [],
   onToggleDeleteSelection,
-  generalActionDisabled = false
+  generalActionDisabled = false,
+  allUserPeople = []
 }: PeopleListProps) {
   // Safe array access with fallback
   const safePeople = people || [];
@@ -78,6 +80,7 @@ export default function PeopleList({
             isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? safeSelectedForDeletionIds.includes(person.id) : false}
             onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
             generalActionDisabled={generalActionDisabled}
+            allUserPeople={allUserPeople}
           />
         );
       })}

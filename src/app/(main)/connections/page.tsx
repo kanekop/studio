@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
+import VirtualizedConnectionsList from '@/components/features/VirtualizedConnectionsList';
 
 export default function ManageConnectionsPage() {
     const { allUserConnections, allUserPeople, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
@@ -537,91 +538,17 @@ export default function ManageConnectionsPage() {
                     </CardContent>
                 </Card>
             ) : (
-                <div className="space-y-4">
-                    {filteredAndSortedConnections.map((connection) => {
-                        // 安全なコネクション情報取得
-                        if (!connection?.id) {
-                            console.warn('Invalid connection found:', connection);
-                            return null;
-                        }
-
-                        const fromPerson = getPersonInfo(connection.fromPersonId);
-                        const toPerson = getPersonInfo(connection.toPersonId);
-                        
-                        // 無効なコネクション（人物が見つからない）をスキップ
-                        if (!fromPerson || !toPerson) {
-                            console.warn('People not found for connection:', connection.id);
-                            return null;
-                        }
-
-                        const category = getConnectionCategory(connection.types || []);
-                        const isDeleting = deletingConnectionId === connection.id;
-                        
-                        return (
-                            <Card key={connection.id} className="hover:shadow-md transition-shadow">
-                                <CardContent className="p-4">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                {getCategoryIcon(category)}
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-medium">{fromPerson.name}</span>
-                                                    <span className="text-muted-foreground">→</span>
-                                                    <span className="font-medium">{toPerson.name}</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex flex-wrap gap-2 mb-2">
-                                                {Array.isArray(connection.types) && connection.types.map((type, index) => (
-                                                    <Badge key={`${connection.id}-type-${index}`} variant="secondary">
-                                                        {type || '不明なタイプ'}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                            
-                                            {Array.isArray(connection.reasons) && connection.reasons.length > 0 && (
-                                                <div className="text-sm text-muted-foreground mb-2">
-                                                    理由: {connection.reasons.filter(Boolean).join(', ')}
-                                                </div>
-                                            )}
-                                            
-                                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                                {typeof connection.strength === 'number' && (
-                                                    <span>強さ: {connection.strength}/5</span>
-                                                )}
-                                                <span>
-                                                    作成: {formatTimestamp(connection.createdAt)}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-2">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleEditConnection(connection)}
-                                                disabled={isDeleting}
-                                                title="コネクションを編集"
-                                            >
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteConnection(connection)}
-                                                disabled={isDeleting}
-                                                className="text-destructive hover:text-destructive"
-                                                title="コネクションを削除"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        );
-                    })}
-                </div>
+                <VirtualizedConnectionsList
+                    connections={filteredAndSortedConnections}
+                    getPersonInfo={getPersonInfo}
+                    formatTimestamp={formatTimestamp}
+                    getConnectionCategory={getConnectionCategory}
+                    getCategoryIcon={getCategoryIcon}
+                    onEditConnection={handleEditConnection}
+                    onDeleteConnection={handleDeleteConnection}
+                    deletingConnectionId={deletingConnectionId}
+                    containerHeight={500}
+                />
             )}
         </div>
     );

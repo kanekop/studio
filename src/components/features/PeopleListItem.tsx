@@ -1,6 +1,5 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import Image from 'next/image'; // Keep as default NextImage import
 import type { Person, Connection } from '@/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react';
@@ -13,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import OptimizedImage from '@/components/ui/optimized-image';
+import MobileLongPressMenu from './MobileLongPressMenu';
 
 interface PeopleListItemProps {
   person: Person;
@@ -24,6 +25,7 @@ interface PeopleListItemProps {
   isSelectedForDeletion?: boolean;
   onToggleDeleteSelection?: () => void;
   generalActionDisabled?: boolean;
+  allUserPeople?: Person[];
 }
 
 const GENERAL_CONNECTION_TYPES = ['colleague', 'friend', 'club_member', 'acquaintance', 'fellow_member', 'group_member']; // Added acquaintance
@@ -32,7 +34,7 @@ const PROFESSIONAL_CONNECTION_TYPES = ['manager', 'reports_to', 'subordinate', '
 const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
 
 
-const PeopleListItem: React.FC<PeopleListItemProps> = ({
+const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   person,
   onEditClick,
   onInitiateConnection,
@@ -42,46 +44,57 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
   isSelectedForDeletion = false,
   onToggleDeleteSelection,
   generalActionDisabled = false,
+  allUserPeople = [],
 }) => {
   const { allUserConnections } = useFaceRoster();
   const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null);
-  const [isLoadingImage, setIsLoadingImage] = useState<boolean>(true);
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
+  // 画像URLキャッシュ（メモリリーク防止のため）
+  const imageUrlCache = useMemo(() => new Map<string, string>(), []);
+
   useEffect(() => {
     let isMounted = true;
-    setIsLoadingImage(true);
 
     const fetchImage = async () => {
       const imagePathToFetch = person.primaryFaceAppearancePath || person.faceAppearances?.[0]?.faceImageStoragePath;
 
       if (imagePathToFetch && storage) {
+        // キャッシュをチェック
+        if (imageUrlCache.has(imagePathToFetch)) {
+          if (isMounted) {
+            setDisplayImageUrl(imageUrlCache.get(imagePathToFetch)!);
+          }
+          return;
+        }
+
         try {
           const imageFileRef = storageRef(storage, imagePathToFetch);
           const url = await getDownloadURL(imageFileRef);
           if (isMounted) {
+            // キャッシュに保存
+            imageUrlCache.set(imagePathToFetch, url);
             setDisplayImageUrl(url);
           }
         } catch (error) {
           console.error(`Error fetching image for ${person.name} (${imagePathToFetch}):`, error);
           if (isMounted) {
-            setDisplayImageUrl("https://placehold.co/150x150.png?text=Error");
+            const errorUrl = "https://placehold.co/300x300.png?text=Error";
+            imageUrlCache.set(imagePathToFetch, errorUrl);
+            setDisplayImageUrl(errorUrl);
           }
         }
       } else {
         if (isMounted) {
-          setDisplayImageUrl("https://placehold.co/150x150.png?text=No+Image");
+          setDisplayImageUrl("https://placehold.co/300x300.png?text=No+Image");
         }
-      }
-      if (isMounted) {
-        setIsLoadingImage(false);
       }
     };
 
     fetchImage();
     return () => { isMounted = false; };
-  }, [person]); // Re-fetch if person object changes (e.g., primaryFaceAppearancePath updates)
+  }, [person, imageUrlCache]); // Re-fetch if person object changes (e.g., primaryFaceAppearancePath updates)
 
   const connectionCounts = useMemo(() => {
     let general = 0;
@@ -251,37 +264,35 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
           />
         </div>
       )}
-      {selectionMode === 'none' && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="absolute top-1 right-1 z-10 h-7 w-7 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-          onClick={(e) => { e.stopPropagation(); onEditClick(); }}
-          disabled={generalActionDisabled}
-          aria-label={`Edit ${person?.name || 'Unknown'}`}
-          title={`Edit ${person?.name || 'Unknown'}`}
-        >
-          <Pencil className="h-4 w-4" />
-        </Button>
-      )}
+      {/* Mobile Long Press Menu / Desktop Edit button */}
+      <MobileLongPressMenu
+        person={person}
+        allPeople={allUserPeople}
+        onEditClick={onEditClick}
+        onInitiateConnection={onInitiateConnection}
+        onToggleMergeSelection={onToggleMergeSelection}
+        onToggleDeleteSelection={onToggleDeleteSelection}
+        isSelectedForMerge={isSelectedForMerge}
+        isSelectedForDeletion={isSelectedForDeletion}
+        selectionMode={selectionMode}
+        disabled={generalActionDisabled}
+      />
 
       <CardHeader className="p-0">
-        {isLoadingImage ? (
-          <Skeleton className="w-full aspect-square bg-muted" />
-        ) : (
-          <div className="aspect-square w-full relative bg-muted">
-            <Image
-              src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
-              alt={`Face of ${person?.name || 'Unknown'}`}
-              fill
-              sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-cover"
-              data-ai-hint="person portrait"
-              draggable="false"
-              priority={false} // Set to false or remove if not above the fold
-            />
-          </div>
-        )}
+        <div className="aspect-square w-full relative bg-muted">
+          <OptimizedImage
+            src={displayImageUrl || "https://placehold.co/300x300.png?text=Placeholder"}
+            alt={`Face of ${person?.name || 'Unknown'}`}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            objectFit="cover"
+            priority={false}
+            placeholder="blur"
+            loading="lazy"
+            fallbackSrc="https://placehold.co/300x300.png?text=No+Image"
+            className="rounded-t-lg"
+          />
+        </div>
       </CardHeader>
       <CardContent className="p-3 flex-grow">
         <CardTitle className="text-lg font-semibold truncate" title={person?.name || 'Unknown'}>
@@ -321,6 +332,6 @@ const PeopleListItem: React.FC<PeopleListItemProps> = ({
       </CardFooter>
     </Card>
   );
-};
+});
 
 export default PeopleListItem;
