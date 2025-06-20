@@ -13,6 +13,8 @@ import { Connection, Person } from '@/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 
 export default function ManageConnectionsPage() {
     const { allUserConnections, allUserPeople, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
@@ -25,6 +27,9 @@ export default function ManageConnectionsPage() {
     const [sortBy, setSortBy] = useState<string>('created_desc');
     const [deletingConnectionId, setDeletingConnectionId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showAllConnections, setShowAllConnections] = useState<boolean>(false);
+    const [allFirestoreConnections, setAllFirestoreConnections] = useState<Connection[]>([]);
+    const [isLoadingAllConnections, setIsLoadingAllConnections] = useState<boolean>(false);
 
     // コネクションの種類で分類するためのヘルパー関数
     const getConnectionCategory = (types: string[]) => {
@@ -84,17 +89,72 @@ export default function ManageConnectionsPage() {
         return str.toLowerCase().includes(search.toLowerCase());
     }, []);
 
+    // Firestoreから直接すべてのコネクションを取得
+    const fetchAllConnectionsFromFirestore = useCallback(async () => {
+        if (isLoadingAllConnections) return;
+        
+        setIsLoadingAllConnections(true);
+        setError(null);
+        
+        try {
+            const connectionsQuery = query(
+                collection(db, "connections"),
+                orderBy("createdAt", "desc")
+            );
+            
+            const snapshot = await getDocs(connectionsQuery);
+            const connections: Connection[] = [];
+            
+            snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                if (data) {
+                    connections.push({
+                        id: doc.id,
+                        ...data
+                    } as Connection);
+                }
+            });
+            
+            setAllFirestoreConnections(connections);
+            console.log('=== All Firestore Connections ===');
+            console.log('Total connections in Firestore:', connections.length);
+            console.log('Connections:', connections.map(c => ({
+                id: c.id,
+                from: c.fromPersonId,
+                to: c.toPersonId,
+                types: c.types
+            })));
+            console.log('================================');
+            
+        } catch (error) {
+            console.error('Failed to fetch all connections:', error);
+            setError('すべてのコネクションの取得に失敗しました。');
+            toast({
+                title: "取得エラー",
+                description: "すべてのコネクションの取得に失敗しました",
+                variant: "destructive"
+            });
+        } finally {
+            setIsLoadingAllConnections(false);
+        }
+    }, [isLoadingAllConnections, toast]);
+
     // 堅牢なフィルタリングとソート機能
     const filteredAndSortedConnections = useMemo(() => {
         try {
             setError(null);
             
-            if (!Array.isArray(allUserConnections) || !Array.isArray(allUserPeople)) {
+            // 表示するコネクションデータを決定
+            const connectionsToProcess = showAllConnections 
+                ? allFirestoreConnections 
+                : allUserConnections;
+            
+            if (!Array.isArray(connectionsToProcess) || !Array.isArray(allUserPeople)) {
                 return [];
             }
 
             // 有効なコネクションのみをフィルタリング（両方の人物が存在する）
-            const validConnections = allUserConnections.filter(connection => {
+            const validConnections = connectionsToProcess.filter(connection => {
                 if (!connection?.id || !connection?.fromPersonId || !connection?.toPersonId) {
                     return false;
                 }
@@ -210,7 +270,7 @@ export default function ManageConnectionsPage() {
             setError('データの処理中にエラーが発生しました。ページを再読み込みしてください。');
             return [];
         }
-    }, [allUserConnections, allUserPeople, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
+    }, [allUserConnections, allUserPeople, allFirestoreConnections, showAllConnections, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
 
     const handleEditConnection = (connection: Connection) => {
         openDialog('createConnection', { editingConnection: connection });
@@ -282,7 +342,25 @@ export default function ManageConnectionsPage() {
 
     // データの有効性チェック
     const hasValidData = Array.isArray(allUserConnections) && Array.isArray(allUserPeople);
-    const isLoading = isLoadingAllUserConnections || isLoadingAllUserPeople;
+    const hasAllConnectionsData = Array.isArray(allFirestoreConnections);
+    const isLoading = isLoadingAllUserConnections || isLoadingAllUserPeople || isLoadingAllConnections;
+
+    // デバッグ情報（開発用）
+    React.useEffect(() => {
+        if (hasValidData && !isLoading) {
+            console.log('=== Connections Debug Info ===');
+            console.log('Total people:', allUserPeople?.length || 0);
+            console.log('People IDs:', allUserPeople?.map(p => p.id) || []);
+            console.log('Total connections found:', allUserConnections?.length || 0);
+            console.log('Connections:', allUserConnections?.map(c => ({
+                id: c.id,
+                from: c.fromPersonId,
+                to: c.toPersonId,
+                types: c.types
+            })) || []);
+            console.log('================================');
+        }
+    }, [allUserConnections, allUserPeople, hasValidData, isLoading]);
 
     return (
         <div className="container mx-auto py-8 px-4">
@@ -294,6 +372,11 @@ export default function ManageConnectionsPage() {
                 <div className="flex items-center gap-4">
                     <div className="text-sm text-muted-foreground">
                         {hasValidData ? `${filteredAndSortedConnections.length} connections found` : 'データ準備中...'}
+                        {showAllConnections && (
+                            <span className="block text-xs text-orange-600">
+                                （すべてのコネクションを表示中）
+                            </span>
+                        )}
                     </div>
                     <Button 
                         onClick={handleCreateNewConnection}
@@ -313,6 +396,61 @@ export default function ManageConnectionsPage() {
                     <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
+
+            {/* コネクション表示モード切り替え */}
+            <Card className="mb-6">
+                <CardContent className="p-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="flex-1">
+                            <h3 className="font-medium mb-2">表示モード</h3>
+                            <div className="text-sm text-muted-foreground">
+                                {showAllConnections ? (
+                                    <div>
+                                        <p>🌐 <strong>すべてのコネクションを表示中</strong></p>
+                                        <p>データベース内のすべてのコネクションが表示されます。</p>
+                                        <p className="text-orange-600 mt-1">
+                                            ⚠️ 一部のコネクションは人物情報が見つからない場合があります。
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <p>👤 <strong>あなたの人物に関連するコネクションのみ表示中</strong></p>
+                                        <p>あなたが追加した{allUserPeople?.length || 0}人の人物に関連するコネクションのみが表示されます。</p>
+                                        {(allUserPeople?.length || 0) < 2 && (
+                                            <p className="text-amber-600 mt-1">
+                                                💡 より多くのコネクションを見るには、まず人物を追加してください。
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <Button
+                                variant={showAllConnections ? "outline" : "default"}
+                                size="sm"
+                                onClick={() => setShowAllConnections(false)}
+                                disabled={isLoading}
+                            >
+                                自分の人物のみ
+                            </Button>
+                            <Button
+                                variant={showAllConnections ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => {
+                                    setShowAllConnections(true);
+                                    if (!hasAllConnectionsData && !isLoadingAllConnections) {
+                                        fetchAllConnectionsFromFirestore();
+                                    }
+                                }}
+                                disabled={isLoading}
+                            >
+                                すべて表示
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
 
             {/* フィルターセクション */}
             <Card className="mb-6">

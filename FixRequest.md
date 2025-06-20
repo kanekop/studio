@@ -1,45 +1,62 @@
-# Connections UI実装依頼
+# Connections表示問題の分析と修正提案
 
-## 現在の問題
-`/connections`ページのUIは更新されているが、実際のデータ表示機能が未実装で、「まだコネクションが登録されていません」と表示されています。Firestoreには複数のコネクションが存在するにも関わらず、それらが表示されません。
+## 問題の原因
+`FaceRosterContext`の`fetchAllConnectionsForAllUserPeople`は、**現在のユーザーが所有する人物のIDリスト**を基にコネクションを取得しています。
 
-## 確認済みの事実
-1. **Firestoreデータベース**: `connections`コレクションに複数のドキュメントが存在
-2. **コンテキスト実装**: `FaceRosterContext`に以下の機能が実装済み
-   - `fetchAllConnectionsForAllUserPeople`: 全コネクション取得
-   - `allUserConnections`: コネクションデータの状態管理
-   - `addConnection`, `updateConnection`, `deleteConnection`: CRUD操作
-3. **UIページ**: `/app/(main)/connections/page.tsx`が仮実装のまま
+### 現在の動作
+1. `fetchAllUserPeople`で`addedBy == currentUser.uid`の人物のみ取得
+2. その人物IDリストを使って`fromPersonId`または`toPersonId`がリストに含まれるコネクションのみ取得
+3. 結果：**自分が追加した人物が関わるコネクションのみ**表示される
 
-## 実装要件
-1. **コネクション一覧表示**
-   - `useFaceRoster`フックから`allUserConnections`と`allUserPeople`を取得
-   - 各コネクションを表示（from/to人物名、関係タイプ、強度など）
-   - ローディング状態の表示（`isLoadingAllUserConnections`を使用）
-   - 「まだコネクションが登録されていません」は、実際にデータが0件の場合のみ表示
+### 問題点
+- Firestoreには10個以上のコネクションが存在
+- しかし、現在のユーザーが所有する人物が1人しかいない場合、その人物に関連するコネクションのみ表示
+- 他のユーザーが作成した人物間のコネクションは表示されない
 
-2. **必要な機能**
-   - コネクション一覧の表示
-   - フィルタリング（人物名、関係タイプなど）
-   - ソート機能
-   - 編集・削除ボタン
-   - 新規コネクション作成ボタン
+## 修正案
 
-3. **UIデザイン要件**
-   - 既存のデザインシステムに準拠
-   - レスポンシブ対応
-   - カード形式またはテーブル形式での表示
+### 案1：現在の仕様を維持（推奨）
+これはセキュリティ上の意図的な設計の可能性があります。ユーザーは自分が管理する人物のコネクションのみ見ることができます。
 
-## 参考実装
-- `/app/(main)/people/page.tsx`: 人物一覧の実装を参考に
-- `EditPersonDialog.tsx`内の関連コネクション表示部分
-- 既存のUIコンポーネント（Card, Table, Skeletonなど）を活用
+**対応**：
+- UIに「あなたが追加した人物のコネクションのみ表示されます」という説明を追加
+- 人物を増やすよう促すメッセージを表示
 
-## 実装ファイル
-`src/app/(main)/connections/page.tsx`を更新してください。
+### 案2：すべてのコネクションを表示
+もしすべてのコネクションを表示したい場合は、`connections/page.tsx`で独自のクエリを実装する必要があります。
 
-## 注意事項
-- 既存の`FaceRosterContext`のメソッドとステートを活用
-- エラーハンドリングとローディング状態を適切に実装
-- パフォーマンスを考慮（大量のコネクションがある場合の対応）
-- 現在のUIデザイン（フィルターとソートのドロップダウン）は維持しつつ、実際の機能を実装
+**実装方法**：
+```typescript
+// connections/page.tsx内で直接実装
+const fetchAllConnections = async () => {
+  const connectionsQuery = query(
+    collection(db, "connections"),
+    orderBy("createdAt", "desc")
+  );
+  const snapshot = await getDocs(connectionsQuery);
+  // すべてのコネクションを取得
+};
+```
+
+**注意**：
+- セキュリティルールの確認が必要
+- 他のユーザーのデータへのアクセス権限を考慮
+
+## 推奨アクション
+
+1. **まず人物データを確認**：
+   - Peopleページで何人の人物が登録されているか確認
+   - 人物が1人しかいない場合は、まず人物を追加
+
+2. **デバッグ情報の追加**：
+   ```typescript
+   console.log('Total people:', allUserPeople.length);
+   console.log('People IDs:', allUserPeople.map(p => p.id));
+   console.log('Total connections found:', allUserConnections.length);
+   ```
+
+3. **UIの改善**：
+   - 「○人の人物に関連する△個のコネクション」という表示を追加
+   - フィルター条件を明確に表示
+
+この問題は、データの所有権とプライバシーに関わる設計上の判断によるものと考えられます。
