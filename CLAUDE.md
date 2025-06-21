@@ -241,6 +241,25 @@ Before committing any code, verify:
 - [ ] All async operations have try-catch blocks
 - [ ] User feedback is provided for error states
 
+## Documentation Maintenance
+
+**Critical: Keep documentation current with code changes**
+
+- **After completing any development work**: Update relevant documentation immediately
+- **Before committing to Git**: Always verify documentation reflects current implementation
+- **For code reviews**: Ensure documentation changes are included to prevent inconsistencies
+- **Architecture changes**: Update CLAUDE.md, component documentation, and type definitions
+- **New features**: Document usage patterns, conventions, and integration points
+
+Common documentation to update:
+- CLAUDE.md (architecture, conventions, commands)
+- Component README files (if any)
+- TypeScript type definitions in comments
+- API documentation for context hooks
+- Installation and setup instructions
+
+This prevents confusion during code reviews and ensures team members have accurate information.
+
 ## Notes
 
 - Firebase config is hardcoded (no .env file needed)
