@@ -1,13 +1,13 @@
 "use client";
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useRoster, useUI } from '@/contexts';
+import { useFaceRoster, useUI } from '@/contexts';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
 const ImageUploadForm = () => {
   const { isProcessing } = useUI();
-  const { handleImageUpload } = useRoster();
+  const { handleImageUpload } = useFaceRoster();
   const [isDragging, setIsDragging] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {

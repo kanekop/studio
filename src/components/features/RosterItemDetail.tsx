@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import { useRoster, useUI } from '@/contexts';
+import { useFaceRoster, useUI } from '@/contexts';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { EditablePersonInContext } from '@/types';
 
 const RosterItemDetail = () => {
-  const { roster, updatePersonDetails } = useRoster();
+  const { roster, updatePersonDetails } = useFaceRoster();
   const { isProcessing: isGlobalProcessing } = useUI();
   
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);

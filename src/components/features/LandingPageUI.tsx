@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { UploadCloud, History, LogIn, Trash2, Edit3, FileImage } from 'lucide-react';
 import ImageUploadForm from './ImageUploadForm';
-import { useAuth, useRoster } from '@/contexts';
+import { useAuth, useFaceRoster } from '@/contexts';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ImageSet } from '@/types';
 import { format } from 'date-fns';
@@ -13,7 +13,7 @@ import { format } from 'date-fns';
 
 const LandingPageUI = () => {
   const { currentUser } = useAuth();
-  const { userRosters, isLoadingUserRosters, loadRosterForEditing, deleteRoster, imageDataUrl } = useRoster();
+  const { userRosters, isLoadingUserRosters, loadRosterForEditing, deleteRoster, imageDataUrl } = useFaceRoster();
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';

@@ -6,7 +6,7 @@ import { ImageProvider } from './ImageContext';
 import { SearchFilterProvider } from './SearchFilterContext';
 import { PeopleProvider } from './PeopleContext';
 import { ConnectionProvider } from './ConnectionContext';
-import { RosterProvider } from './RosterContext';
+import { FaceRosterProvider } from './FaceRosterContext';
 import { PeopleMergeProvider } from './PeopleMergeContext';
 import { PeopleDeletionProvider } from './PeopleDeletionContext';
 
@@ -24,9 +24,9 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
               <PeopleProvider>
                 <PeopleMergeProvider>
                   <PeopleDeletionProvider>
-                    <RosterProvider>
+                    <FaceRosterProvider>
                       {children}
-                    </RosterProvider>
+                    </FaceRosterProvider>
                   </PeopleDeletionProvider>
                 </PeopleMergeProvider>
               </PeopleProvider>
@@ -45,7 +45,7 @@ export { useImage } from './ImageContext';
 export { useSearchFilter } from './SearchFilterContext';
 export { usePeople } from './PeopleContext';
 export { useConnections } from './ConnectionContext';
-export { useRoster } from './RosterContext';
+export { useFaceRoster } from './FaceRosterContext';
 export { usePeopleMerge } from './PeopleMergeContext';
 export { usePeopleDeletion } from './PeopleDeletionContext';
 

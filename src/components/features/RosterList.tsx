@@ -1,12 +1,12 @@
 
 "use client";
 import React from 'react';
-import { useRoster, useUI } from '@/contexts';
+import { useFaceRoster, useUI } from '@/contexts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import RosterItem from './RosterItem';
 
 const RosterList: React.FC = () => {
-  const { roster } = useRoster();
+  const { roster } = useFaceRoster();
   const { selectedPersonId, selectPerson, isProcessing } = useUI();
 
   // Safe array access with null check

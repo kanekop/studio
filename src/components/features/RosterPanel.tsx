@@ -5,10 +5,10 @@ import RosterList from './RosterList';
 import RosterItemDetail from './RosterItemDetail';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users } from 'lucide-react';
-import { useRoster, useUI } from '@/contexts';
+import { useFaceRoster, useUI } from '@/contexts';
 
 const RosterPanel = () => {
-  const { roster } = useRoster();
+  const { roster } = useFaceRoster();
   const { isProcessing } = useUI();
 
   return (

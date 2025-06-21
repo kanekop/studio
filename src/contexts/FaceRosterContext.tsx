@@ -30,6 +30,11 @@ interface FaceRosterContextType {
   userRosters: ImageSet[];
   isLoadingUserRosters: boolean;
 
+  imageDataUrl: string | null;
+  originalImageStoragePath: string | null;
+  originalImageSize: { width: number; height: number } | null;
+  drawnRegions: Region[];
+
   selectPerson: (id: string | null) => void;
   updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>) => Promise<void>;
   clearAllData: (showToast?: boolean) => void;
@@ -42,6 +47,11 @@ interface FaceRosterContextType {
     originalImageStoragePath: string,
     originalImageSize: { width: number; height: number }
   ) => Promise<void>;
+
+  handleImageUpload: (file: File) => Promise<void>;
+  addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
+  clearDrawnRegions: () => void;
+  getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
 
 }
 
@@ -85,10 +95,19 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [userRosters, setUserRosters] = useState<ImageSet[]>([]);
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
 
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+  const [originalImageStoragePath, setOriginalImageStoragePath] = useState<string | null>(null);
+  const [originalImageSize, setOriginalImageSize] = useState<{ width: number; height: number } | null>(null);
+  const [drawnRegions, setDrawnRegions] = useState<Region[]>([]);
+
   const clearAllData = useCallback((showToast = true) => {
     setRoster([]);
     setSelectedPersonId(null);
     setCurrentRosterDocId(null);
+    setImageDataUrl(null);
+    setOriginalImageStoragePath(null);
+    setOriginalImageSize(null);
+    setDrawnRegions([]);
     if (showToast) {
       toast({ title: "Editor Cleared", description: "Current image and roster have been cleared from the editor." });
     }
@@ -483,7 +502,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           tempFaceImageDataUri: faceDataUri,
           tempOriginalRegion: region,
           currentRosterAppearance: {
-            id: `appearance_${Date.now()}_${i}`,
             rosterId: '',
             faceImageStoragePath: '',
             originalRegion: region,
@@ -522,6 +540,114 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast]);
 
+  const handleImageUpload = useCallback(async (file: File) => {
+    if (!currentUser?.uid) {
+      toast({
+        title: "認証エラー",
+        description: "ユーザーがログインしていません",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      toast({
+        title: "ファイル形式エラー",
+        description: "サポートされている形式: PNG, JPEG, WebP",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      toast({
+        title: "ファイルサイズエラー",
+        description: `ファイルサイズは${MAX_FILE_SIZE_MB}MB以下にしてください`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsProcessingState(true);
+      clearAllData(false);
+
+      const storagePath = `users/${currentUser.uid}/rosters/${Date.now()}_${file.name}`;
+      const storageRef = storageRefStandard(appFirebaseStorage, storagePath);
+      
+      await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      // 画像のサイズを取得
+      const img = new Image();
+      img.onload = () => {
+        setOriginalImageSize({ width: img.width, height: img.height });
+      };
+      img.src = downloadURL;
+
+      setImageDataUrl(downloadURL);
+      setOriginalImageStoragePath(storagePath);
+
+      toast({
+        title: "アップロード完了",
+        description: "画像が正常にアップロードされました",
+      });
+    } catch (error) {
+      console.error('Image upload error:', error);
+      toast({
+        title: "アップロードエラー",
+        description: "画像のアップロードに失敗しました",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingState(false);
+    }
+  }, [currentUser?.uid, clearAllData, toast]);
+
+  const addDrawnRegion = useCallback((
+    displayRegion: Omit<DisplayRegion, 'id'>, 
+    imageDisplaySize: { width: number; height: number }
+  ) => {
+    if (!originalImageSize) return;
+
+    const scaleX = originalImageSize.width / imageDisplaySize.width;
+    const scaleY = originalImageSize.height / imageDisplaySize.height;
+
+    const originalRegion: Region = {
+      id: crypto.randomUUID(),
+      x: displayRegion.x * scaleX,
+      y: displayRegion.y * scaleY,
+      width: displayRegion.width * scaleX,
+      height: displayRegion.height * scaleY,
+    };
+
+    setDrawnRegions(prev => [...prev, originalRegion]);
+  }, [originalImageSize]);
+
+  const clearDrawnRegions = useCallback(() => {
+    setDrawnRegions([]);
+  }, []);
+
+  const getScaledRegionForDisplay = useCallback((
+    originalRegion: Region, 
+    imageDisplaySize: { width: number; height: number }
+  ): DisplayRegion => {
+    if (!originalImageSize) {
+      return { id: originalRegion.id || 'default', ...originalRegion };
+    }
+
+    const scaleX = imageDisplaySize.width / originalImageSize.width;
+    const scaleY = imageDisplaySize.height / originalImageSize.height;
+
+    return {
+      id: originalRegion.id || crypto.randomUUID(),
+      x: originalRegion.x * scaleX,
+      y: originalRegion.y * scaleY,
+      width: originalRegion.width * scaleX,
+      height: originalRegion.height * scaleY,
+    };
+  }, [originalImageSize]);
+
 
 
 
@@ -536,6 +662,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       currentRosterDocId,
       userRosters,
       isLoadingUserRosters,
+      imageDataUrl,
+      originalImageStoragePath,
+      originalImageSize,
+      drawnRegions,
       selectPerson,
       updatePersonDetails,
       clearAllData,
@@ -543,6 +673,10 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       loadRosterForEditing,
       deleteRoster,
       createRosterFromRegions,
+      handleImageUpload,
+      addDrawnRegion,
+      clearDrawnRegions,
+      getScaledRegionForDisplay,
     }}>
       {children}
     </FaceRosterContext.Provider>

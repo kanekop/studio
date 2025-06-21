@@ -12,7 +12,7 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
 import Link from 'next/link';
-import { useAuth, useRoster } from '@/contexts';
+import { useAuth, useFaceRoster } from '@/contexts';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 export function AppHeader() {
   const { currentUser, isAuthLoading } = useAuth();
-  const { clearAllData } = useRoster();
+  const { clearAllData } = useFaceRoster();
   const { handleError } = useErrorHandler();
 
   const handleLogout = async () => {
