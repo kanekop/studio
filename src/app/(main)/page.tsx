@@ -1,19 +1,16 @@
-
 "use client";
 import React from 'react';
-import { useAuth, useRoster } from '@/contexts';
-import { useImage } from '@/contexts/ImageContext';
-import { useUI } from '@/contexts';
+import { useAuth, useRoster, useImage, useUI } from '@/contexts';
 import LandingPageUI from '@/components/features/LandingPageUI';
 import EditorUI from '@/components/features/EditorUI';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const AppContent = () => {
-  const { currentUser, isAuthLoading: isLoading } = useAuth();
+  const { currentUser, isAuthLoading } = useAuth();
+  const { imageDataUrl } = useRoster();
   const { isProcessing } = useUI();
-  const { imageDataUrl } = useImage();
 
-  if (isLoading) { // Now isLoading refers to auth state loading
+  if (isAuthLoading) { // Auth state loading
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh]">
         <svg className="animate-spin h-16 w-16 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -53,6 +50,6 @@ const AppContent = () => {
 }
 
 export default function Home() {
-  // FaceRosterProvider is in (main)/layout.tsx
+  // AppProviders is in (main)/layout.tsx
   return <AppContent />;
 }

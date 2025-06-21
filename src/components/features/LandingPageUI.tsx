@@ -1,4 +1,3 @@
-
 "use client";
 import React from 'react';
 import Image from 'next/image';
@@ -6,8 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { UploadCloud, History, LogIn, Trash2, Edit3, FileImage } from 'lucide-react';
 import ImageUploadForm from './ImageUploadForm';
-import { useAuth, useRoster, useUI } from '@/contexts';
-import { useImage } from '@/contexts/ImageContext';
+import { useAuth, useRoster } from '@/contexts';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ImageSet } from '@/types';
 import { format } from 'date-fns';
@@ -15,9 +13,7 @@ import { format } from 'date-fns';
 
 const LandingPageUI = () => {
   const { currentUser } = useAuth();
-  const { userRosters, isLoadingUserRosters, loadRosterForEditing, deleteRoster } = useRoster();
-  const { isProcessing } = useUI();
-  const { imageDataUrl } = useImage(); 
+  const { userRosters, isLoadingUserRosters, loadRosterForEditing, deleteRoster, imageDataUrl } = useRoster();
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'N/A';
@@ -62,31 +58,17 @@ const LandingPageUI = () => {
                 Upload an image, mark the faces, and build your personalized roster in minutes.
                 Login to save your work to the cloud.
               </p>
-              <div className="mt-4 p-4 border-l-4 border-accent bg-accent/10 rounded-md">
-                <h2 className="text-xl font-headline font-semibold text-accent-foreground mb-2">How it works:</h2>
-                <ul className="list-disc list-inside space-y-1 text-foreground/70">
-                  <li>Login or create an account.</li>
-                  <li>Upload your image (PNG, JPG, WEBP).</li>
-                  <li>Click and drag to draw rectangles around faces.</li>
-                  <li>Click "Create Roster from Selections".</li>
-                  <li>Edit names and add notes for each person.</li>
-                  <li>Your work will be saved to your account.</li>
-                </ul>
-              </div>
-               <div className="aspect-video bg-muted rounded-lg overflow-hidden shadow-lg">
-                <Image
-                  src="https://placehold.co/600x338.png"
-                  alt="FaceRoster app explanation image"
-                  width={600}
-                  height={338}
-                  className="object-cover w-full h-full"
-                  data-ai-hint="team meeting video"
-                  priority 
-                />
+              <div className="space-y-4 pt-4">
+                <h2 className="text-2xl font-semibold">How it works:</h2>
+                <ol className="list-decimal list-inside space-y-2 text-foreground/80">
+                  <li>Upload an image with people's faces</li>
+                  <li>Mark each face using simple click-and-drag</li>
+                  <li>Add names and details for each person</li>
+                  <li>Save your roster for future reference</li>
+                </ol>
               </div>
             </>
           ) : (
-            // Logged In: Show "Your Saved Rosters"
             <Card className="shadow-xl">
               <CardHeader>
                 <CardTitle className="font-headline text-2xl flex items-center">
@@ -96,54 +78,61 @@ const LandingPageUI = () => {
                   Select a roster to continue editing or view its details.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 {isLoadingUserRosters ? (
-                  <>
-                    <Skeleton className="h-12 w-full rounded-md" />
-                    <Skeleton className="h-12 w-full rounded-md" />
-                    <Skeleton className="h-12 w-full rounded-md" />
-                  </>
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <Skeleton key={i} className="h-20 w-full" />
+                    ))}
+                  </div>
                 ) : userRosters.length > 0 ? (
-                  <ul className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
                     {userRosters.map((roster) => (
-                      <li key={roster.id} className="p-3 border rounded-lg bg-card hover:shadow-md transition-shadow">
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <h3 className="font-semibold text-primary-foregroundtruncate max-w-xs">{roster.rosterName}</h3>
-                            <p className="text-xs text-muted-foreground">
+                      <div
+                        key={roster.id}
+                        className="border rounded-lg p-4 hover:bg-accent/10 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-semibold flex items-center">
+                              <FileImage className="mr-2 h-4 w-4" />
+                              {roster.rosterName || 'Untitled Roster'}
+                            </h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {roster.description || 'No description'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">
                               Created: {formatDate(roster.createdAt)}
                             </p>
-                             <p className="text-xs text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               People: {roster.peopleIds?.length || 0}
                             </p>
                           </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              onClick={() => loadRosterForEditing(roster.id)}
-                              disabled={isProcessing}
-                              className="group"
+                          <div className="flex gap-2 ml-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => loadRosterForEditing(roster.id!)}
                             >
-                              <Edit3 className="mr-1.5 h-4 w-4 group-hover:animate-pulse" /> Load
+                              <Edit3 className="h-4 w-4" />
                             </Button>
-                            <Button 
-                              variant="destructive" 
-                              size="icon" 
-                              onClick={() => deleteRoster(roster.id)} // Implement deleteRoster in context
-                              disabled={isProcessing}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deleteRoster(roster.id!)}
                             >
                               <Trash2 className="h-4 w-4" />
-                               <span className="sr-only">Delete Roster</span>
                             </Button>
                           </div>
                         </div>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 ) : (
-                  <p className="text-center text-muted-foreground py-4">
-                    You have no saved rosters yet. Upload an image to create one!
+                  <p className="text-center text-muted-foreground py-8">
+                    You have no saved rosters yet.
+                    <br />
+                    Upload an image to create one!
                   </p>
                 )}
               </CardContent>
@@ -153,7 +142,7 @@ const LandingPageUI = () => {
 
         {/* Right Column: Image Uploader / Login */}
         <div>
-          <Card className="shadow-xl sticky top-24"> {/* Sticky for better UX if roster list is long */}
+          <Card className="shadow-xl sticky top-24">
             <CardHeader>
               <CardTitle className="font-headline text-2xl flex items-center">
                 <UploadCloud className="mr-2 h-6 w-6 text-primary" /> 
