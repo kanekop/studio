@@ -36,6 +36,12 @@ interface FaceRosterContextType {
   fetchUserRosters: () => Promise<void>;
   loadRosterForEditing: (rosterId: string) => Promise<void>;
   deleteRoster: (rosterId: string) => Promise<void>;
+  createRosterFromRegions: (
+    regions: Region[],
+    imageDataUrl: string,
+    originalImageStoragePath: string,
+    originalImageSize: { width: number; height: number }
+  ) => Promise<void>;
 
 }
 
@@ -415,6 +421,107 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast, fetchUserRosters, currentRosterDocId, clearAllData]);
 
+  const createRosterFromRegions = useCallback(async (
+    regions: Region[],
+    imageDataUrl: string,
+    originalImageStoragePath: string,
+    originalImageSize: { width: number; height: number }
+  ) => {
+    if (!currentUser || !db || !appFirebaseStorage) {
+      toast({ 
+        title: "Error", 
+        description: "User not authenticated or services unavailable.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (regions.length === 0) {
+      toast({ 
+        title: "No Selections", 
+        description: "Please select at least one face region.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsProcessingState(true);
+
+    try {
+      const newPeople: EditablePersonInContext[] = [];
+      
+      for (let i = 0; i < regions.length; i++) {
+        const region = regions[i];
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Failed to get canvas context');
+        
+        const img = new Image();
+        img.src = imageDataUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        
+        canvas.width = region.width;
+        canvas.height = region.height;
+        
+        ctx.drawImage(
+          img,
+          region.x, region.y, region.width, region.height,
+          0, 0, region.width, region.height
+        );
+        
+        const faceDataUri = canvas.toDataURL('image/png');
+        
+        const newPerson: EditablePersonInContext = {
+          id: `temp_${Date.now()}_${i}`,
+          name: `Person ${i + 1}`,
+          faceImageUrl: faceDataUri,
+          isNew: true,
+          tempFaceImageDataUri: faceDataUri,
+          tempOriginalRegion: region,
+          currentRosterAppearance: {
+            id: `appearance_${Date.now()}_${i}`,
+            rosterId: '',
+            faceImageStoragePath: '',
+            originalRegion: region,
+          },
+          notes: '',
+          company: '',
+          hobbies: '',
+          birthday: '',
+          firstMet: '',
+          firstMetContext: '',
+        };
+        
+        newPeople.push(newPerson);
+      }
+      
+      setRoster(newPeople);
+      
+      if (newPeople.length > 0) {
+        setSelectedPersonId(newPeople[0].id);
+      }
+      
+      toast({ 
+        title: "Roster Created", 
+        description: `${regions.length} face(s) detected. Please save the roster to persist changes.` 
+      });
+      
+    } catch (error: any) {
+      console.error("FRC: Error creating roster from regions:", error);
+      toast({ 
+        title: "Creation Failed", 
+        description: `Could not create roster: ${error.message}`, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsProcessingState(false);
+    }
+  }, [currentUser, toast]);
+
 
 
 
@@ -435,6 +542,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       fetchUserRosters,
       loadRosterForEditing,
       deleteRoster,
+      createRosterFromRegions,
     }}>
       {children}
     </FaceRosterContext.Provider>

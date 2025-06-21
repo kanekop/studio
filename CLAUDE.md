@@ -29,6 +29,34 @@ npm run genkit:dev       # Start Genkit
 npm run genkit:watch     # Start with hot reload
 ```
 
+## Debugging & Testing
+
+### System Status Check
+Visit `/test` in development to verify:
+- Firebase service initialization (Auth, Firestore, Storage)
+- Context provider hierarchy
+- Basic system health
+
+### Debug Logging
+```typescript
+import { debugLog } from '@/lib/debug-logger';
+
+// Use in components for systematic error tracking
+debugLog.error('ComponentName', error);
+debugLog.warn('ComponentName', 'Warning message', data);
+debugLog.info('ComponentName', 'Info message', data);
+```
+
+### Error Handling
+```typescript
+import ErrorBoundary from '@/components/ErrorBoundary';
+
+// Wrap components to catch unexpected errors
+<ErrorBoundary>
+  <YourComponent />
+</ErrorBoundary>
+```
+
 ## Architecture Overview
 
 ### Tech Stack
@@ -43,22 +71,28 @@ npm run genkit:watch     # Start with hot reload
 src/
 ├── app/              # Next.js App Router pages
 │   ├── (auth)/      # Login, signup pages
-│   └── (main)/      # Main app pages (people, connections, rosters)
+│   ├── (main)/      # Main app pages (people, connections, rosters)
+│   └── test/        # System status and debugging page
 ├── components/
 │   ├── features/    # Feature-specific components
-│   └── ui/          # Reusable ShadCN UI components
+│   ├── ui/          # Reusable ShadCN UI components
+│   └── ErrorBoundary.tsx  # Error boundary for unexpected errors
 ├── contexts/        # React Context providers
 ├── hooks/           # Custom React hooks
 ├── lib/             # Utilities and Firebase config
+│   ├── firebase.ts  # Firebase configuration
+│   └── debug-logger.ts  # Systematic error logging
 ├── types/           # TypeScript type definitions
 └── ai/              # Genkit AI integration
 ```
 
 ### Key Files
 - `src/lib/firebase.ts`: Firebase configuration (hardcoded, no env vars)
-- `src/contexts/FaceRosterContext.tsx`: Main state management
-- `src/types/index.ts`: Core type definitions
-- `src/ai/genkit.ts`: AI configuration
+- `src/contexts/index.tsx`: Unified Context exports and AppProviders
+- `src/types/index.ts`: Core type definitions including ImageSet with description
+- `src/lib/debug-logger.ts`: Systematic error logging utilities
+- `src/components/ErrorBoundary.tsx`: React error boundary component
+- `src/app/test/page.tsx`: System status verification page
 
 ## Core Features & Implementation
 
@@ -71,6 +105,8 @@ src/
 ### 2. Roster Management
 - Image upload and face region selection
 - Manual face identification via drag-and-drop
+- **Face region extraction**: `createRosterFromRegions` method for automatic face cropping
+- Canvas-based image processing for face region isolation  
 - Stored in Firestore: `/rosters/{rosterId}`
 - Images in Cloud Storage: `/users/{userId}/rosters/`
 
@@ -100,18 +136,48 @@ export const MyComponent: React.FC<Props> = ({ title, onAction }) => {
 
 ### State Updates
 ```typescript
-// Always use the context for global state
-const { people, addPerson } = useFaceRoster();
+// Use unified context exports from @/contexts
+const { 
+  roster, 
+  createRosterFromRegions, 
+  selectPerson, 
+  updatePersonDetails,
+  currentUser,
+  isProcessing 
+} = useFaceRoster();
 
 // Handle async operations with proper error handling
 const handleSubmit = async (data: FormData) => {
   try {
-    await addPerson(data);
-    toast.success('Person added');
+    await updatePersonDetails(personId, data);
+    toast({ title: 'Success', description: 'Person updated' });
   } catch (error) {
-    toast.error('Failed to add person');
+    debugLog.error('ComponentName', error);
+    toast({ title: 'Error', description: 'Failed to update person', variant: 'destructive' });
   }
 };
+
+// Create roster from selected face regions
+const handleRegionSelection = async (regions: Region[], imageDataUrl: string) => {
+  await createRosterFromRegions(regions, imageDataUrl, storagePath, imageSize);
+};
+```
+
+### Defensive Programming
+```typescript
+// Always use null-safe access patterns
+const safePeople = people || [];
+const person = people?.find(p => p.id === id);
+const name = person?.name || 'Unknown';
+
+// Validate objects before use
+if (!person?.id) {
+  console.warn('Person object missing id:', person);
+  return null;
+}
+
+// Use optional chaining for function calls
+onClick={() => selectPerson?.(person.id)}
 ```
 
 ### Styling with Tailwind
@@ -158,6 +224,32 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const storageRef = ref(storage, `users/${userId}/images/${filename}`);
 await uploadBytes(storageRef, file);
 const downloadURL = await getDownloadURL(storageRef);
+```
+
+### Face Region Processing
+```typescript
+// Create roster from selected face regions
+const { createRosterFromRegions } = useFaceRoster();
+
+// Process face regions from image
+const handleFaceRegions = async (
+  regions: Region[],
+  imageDataUrl: string,
+  originalImageStoragePath: string,
+  originalImageSize: { width: number; height: number }
+) => {
+  await createRosterFromRegions(
+    regions, 
+    imageDataUrl, 
+    originalImageStoragePath, 
+    originalImageSize
+  );
+};
+
+// Canvas-based face extraction
+// - Automatically crops each selected region
+// - Creates temporary person entries
+// - Uses Canvas API for image processing
 ```
 
 ## Testing & Quality Checks
@@ -267,3 +359,7 @@ This prevents confusion during code reviews and ensures team members have accura
 - Images are limited to 10MB
 - The app uses localStorage for temporary data persistence
 - Z-index hierarchy is managed via CSS variables for proper layering
+- All Context hooks are unified and exported from `@/contexts`
+- Defensive programming is applied to prevent null/undefined errors
+- Debug logging and error boundaries are implemented for better error tracking
+- `/test` page available for system health checks during development
