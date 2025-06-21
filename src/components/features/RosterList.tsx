@@ -9,7 +9,10 @@ const RosterList: React.FC = () => {
   const { roster } = useRoster();
   const { selectedPersonId, selectPerson, isProcessing } = useUI();
 
-  if (roster.length === 0) {
+  // Safe array access with null check
+  const safeRoster = roster || [];
+
+  if (safeRoster.length === 0) {
     return (
       <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md h-full flex items-center justify-center">
         Your roster will appear here once you create it from selected regions.
@@ -20,15 +23,23 @@ const RosterList: React.FC = () => {
   return (
     <ScrollArea className="h-full max-h-[300px] md:max-h-none md:flex-grow pr-3 -mr-3">
       <div className="space-y-1.5">
-        {roster.map((person) => (
-          <RosterItem
-            key={person.id}
-            person={person}
-            isSelected={person.id === selectedPersonId}
-            onSelect={() => selectPerson(person.id)}
-            isDisabled={isProcessing}
-          />
-        ))}
+        {safeRoster.map((person) => {
+          // Defensive check for person object and required properties
+          if (!person?.id) {
+            console.warn('RosterList: Person object missing id:', person);
+            return null;
+          }
+
+          return (
+            <RosterItem
+              key={person.id}
+              person={person}
+              isSelected={person.id === selectedPersonId}
+              onSelect={() => selectPerson?.(person.id)}
+              isDisabled={isProcessing}
+            />
+          );
+        })}
       </div>
     </ScrollArea>
   );

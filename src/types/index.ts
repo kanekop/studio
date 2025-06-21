@@ -88,6 +88,7 @@ export interface ImageSet {
   id: string; // Firestore document ID for this roster
   ownerId: string; // UID of the user who owns this ImageSet
   rosterName: string; // User-defined name for this set (e.g., "Q1 Team Meeting")
+  description?: string; // Optional description for this roster
   
   originalImageStoragePath: string; // Path to the original uploaded image in Cloud Storage
   originalImagePath?: string; // Alternative property name for backward compatibility
