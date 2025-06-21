@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { usePeople } from '@/contexts/PeopleContext';
+import { useConnections } from '@/contexts/ConnectionContext';
 import { Connection, Person } from '@/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
 import { useToast } from '@/hooks/use-toast';
@@ -18,7 +20,8 @@ import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import VirtualizedConnectionsList from '@/components/features/VirtualizedConnectionsList';
 
 export default function ManageConnectionsPage() {
-    const { allUserConnections, allUserPeople, isLoadingAllUserConnections, isLoadingAllUserPeople, deleteConnection } = useFaceRoster();
+    const { allUserPeople, isLoadingAllUserPeople } = usePeople();
+    const { allUserConnections, isLoadingAllUserConnections, deleteConnection } = useConnections();
     const { openDialog } = useDialogManager();
     const { toast } = useToast();
     

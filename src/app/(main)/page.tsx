@@ -2,12 +2,14 @@
 "use client";
 import React from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useImage } from '@/contexts/ImageContext';
 import LandingPageUI from '@/components/features/LandingPageUI';
 import EditorUI from '@/components/features/EditorUI';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const AppContent = () => {
-  const { currentUser, imageDataUrl, isLoading, isProcessing } = useFaceRoster();
+  const { currentUser, isLoading, isProcessing } = useFaceRoster();
+  const { imageDataUrl } = useImage();
 
   if (isLoading) { // Now isLoading refers to auth state loading
     return (

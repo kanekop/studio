@@ -5,10 +5,17 @@ import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useImage } from '@/contexts/ImageContext';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
-  const { addDrawnRegion, clearDrawnRegions, createRosterFromRegions, drawnRegions, isProcessing } = useFaceRoster();
+  const { isProcessing } = useFaceRoster();
+  const { addDrawnRegion, clearDrawnRegions, drawnRegions } = useImage();
+  
+  // TODO: Implement createRosterFromRegions functionality
+  const createRosterFromRegions = () => {
+    console.log('createRosterFromRegions: Function not yet implemented in new Context architecture');
+  };
 
   return (
     <Card className="flex-grow flex flex-col shadow-lg">

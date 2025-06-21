@@ -1,6 +1,11 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { useFaceRoster, type PeopleSortOptionValue } from '@/contexts/FaceRosterContext';
+import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { usePeople, type PeopleSortOptionValue } from '@/contexts/PeopleContext';
+import { useConnections } from '@/contexts/ConnectionContext';
+import { usePeopleMerge } from '@/contexts/PeopleMergeContext';
+import { usePeopleDeletion } from '@/contexts/PeopleDeletionContext';
+import { useSearchFilter } from '@/contexts/SearchFilterContext';
 import { Button } from '@/components/ui/button';
 import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
@@ -37,41 +42,52 @@ import AdvancedPeopleSearchFilters from '@/components/features/AdvancedPeopleSea
 
 
 export default function ManagePeoplePage() {
+  const { currentUser, isProcessing } = useFaceRoster();
   const {
     allUserPeople,
     isLoadingAllUserPeople,
-    currentUser,
-    globallySelectedPeopleForMerge,
-    toggleGlobalPersonSelectionForMerge,
-    clearGlobalMergeSelection,
-    performGlobalPeopleMerge,
-    isProcessing,
+    peopleSortOption,
+    setPeopleSortOption,
+    updateGlobalPersonDetails,
+  } = usePeople();
+  const {
+    allUserConnections,
+    isLoadingAllUserConnections,
+    addConnection,
+  } = useConnections();
+  const {
+    selectedPeopleForMerge: globallySelectedPeopleForMerge,
+    togglePersonSelectionForMerge: toggleGlobalPersonSelectionForMerge,
+    clearMergeSelection: clearGlobalMergeSelection,
+    performPeopleMerge: performGlobalPeopleMerge,
     fetchMergeSuggestions,
     mergeSuggestions,
     clearMergeSuggestions,
     isLoadingMergeSuggestions,
-    peopleSortOption,
-    setPeopleSortOption,
-    selectedPeopleIdsForDeletion,
+  } = usePeopleMerge();
+  const {
+    selectedPeopleForDeletion: selectedPeopleIdsForDeletion,
     togglePersonSelectionForDeletion,
-    clearPeopleSelectionForDeletion,
+    clearDeletionSelection: clearPeopleSelectionForDeletion,
     deleteSelectedPeople,
-    updateGlobalPersonDetails,
-    addConnection,
-    allUserConnections,
-    isLoadingAllUserConnections,
+  } = usePeopleDeletion();
+  const {
     peopleSearchQuery,
     setPeopleSearchQuery,
     peopleCompanyFilter,
     setPeopleCompanyFilter,
-    filteredPeople,
+    filterPeople,
     getUniqueCompanies,
     advancedSearchParams,
     setAdvancedSearchParams,
     clearAllSearchFilters,
-    availableHobbies,
-    availableConnectionTypes,
-  } = useFaceRoster();
+    getAvailableHobbies,
+    getAvailableConnectionTypes,
+  } = useSearchFilter();
+  
+  const filteredPeople = filterPeople(allUserPeople, allUserConnections);
+  const availableHobbies = getAvailableHobbies(allUserPeople);
+  const availableConnectionTypes = getAvailableConnectionTypes(allUserConnections);
   const { toast } = useToast();
 
   const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
@@ -250,7 +266,7 @@ export default function ManagePeoplePage() {
 
           <Button
             variant="outline"
-            onClick={fetchMergeSuggestions}
+            onClick={() => fetchMergeSuggestions()}
             disabled={generalActionDisabled || isLoadingMergeSuggestions || (allUserPeople?.length || 0) < 2 || isDeleteSelectionMode}
             title={isDeleteSelectionMode ? "Finish deletion first" : "Find merge suggestions"}
           >
@@ -312,7 +328,7 @@ export default function ManagePeoplePage() {
         <AdvancedPeopleSearchFilters
           searchParams={advancedSearchParams || {}}
           onSearchParamsChange={setAdvancedSearchParams}
-          availableCompanies={getUniqueCompanies?.() || []}
+          availableCompanies={getUniqueCompanies?.(allUserPeople) || []}
           availableHobbies={availableHobbies || []}
           availableConnectionTypes={availableConnectionTypes || []}
           onClearFilters={clearAllSearchFilters}

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useConnections } from '@/contexts/ConnectionContext';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
 import OptimizedImage from '@/components/ui/optimized-image';
 import MobileLongPressMenu from './MobileLongPressMenu';
@@ -45,7 +46,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   generalActionDisabled = false,
   allUserPeople = [],
 }) => {
-  const { allUserConnections } = useFaceRoster();
+  const { allUserConnections } = useConnections();
   const [isBeingDraggedOver, setIsBeingDraggedOver] = useState(false);
   const [isBeingDragged, setIsBeingDragged] = useState(false);
 
