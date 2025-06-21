@@ -10,6 +10,7 @@ import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, 
 import { useToast } from "@/hooks/use-toast";
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
 import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
+import { useUI } from '@/contexts/UIContext';
 
 
 const MAX_FILE_SIZE_MB = 10;
@@ -84,6 +85,7 @@ async function imageStoragePathToDataURI(path: string): Promise<string | undefin
 
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { toast } = useToast();
+  const { selectPerson } = useUI();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [roster, setRoster] = useState<EditablePersonInContext[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -535,6 +537,12 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.log('FRC: Created new people:', newPeople.map(p => ({ id: p.id, name: p.name })));
       setRoster(newPeople);
       
+      // Auto-select the first person if any were created
+      if (newPeople.length > 0) {
+        selectPerson(newPeople[0].id);
+        console.log('FRC: Auto-selected first person:', newPeople[0].id, newPeople[0].name);
+      }
+      
       toast({ 
         title: "Roster Created", 
         description: `${regions.length} face(s) detected. Please save the roster to persist changes.` 
@@ -550,7 +558,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       setIsProcessingState(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser, toast, selectPerson]);
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!currentUser?.uid) {

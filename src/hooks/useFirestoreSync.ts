@@ -198,7 +198,7 @@ export const useFirestoreSync = <T extends FirestoreDocument>(
       ...data,
       createdAt: data.createdAt?.toDate?.() || new Date(),
       updatedAt: data.updatedAt?.toDate?.() || new Date(),
-    } as T;
+    } as unknown as T;
   }, [collectionName]);
 
   const { execute: addDocument } = useAsyncOperation(addDocumentOperation);
