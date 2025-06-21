@@ -2,7 +2,6 @@
 import React from 'react';
 import { AuthProvider } from './AuthContext';
 import { UIProvider } from './UIContext';
-import { ImageProvider } from './ImageContext';
 import { SearchFilterProvider } from './SearchFilterContext';
 import { PeopleProvider } from './PeopleContext';
 import { ConnectionProvider } from './ConnectionContext';
@@ -18,21 +17,19 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
   return (
     <AuthProvider>
       <UIProvider>
-        <ImageProvider>
-          <SearchFilterProvider>
-            <ConnectionProvider>
-              <PeopleProvider>
-                <PeopleMergeProvider>
-                  <PeopleDeletionProvider>
-                    <FaceRosterProvider>
-                      {children}
-                    </FaceRosterProvider>
+        <SearchFilterProvider>
+          <ConnectionProvider>
+            <PeopleProvider>
+              <PeopleMergeProvider>
+                <PeopleDeletionProvider>
+                  <FaceRosterProvider>
+                    {children}
+                  </FaceRosterProvider>
                   </PeopleDeletionProvider>
                 </PeopleMergeProvider>
               </PeopleProvider>
             </ConnectionProvider>
-          </SearchFilterProvider>
-        </ImageProvider>
+        </SearchFilterProvider>
       </UIProvider>
     </AuthProvider>
   );
@@ -41,7 +38,6 @@ export const AppProviders: React.FC<AppProvidersProps> = ({ children }) => {
 // Re-export all hooks for easy access
 export { useAuth } from './AuthContext';
 export { useUI } from './UIContext';
-export { useImage } from './ImageContext';
 export { useSearchFilter } from './SearchFilterContext';
 export { usePeople } from './PeopleContext';
 export { useConnections } from './ConnectionContext';

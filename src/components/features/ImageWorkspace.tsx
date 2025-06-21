@@ -4,12 +4,19 @@ import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-import { useImage } from '@/contexts/ImageContext';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
-  const { isProcessing, createRosterFromRegions } = useFaceRoster();
-  const { addDrawnRegion, clearDrawnRegions, drawnRegions, imageDataUrl, originalImageStoragePath, originalImageSize } = useImage();
+  const { 
+    isProcessing, 
+    createRosterFromRegions, 
+    addDrawnRegion, 
+    clearDrawnRegions, 
+    drawnRegions, 
+    imageDataUrl, 
+    originalImageStoragePath, 
+    originalImageSize 
+  } = useFaceRoster();
   
   // FaceRosterContextからcreateRosterFromRegions関数をインポートして使用
   const handleCreateRoster = async () => {

@@ -64,7 +64,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 - **UI**: Radix UI + ShadCN UI components, Tailwind CSS
 - **Backend**: Firebase (Auth, Firestore, Storage)
 - **AI**: Google Genkit with Gemini 2.0 Flash model
-- **State**: React Context API (FaceRosterContext)
+- **State**: React Context API (Unified FaceRosterContext - central state management)
 
 ### Directory Structure
 ```
@@ -89,6 +89,7 @@ src/
 ### Key Files
 - `src/lib/firebase.ts`: Firebase configuration (hardcoded, no env vars)
 - `src/contexts/index.tsx`: Unified Context exports and AppProviders
+- `src/contexts/FaceRosterContext.tsx`: Central state management (roster, image, and face region handling)
 - `src/types/index.ts`: Core type definitions including ImageSet with description
 - `src/lib/debug-logger.ts`: Systematic error logging utilities
 - `src/components/ErrorBoundary.tsx`: React error boundary component
@@ -143,7 +144,14 @@ const {
   selectPerson, 
   updatePersonDetails,
   currentUser,
-  isProcessing 
+  isProcessing,
+  imageDataUrl,
+  originalImageSize,
+  drawnRegions,
+  handleImageUpload,
+  addDrawnRegion,
+  clearDrawnRegions,
+  getScaledRegionForDisplay
 } = useFaceRoster();
 
 // Handle async operations with proper error handling

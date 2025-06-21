@@ -7,12 +7,12 @@ FaceRosterは、モダンなWebテクノロジーとクラウドサービスを�
 ## 技術スタック
 
 ### フロントエンド
-- **フレームワーク**: Next.js 14 (App Router)
+- **フレームワーク**: Next.js 15.3.3 (App Router)
 - **UIライブラリ**: React 18
 - **型システム**: TypeScript 5
 - **UIコンポーネント**: Radix UI + ShadCN UI
 - **スタイリング**: Tailwind CSS
-- **状態管理**: React Context API
+- **状態管理**: React Context API (Unified FaceRosterContext)
 
 ### バックエンド & インフラ
 - **データベース**: Cloud Firestore
@@ -28,10 +28,11 @@ FaceRosterは、モダンなWebテクノロジーとクラウドサービスを�
   - CDN配信
 - **ホスティング**: Firebase Hosting / Vercel
 
-### AI機能（将来実装予定）
-- **AIフレームワーク**: Google Genkit
-- **顔認識**: TensorFlow.js / Cloud Vision API
-- **自然言語処理**: Vertex AI
+### AI機能
+- **AIフレームワーク**: Google Genkit（実装済み）
+- **AIモデル**: Gemini 2.0 Flash（人物マージ提案機能で使用中）
+- **顔認識**: TensorFlow.js / Cloud Vision API（将来実装予定）
+- **自然言語処理**: Vertex AI（将来実装予定）
 
 ## システム構成図
 
@@ -104,7 +105,9 @@ graph TB
 
 ### フロントエンド
 - Next.js Turbopackによる高速ビルド
-- 画像の最適化（next/image）
+- 画像の最適化（OptimizedImageコンポーネント）
+- 仮想スクロール（@tanstack/react-virtual）
+- 遅延読み込み（react-intersection-observer）
 - コード分割とレイジーローディング
 
 ### バックエンド

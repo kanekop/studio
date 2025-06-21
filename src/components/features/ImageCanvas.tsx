@@ -1,7 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-import { useImage } from '@/contexts/ImageContext';
 import type { DisplayRegion, Region } from '@/types';
 
 interface ImageCanvasProps {
@@ -9,7 +8,7 @@ interface ImageCanvasProps {
 }
 
 const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
-  const { imageDataUrl, originalImageSize, drawnRegions: existingOriginalRegions, getScaledRegionForDisplay } = useImage();
+  const { imageDataUrl, originalImageSize, drawnRegions: existingOriginalRegions, getScaledRegionForDisplay } = useFaceRoster();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);

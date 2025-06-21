@@ -46,7 +46,7 @@ import { toast } from 'sonner';
 
 // 3. 内部モジュール（絶対パス）
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/use-auth';
+import { useFaceRoster } from '@/contexts';
 
 // 4. 相対インポート
 import { PersonCard } from './PersonCard';
@@ -80,6 +80,15 @@ function useDialogState() {
   const [isOpen, setIsOpen] = useState(false);
   return { isOpen, setIsOpen };
 }
+
+// 統一されたコンテキストフックを使用
+const {
+  imageDataUrl,
+  handleImageUpload,
+  roster,
+  createRosterFromRegions,
+  isProcessing
+} = useFaceRoster();
 
 // useEffectの依存配列を正確に
 useEffect(() => {
