@@ -1,20 +1,18 @@
-
 "use client";
 import React from 'react';
 import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
-import { useRoster, useUI } from '@/contexts';
-import { useImage } from '@/contexts/ImageContext';
+import { useRoster, useImage, useUI } from '@/contexts';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
   const { isProcessing } = useUI();
+  const { createRosterFromRegions } = useRoster();
   const { addDrawnRegion, clearDrawnRegions, drawnRegions } = useImage();
   
-  // TODO: Implement createRosterFromRegions functionality
-  const createRosterFromRegions = () => {
-    console.log('createRosterFromRegions: Function not yet implemented in new Context architecture');
+  const handleCreateRoster = async () => {
+    await createRosterFromRegions();
   };
 
   return (
@@ -34,7 +32,7 @@ const ImageWorkspace = () => {
             <RotateCcw className="mr-2 h-4 w-4 group-hover:animate-spin" /> Clear Regions
           </Button>
           <Button
-            onClick={createRosterFromRegions}
+            onClick={handleCreateRoster}
             disabled={drawnRegions.length === 0 || isProcessing}
             aria-label="Create roster from selected regions"
           >

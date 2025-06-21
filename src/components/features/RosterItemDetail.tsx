@@ -1,4 +1,3 @@
-
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
@@ -14,9 +13,9 @@ import type { EditablePersonInContext } from '@/types';
 
 const RosterItemDetail = () => {
   const { roster, updatePersonDetails } = useRoster();
-  const { selectedPersonId, selectPerson } = useUI();
   const { isProcessing: isGlobalProcessing } = useUI();
   
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [company, setCompany] = useState('');
@@ -26,7 +25,7 @@ const RosterItemDetail = () => {
   const [firstMetContext, setFirstMetContext] = useState('');
 
   const [isEditing, setIsEditing] = useState(false);
-  const [isDirty, setIsDirty] = useState(false); // Track local unsaved changes
+  const [isDirty, setIsDirty] = useState(false);
 
   const selectedPerson = useMemo(() => {
     return roster.find(p => p.id === selectedPersonId);
@@ -42,219 +41,288 @@ const RosterItemDetail = () => {
       setFirstMet(selectedPerson.firstMet || '');
       setFirstMetContext(selectedPerson.firstMetContext || '');
       
-      // If the selected person was just created (not truly 'isNew' anymore, but implied by selection after creation flow),
-      // or if it's a different person selected, start in edit mode.
-      // Check if this specific person was just added (e.g., if their `isNew` flag was set by `createRosterFromRegions` before being cleared).
-      // A simpler approach: if `selectPerson` just set this ID after creation, this useEffect runs.
-      // We can manage `isEditing` more directly if needed. For now, new selections might default to view.
-      // If a *new* person is selected after bulk save, they will have default data. 
-      // We want the user to be able to edit it.
-      // A simple heuristic: if the name is like "Person X", assume it's new and enter edit mode.
-      if (selectedPerson.name.startsWith("Person ") && selectedPerson.name.match(/^Person \d+$/)) {
+      if (selectedPerson.name === '' || selectedPerson.isNew) {
         setIsEditing(true);
-      } else {
-        setIsEditing(false); 
       }
-      setIsDirty(false); // Reset dirty state on person change
-    } else {
-      setName('');
-      setNotes('');
-      setCompany('');
-      setHobbies('');
-      setBirthday('');
-      setFirstMet('');
-      setFirstMetContext('');
-      setIsEditing(false);
-      setIsDirty(false);
     }
   }, [selectedPerson]);
 
-  const handleInputChange = (setter: React.Dispatch<React.SetStateAction<string>>, value: string) => {
-    setter(value);
+  const handleInputChange = (
+    field: string,
+    value: string
+  ) => {
     setIsDirty(true);
+    switch (field) {
+      case 'name':
+        setName(value);
+        break;
+      case 'notes':
+        setNotes(value);
+        break;
+      case 'company':
+        setCompany(value);
+        break;
+      case 'hobbies':
+        setHobbies(value);
+        break;
+      case 'birthday':
+        setBirthday(value);
+        break;
+      case 'firstMet':
+        setFirstMet(value);
+        break;
+      case 'firstMetContext':
+        setFirstMetContext(value);
+        break;
+    }
   };
 
   const handleSave = async () => {
+    if (!selectedPerson || !isDirty) return;
+
+    await updatePersonDetails(selectedPerson.id, {
+      name,
+      notes,
+      company,
+      hobbies,
+      birthday,
+      firstMet,
+      firstMetContext,
+    });
+
+    setIsDirty(false);
+    setIsEditing(false);
+  };
+
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
     if (selectedPerson) {
-      const detailsToUpdate: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>> = { 
-        name, 
-        notes,
-        company,
-        hobbies,
-        birthday,
-        firstMet,
-        firstMetContext,
-      };
-      await updatePersonDetails(selectedPerson.id, detailsToUpdate); 
-      setIsEditing(false); 
-      setIsDirty(false);
+      setName(selectedPerson.name);
+      setNotes(selectedPerson.notes || '');
+      setCompany(selectedPerson.company || '');
+      setHobbies(selectedPerson.hobbies || '');
+      setBirthday(selectedPerson.birthday || '');
+      setFirstMet(selectedPerson.firstMet || '');
+      setFirstMetContext(selectedPerson.firstMetContext || '');
     }
+    setIsDirty(false);
+    setIsEditing(false);
   };
 
-  const handleToggleEditMode = () => {
-    if (isEditing && isDirty) {
-      // Optionally, confirm if user wants to discard changes
-      // For now, just revert to saved state if they cancel editing with dirty fields
-      if (selectedPerson) {
-        setName(selectedPerson.name);
-        setNotes(selectedPerson.notes || '');
-        setCompany(selectedPerson.company || '');
-        setHobbies(selectedPerson.hobbies || '');
-        setBirthday(selectedPerson.birthday || '');
-        setFirstMet(selectedPerson.firstMet || '');
-        setFirstMetContext(selectedPerson.firstMetContext || '');
-        setIsDirty(false);
-      }
-    }
-    setIsEditing(!isEditing);
-  };
-
-
-  if (!selectedPersonId) {
+  if (!selectedPerson) {
     return (
-      <Card className="h-full flex flex-col items-center justify-center shadow-lg">
-        <CardContent className="text-center p-6">
-          <UserCircle className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-          <p className="text-muted-foreground">Select a person from the roster to view details.</p>
+      <Card className="h-full">
+        <CardContent className="flex items-center justify-center h-full text-muted-foreground">
+          <div className="text-center">
+            <UserCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            <p>Select a person from the roster to view details</p>
+          </div>
         </CardContent>
       </Card>
     );
   }
-
-  if (!selectedPerson) { 
-    return (
-      <Card className="h-full flex flex-col shadow-lg">
-        <CardHeader>
-          <Skeleton className="h-8 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-        </CardHeader>
-        <CardContent className="space-y-4 p-6">
-          <Skeleton className="w-full h-48 rounded-md" />
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-24 w-full" />
-        </CardContent>
-        <CardFooter>
-          <Skeleton className="h-10 w-24" />
-        </CardFooter>
-      </Card>
-    );
-  }
-  
-  const canEditOrSave = !isGlobalProcessing;
-
-  const renderDetailField = (label: string, value: string | undefined, IconComponent?: React.ElementType) => (
-    <div className="flex items-start py-1">
-      {IconComponent && <IconComponent className="h-4 w-4 text-muted-foreground mr-2 mt-1 flex-shrink-0" />}
-      <span className="text-sm text-muted-foreground w-28 flex-shrink-0">{label}:</span>
-      <span className="text-sm text-foreground break-words whitespace-pre-wrap">
-        {value || <span className="italic">Not set</span>}
-      </span>
-    </div>
-  );
 
   return (
-    <Card className="h-full flex flex-col shadow-lg overflow-hidden">
-      <CardHeader className="bg-muted/30">
-        <CardTitle className="font-headline text-xl flex items-center justify-between">
-          {`Details for ${selectedPerson.name.startsWith("Person ") && selectedPerson.name.match(/^Person \d+$/) && !isEditing ? selectedPerson.name + " (Default)" : name || "Person Details"}`}
-          {canEditOrSave && (
-            <Button variant="ghost" size="sm" onClick={handleToggleEditMode} aria-label={isEditing ? "Cancel editing" : "Edit details"}>
-              {isEditing ? <CheckSquare className="h-5 w-5 text-green-500" /> : <Edit3 className="h-5 w-5 text-accent" />}
-              <span className="ml-2 sr-only sm:not-sr-only">{isEditing ? 'View Mode' : 'Edit Mode'}</span>
+    <Card className="h-full overflow-hidden">
+      <CardHeader className="space-y-1">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl">Person Details</CardTitle>
+          {!isEditing && (
+            <Button
+              onClick={handleEdit}
+              variant="outline"
+              size="sm"
+              disabled={isGlobalProcessing}
+            >
+              <Edit3 className="h-4 w-4 mr-1" />
+              Edit
             </Button>
           )}
-        </CardTitle>
+        </div>
         <CardDescription>
-          {isEditing ? `Editing information for ${name || "this person"}.` : `Viewing information for ${selectedPerson.name}.`}
+          {isEditing ? 'Edit information below' : 'View person information'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 p-4 md:p-6 flex-grow overflow-y-auto">
-        <div className="aspect-square w-full max-w-[200px] mx-auto rounded-md overflow-hidden shadow-md border bg-muted">
-          {(selectedPerson.faceImageUrl && selectedPerson.faceImageUrl !== "https://placehold.co/100x100.png") ? (
-            <Image
-              src={selectedPerson.faceImageUrl} 
-              alt={`Face of ${selectedPerson.name}`}
-              width={200}
-              height={200}
-              className="object-cover w-full h-full"
-              priority
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-muted">
-              <UserCircle className="h-24 w-24 text-muted-foreground" />
-            </div>
-          )}
+
+      <CardContent className="space-y-4 overflow-y-auto max-h-[calc(100vh-300px)]">
+        <div className="flex justify-center mb-4">
+          <div className="relative">
+            {selectedPerson.faceImageUrl ? (
+              <Image
+                src={selectedPerson.faceImageUrl}
+                alt={selectedPerson.name || 'Person'}
+                width={128}
+                height={128}
+                className="rounded-full object-cover border-4 border-primary/10"
+              />
+            ) : (
+              <Skeleton className="w-32 h-32 rounded-full" />
+            )}
+          </div>
         </div>
 
-        <div>
-          <Label htmlFor="personName" className="text-xs font-medium text-muted-foreground">Name*</Label>
-          {isEditing && canEditOrSave ? (
-            <Input id="personName" value={name} onChange={(e) => handleInputChange(setName, e.target.value)} className="mt-1" aria-label="Person's name" placeholder="Enter name (required)"/>
-          ) : (
-            <p className="mt-0.5 text-lg font-semibold p-2 rounded-md ">{selectedPerson.name}</p>
-          )}
-        </div>
-        
-        <div>
-          <Label htmlFor="personCompany" className="text-xs font-medium text-muted-foreground">Company</Label>
-          {isEditing && canEditOrSave ? (
-            <Input id="personCompany" value={company} onChange={(e) => handleInputChange(setCompany, e.target.value)} className="mt-1" placeholder="Company name" />
-          ) : (
-             renderDetailField("Company", selectedPerson.company, Building)
-          )}
-        </div>
-        
-        <div>
-          <Label htmlFor="personHobbies" className="text-xs font-medium text-muted-foreground">Hobbies</Label>
-          {isEditing && canEditOrSave ? (
-            <Textarea id="personHobbies" value={hobbies} onChange={(e) => handleInputChange(setHobbies, e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Reading, Hiking, Coding" />
-          ) : (
-            renderDetailField("Hobbies", selectedPerson.hobbies, Smile)
-          )}
-        </div>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name" className="flex items-center gap-2">
+              <UserCircle className="h-4 w-4" />
+              Name
+            </Label>
+            {isEditing ? (
+              <Input
+                id="name"
+                value={name}
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                placeholder="Enter name"
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {name || 'No name provided'}
+              </p>
+            )}
+          </div>
 
-        <div>
-          <Label htmlFor="personBirthday" className="text-xs font-medium text-muted-foreground">Birthday</Label>
-          {isEditing && canEditOrSave ? (
-            <Input id="personBirthday" value={birthday} onChange={(e) => handleInputChange(setBirthday, e.target.value)} className="mt-1" placeholder="e.g., January 1st or 1990-01-01" />
-          ) : (
-            renderDetailField("Birthday", selectedPerson.birthday, CalendarDays)
-          )}
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="company" className="flex items-center gap-2">
+              <Building className="h-4 w-4" />
+              Company
+            </Label>
+            {isEditing ? (
+              <Input
+                id="company"
+                value={company}
+                onChange={(e) => handleInputChange('company', e.target.value)}
+                placeholder="Enter company"
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {company || 'No company provided'}
+              </p>
+            )}
+          </div>
 
-        <div>
-          <Label htmlFor="personFirstMet" className="text-xs font-medium text-muted-foreground">First Met</Label>
-          {isEditing && canEditOrSave ? (
-            <Input id="personFirstMet" value={firstMet} onChange={(e) => handleInputChange(setFirstMet, e.target.value)} className="mt-1" placeholder="e.g., At a conference or 2023-05-15" />
-          ) : (
-            renderDetailField("First Met", selectedPerson.firstMet, CalendarDays)
-          )}
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="hobbies" className="flex items-center gap-2">
+              <Smile className="h-4 w-4" />
+              Hobbies
+            </Label>
+            {isEditing ? (
+              <Input
+                id="hobbies"
+                value={hobbies}
+                onChange={(e) => handleInputChange('hobbies', e.target.value)}
+                placeholder="Enter hobbies"
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {hobbies || 'No hobbies provided'}
+              </p>
+            )}
+          </div>
 
-        <div>
-          <Label htmlFor="personFirstMetContext" className="text-xs font-medium text-muted-foreground">First Met Context</Label>
-          {isEditing && canEditOrSave ? (
-            <Textarea id="personFirstMetContext" value={firstMetContext} onChange={(e) => handleInputChange(setFirstMetContext, e.target.value)} className="mt-1 min-h-[60px]" placeholder="e.g., Introduced by John at the tech meetup" />
-          ) : (
-             renderDetailField("Context", selectedPerson.firstMetContext, Info)
-          )}
-        </div>
+          <div className="space-y-2">
+            <Label htmlFor="birthday" className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Birthday
+            </Label>
+            {isEditing ? (
+              <Input
+                id="birthday"
+                type="date"
+                value={birthday}
+                onChange={(e) => handleInputChange('birthday', e.target.value)}
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {birthday || 'No birthday provided'}
+              </p>
+            )}
+          </div>
 
-        <div>
-          <Label htmlFor="personNotes" className="text-xs font-medium text-muted-foreground">Notes</Label>
-          {isEditing && canEditOrSave ? (
-            <Textarea id="personNotes" value={notes} onChange={(e) => handleInputChange(setNotes, e.target.value)} placeholder="Add any relevant notes..." className="mt-1 min-h-[80px]" aria-label="Notes about the person"/>
-          ) : (
-            <p className="mt-1 text-sm p-2 rounded-md bg-muted/30 min-h-[60px] whitespace-pre-wrap">
-              {selectedPerson.notes || <span className="italic text-muted-foreground">No notes added.</span>}
-            </p>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="firstMet" className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              First Met
+            </Label>
+            {isEditing ? (
+              <Input
+                id="firstMet"
+                type="date"
+                value={firstMet}
+                onChange={(e) => handleInputChange('firstMet', e.target.value)}
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {firstMet || 'No date provided'}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="firstMetContext" className="flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              First Met Context
+            </Label>
+            {isEditing ? (
+              <Input
+                id="firstMetContext"
+                value={firstMetContext}
+                onChange={(e) => handleInputChange('firstMetContext', e.target.value)}
+                placeholder="Where/how did you meet?"
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md">
+                {firstMetContext || 'No context provided'}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes" className="flex items-center gap-2">
+              <CheckSquare className="h-4 w-4" />
+              Notes
+            </Label>
+            {isEditing ? (
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => handleInputChange('notes', e.target.value)}
+                placeholder="Add any notes about this person"
+                rows={3}
+                disabled={isGlobalProcessing}
+              />
+            ) : (
+              <p className="text-sm font-medium px-3 py-2 bg-muted rounded-md min-h-[80px] whitespace-pre-wrap">
+                {notes || 'No notes provided'}
+              </p>
+            )}
+          </div>
         </div>
       </CardContent>
-      { isEditing && canEditOrSave && (
-        <CardFooter className="bg-muted/30 border-t pt-4">
-          <Button onClick={handleSave} className="w-full sm:w-auto" disabled={isGlobalProcessing || !name.trim() || !isDirty} title={!name.trim() ? "Name is required to save" : (!isDirty ? "No changes to save" : "Save changes")}>
-            <Save className="mr-2 h-4 w-4" /> Save Changes
+
+      {isEditing && (
+        <CardFooter className="flex justify-end gap-2 border-t pt-4">
+          <Button
+            onClick={handleCancel}
+            variant="outline"
+            disabled={isGlobalProcessing}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!isDirty || isGlobalProcessing}
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Save Changes
           </Button>
         </CardFooter>
       )}
@@ -263,4 +331,3 @@ const RosterItemDetail = () => {
 };
 
 export default RosterItemDetail;
-
