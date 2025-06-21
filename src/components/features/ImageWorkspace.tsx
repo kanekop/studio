@@ -3,26 +3,30 @@ import React from 'react';
 import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
-import { useRoster, useUI, useAuth } from '@/contexts';
+import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useImage } from '@/contexts/ImageContext';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
-  const { currentUser } = useAuth();
-  const { isProcessing } = useUI();
-  const { createRosterFromRegions, originalImageStoragePath, roster, addDrawnRegion, clearDrawnRegions, drawnRegions } = useRoster();
+  const { isProcessing, createRosterFromRegions } = useFaceRoster();
+  const { addDrawnRegion, clearDrawnRegions, drawnRegions, imageDataUrl, originalImageStoragePath, originalImageSize } = useImage();
   
+  // FaceRosterContextからcreateRosterFromRegions関数をインポートして使用
   const handleCreateRoster = async () => {
-    console.log('=== CREATE ROSTER DEBUG ===');
-    console.log('Current User:', currentUser?.uid);
-    console.log('Original Image Storage Path:', originalImageStoragePath);
-    console.log('Drawn Regions:', drawnRegions);
-    console.log('Current Roster:', roster);
-    
+    if (!imageDataUrl || !originalImageStoragePath || !originalImageSize || drawnRegions.length === 0) {
+      console.error('ImageWorkspace: Missing required data for roster creation');
+      return;
+    }
+
     try {
-      await createRosterFromRegions();
-      console.log('Create roster completed');
+      await createRosterFromRegions(
+        drawnRegions,
+        imageDataUrl,
+        originalImageStoragePath,
+        originalImageSize
+      );
     } catch (error) {
-      console.error('Create roster error:', error);
+      console.error('ImageWorkspace: Error creating roster:', error);
     }
   };
 
@@ -44,7 +48,7 @@ const ImageWorkspace = () => {
           </Button>
           <Button
             onClick={handleCreateRoster}
-            disabled={drawnRegions.length === 0 || isProcessing}
+            disabled={drawnRegions.length === 0 || isProcessing || !imageDataUrl}
             aria-label="Create roster from selected regions"
           >
             {isProcessing ? (
