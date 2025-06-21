@@ -1,7 +1,6 @@
 
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { useImage } from '@/contexts/ImageContext';
 import type { DisplayRegion, Region } from '@/types';
 

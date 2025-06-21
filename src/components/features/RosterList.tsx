@@ -1,12 +1,13 @@
 
 "use client";
 import React from 'react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useRoster, useUI } from '@/contexts';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import RosterItem from './RosterItem';
 
 const RosterList: React.FC = () => {
-  const { roster, selectedPersonId, selectPerson, isProcessing } = useFaceRoster();
+  const { roster } = useRoster();
+  const { selectedPersonId, selectPerson, isProcessing } = useUI();
 
   if (roster.length === 0) {
     return (

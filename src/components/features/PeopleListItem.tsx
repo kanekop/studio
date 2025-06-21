@@ -9,7 +9,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { useConnections } from '@/contexts/ConnectionContext';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
 import OptimizedImage from '@/components/ui/optimized-image';

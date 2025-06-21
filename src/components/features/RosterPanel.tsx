@@ -5,10 +5,11 @@ import RosterList from './RosterList';
 import RosterItemDetail from './RosterItemDetail';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Users } from 'lucide-react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useRoster, useUI } from '@/contexts';
 
 const RosterPanel = () => {
-  const { roster, isProcessing } = useFaceRoster();
+  const { roster } = useRoster();
+  const { isProcessing } = useUI();
 
   return (
     <Card className="flex-grow flex flex-col shadow-lg h-full">

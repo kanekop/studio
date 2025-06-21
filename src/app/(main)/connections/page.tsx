@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { usePeople } from '@/contexts/PeopleContext';
 import { useConnections } from '@/contexts/ConnectionContext';
 import { Connection, Person } from '@/types';
