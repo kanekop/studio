@@ -12,14 +12,14 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
 import Link from 'next/link';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useRoster } from '@/contexts';
 import { auth } from '@/lib/firebase';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 
 export function AppHeader() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const { clearAllData } = useFaceRoster();
+  const { clearAllData } = useRoster();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {

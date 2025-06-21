@@ -2,13 +2,13 @@
 "use client";
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useRoster, useUI } from '@/contexts';
 import { useImage } from '@/contexts/ImageContext';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
 const ImageUploadForm = () => {
-  const { isProcessing } = useFaceRoster();
+  const { isProcessing } = useUI();
   const { handleImageUpload } = useImage();
   const [isDragging, setIsDragging] = useState(false);
 

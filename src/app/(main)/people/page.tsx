@@ -1,11 +1,12 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
 import { usePeople, type PeopleSortOptionValue } from '@/contexts/PeopleContext';
 import { useConnections } from '@/contexts/ConnectionContext';
 import { usePeopleMerge } from '@/contexts/PeopleMergeContext';
 import { usePeopleDeletion } from '@/contexts/PeopleDeletionContext';
 import { useSearchFilter } from '@/contexts/SearchFilterContext';
+import { useAuth } from '@/contexts';
+import { useUI } from '@/contexts';
 import { Button } from '@/components/ui/button';
 import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
@@ -42,7 +43,8 @@ import AdvancedPeopleSearchFilters from '@/components/features/AdvancedPeopleSea
 
 
 export default function ManagePeoplePage() {
-  const { currentUser, isProcessing } = useFaceRoster();
+  const { currentUser } = useAuth();
+  const { isProcessing } = useUI();
   const {
     allUserPeople,
     isLoadingAllUserPeople,

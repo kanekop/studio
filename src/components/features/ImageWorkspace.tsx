@@ -4,12 +4,12 @@ import React from 'react';
 import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
-import { useFaceRoster } from '@/contexts/FaceRosterContext';
+import { useRoster, useUI } from '@/contexts';
 import { useImage } from '@/contexts/ImageContext';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
-  const { isProcessing } = useFaceRoster();
+  const { isProcessing } = useUI();
   const { addDrawnRegion, clearDrawnRegions, drawnRegions } = useImage();
   
   // TODO: Implement createRosterFromRegions functionality
