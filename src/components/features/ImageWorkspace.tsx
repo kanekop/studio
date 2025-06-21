@@ -3,7 +3,7 @@ import React from 'react';
 import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
-import { useRoster, useImage, useUI, useAuth } from '@/contexts';
+import { useRoster, useUI, useAuth } from '@/contexts';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {

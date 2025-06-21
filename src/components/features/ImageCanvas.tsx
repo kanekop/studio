@@ -1,6 +1,6 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useImage, useRoster } from '@/contexts';
+import { useRoster } from '@/contexts';
 import type { DisplayRegion, Region } from '@/types';
 
 interface ImageCanvasProps {
