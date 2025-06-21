@@ -340,6 +340,32 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setSelectedPersonId(null);
       }
 
+      // Load the original image for the canvas
+      if (rosterData.originalImageStoragePath) {
+        setOriginalImageStoragePath(rosterData.originalImageStoragePath);
+        
+        // Set original image dimensions
+        if (rosterData.originalImageDimensions) {
+          setOriginalImageSize(rosterData.originalImageDimensions);
+        } else if (rosterData.originalImageSize) {
+          // Fallback for backward compatibility
+          setOriginalImageSize(rosterData.originalImageSize);
+        }
+        
+        // Convert the Firebase Storage path to a data URL for canvas operations
+        const dataUrl = await imageStoragePathToDataURI(rosterData.originalImageStoragePath);
+        if (dataUrl) {
+          setImageDataUrl(dataUrl);
+        } else {
+          console.error('FRC: Failed to load original image from storage');
+          toast({ 
+            title: "Image Load Warning", 
+            description: "Could not load the original image, but you can still edit person details.", 
+            variant: "destructive" 
+          });
+        }
+      }
+
       toast({ title: "Roster Loaded", description: `${rosterData.rosterName} is ready for editing.` });
 
     } catch (error: any) {
@@ -477,6 +503,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!ctx) throw new Error('Failed to get canvas context');
         
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.src = imageDataUrl;
         await new Promise((resolve, reject) => {
           img.onload = resolve;
@@ -572,6 +599,14 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIsProcessingState(true);
       clearAllData(false);
 
+      // Convert file to data URL for canvas operations
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
       const storagePath = `users/${currentUser.uid}/rosters/${Date.now()}_${file.name}`;
       const storageRef = storageRefStandard(appFirebaseStorage, storagePath);
       
@@ -580,12 +615,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       // 画像のサイズを取得
       const img = new Image();
+      img.crossOrigin = "anonymous";
       img.onload = () => {
         setOriginalImageSize({ width: img.width, height: img.height });
       };
-      img.src = downloadURL;
+      img.src = dataUrl; // Use data URL instead of Firebase URL
 
-      setImageDataUrl(downloadURL);
+      setImageDataUrl(dataUrl); // Use data URL for canvas operations
       setOriginalImageStoragePath(storagePath);
 
       toast({
