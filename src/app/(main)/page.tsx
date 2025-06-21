@@ -10,6 +10,8 @@ const AppContent = () => {
   const { imageDataUrl } = useFaceRoster();
   const { isProcessing } = useUI();
 
+  console.log('AppContent: imageDataUrl from FaceRoster:', imageDataUrl ? 'loaded' : 'null');
+
   if (isAuthLoading) { // Auth state loading
     return (
       <div className="flex flex-col items-center justify-center min-h-[80vh]">
