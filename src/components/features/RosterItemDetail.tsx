@@ -13,9 +13,7 @@ import type { EditablePersonInContext } from '@/types';
 
 const RosterItemDetail = () => {
   const { roster, updatePersonDetails } = useFaceRoster();
-  const { isProcessing: isGlobalProcessing } = useUI();
-  
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const { isProcessing: isGlobalProcessing, selectedPersonId } = useUI();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [company, setCompany] = useState('');
@@ -28,7 +26,9 @@ const RosterItemDetail = () => {
   const [isDirty, setIsDirty] = useState(false);
 
   const selectedPerson = useMemo(() => {
-    return roster.find(p => p.id === selectedPersonId);
+    const person = roster.find(p => p.id === selectedPersonId);
+    console.log('RosterItemDetail: Selected person:', { selectedPersonId, person: person ? { id: person.id, name: person.name } : null });
+    return person;
   }, [roster, selectedPersonId]);
 
   useEffect(() => {

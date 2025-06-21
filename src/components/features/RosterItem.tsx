@@ -19,6 +19,8 @@ const RosterItem: React.FC<RosterItemProps> = ({
   onSelect,
   isDisabled = false,
 }) => {
+  console.log('RosterItem: Rendering person:', { id: person.id, name: person.name });
+  
   return (
     <div
       className={cn(

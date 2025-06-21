@@ -11,6 +11,8 @@ const RosterList: React.FC = () => {
 
   // Safe array access with null check
   const safeRoster = roster || [];
+  
+  console.log('RosterList: Current roster:', safeRoster.map(p => ({ id: p.id, name: p.name })));
 
   if (safeRoster.length === 0) {
     return (

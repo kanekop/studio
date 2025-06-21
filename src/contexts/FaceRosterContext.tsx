@@ -23,7 +23,6 @@ export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_a
 interface FaceRosterContextType {
   currentUser: FirebaseUser | null;
   roster: EditablePersonInContext[];
-  selectedPersonId: string | null;
   isLoading: boolean;
   isProcessing: boolean;
   currentRosterDocId: string | null;
@@ -35,7 +34,6 @@ interface FaceRosterContextType {
   originalImageSize: { width: number; height: number } | null;
   drawnRegions: Region[];
 
-  selectPerson: (id: string | null) => void;
   updatePersonDetails: (personId: string, details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>) => Promise<void>;
   clearAllData: (showToast?: boolean) => void;
   fetchUserRosters: () => Promise<void>;
@@ -88,7 +86,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { toast } = useToast();
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [roster, setRoster] = useState<EditablePersonInContext[]>([]);
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isProcessing, setIsProcessingState] = useState<boolean>(false);
   const [currentRosterDocId, setCurrentRosterDocId] = useState<string | null>(null);
@@ -102,7 +99,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const clearAllData = useCallback((showToast = true) => {
     setRoster([]);
-    setSelectedPersonId(null);
     setCurrentRosterDocId(null);
     setImageDataUrl(null);
     setOriginalImageStoragePath(null);
@@ -173,9 +169,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
 
 
-  const selectPerson = useCallback((id: string | null) => {
-    setSelectedPersonId(id);
-  }, []);
 
   const updatePersonDetails = useCallback(async (
     personIdToUpdate: string,
@@ -334,11 +327,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
       setRoster(peopleForRosterUI);
-      if (peopleForRosterUI.length > 0) {
-        setSelectedPersonId(peopleForRosterUI[0].id);
-      } else {
-        setSelectedPersonId(null);
-      }
 
       // Load the original image for the canvas
       if (rosterData.originalImageStoragePath) {
@@ -544,11 +532,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         newPeople.push(newPerson);
       }
       
+      console.log('FRC: Created new people:', newPeople.map(p => ({ id: p.id, name: p.name })));
       setRoster(newPeople);
-      
-      if (newPeople.length > 0) {
-        setSelectedPersonId(newPeople[0].id);
-      }
       
       toast({ 
         title: "Roster Created", 
@@ -692,7 +677,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <FaceRosterContext.Provider value={{
       currentUser,
       roster,
-      selectedPersonId,
       isLoading,
       isProcessing,
       currentRosterDocId,
@@ -702,7 +686,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       originalImageStoragePath,
       originalImageSize,
       drawnRegions,
-      selectPerson,
       updatePersonDetails,
       clearAllData,
       fetchUserRosters,
