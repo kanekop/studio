@@ -1,7 +1,6 @@
-
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { useImage } from '@/contexts/ImageContext';
+import { useImage, useRoster } from '@/contexts';
 import type { DisplayRegion, Region } from '@/types';
 
 interface ImageCanvasProps {
@@ -9,7 +8,7 @@ interface ImageCanvasProps {
 }
 
 const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
-  const { imageDataUrl, originalImageSize, drawnRegions: existingOriginalRegions, getScaledRegionForDisplay } = useImage();
+  const { imageDataUrl, originalImageSize, drawnRegions: existingOriginalRegions, getScaledRegionForDisplay } = useRoster();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -28,132 +27,130 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
     // Calculate display size maintaining aspect ratio
     const containerWidth = canvas.parentElement?.clientWidth || canvas.width;
     const aspectRatio = originalImageSize.width / originalImageSize.height;
-    let displayWidth = containerWidth;
-    let displayHeight = containerWidth / aspectRatio;
-
-    if (displayHeight > (window.innerHeight * 0.7)) { // Max height constraint
-        displayHeight = window.innerHeight * 0.7;
-        displayWidth = displayHeight * aspectRatio;
-    }
     
+    let displayWidth = containerWidth;
+    let displayHeight = displayWidth / aspectRatio;
+    
+    if (displayHeight > 600) {
+      displayHeight = 600;
+      displayWidth = displayHeight * aspectRatio;
+    }
+
+    // Set canvas size
     canvas.width = displayWidth;
     canvas.height = displayHeight;
-    if (imageDisplaySize.width !== displayWidth || imageDisplaySize.height !== displayHeight) {
-      setImageDisplaySize({ width: displayWidth, height: displayHeight });
-    }
-    
+    setImageDisplaySize({ width: displayWidth, height: displayHeight });
+
     // Draw image
     ctx.drawImage(imageRef.current, 0, 0, displayWidth, displayHeight);
 
-    // Draw existing regions (converted to display coordinates)
-    existingOriginalRegions.forEach(originalRegion => {
-      const displayRegion = getScaledRegionForDisplay(originalRegion, {width: displayWidth, height: displayHeight});
-      ctx.strokeStyle = 'rgba(255, 255, 0, 0.7)'; // Yellow for saved regions
+    // Draw existing regions
+    existingOriginalRegions.forEach((region) => {
+      const scaledRegion = getScaledRegionForDisplay(region, { width: displayWidth, height: displayHeight });
+      ctx.strokeStyle = '#A855BA';
       ctx.lineWidth = 2;
-      ctx.strokeRect(displayRegion.x, displayRegion.y, displayRegion.width, displayRegion.height);
+      ctx.strokeRect(scaledRegion.x, scaledRegion.y, scaledRegion.width, scaledRegion.height);
     });
-    
-    // Draw current drawing rectangle
-    if (currentRect) {
-      ctx.strokeStyle = 'rgba(74, 222, 128, 0.9)'; // Green for current drawing
-      ctx.lineWidth = 2;
-      ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
-    }
-  }, [originalImageSize, currentRect, existingOriginalRegions, getScaledRegionForDisplay, imageDisplaySize]);
 
-  useEffect(() => {
-    if (imageDataUrl) {
-      const img = new Image();
-      img.onload = () => {
-        imageRef.current = img;
-        draw(); // Initial draw
-      };
-      img.src = imageDataUrl;
+    // Draw current drawing rectangle
+    if (currentRect && isDrawing) {
+      ctx.strokeStyle = '#5EEAD4';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
+      ctx.setLineDash([]);
     }
+  }, [imageRef, originalImageSize, existingOriginalRegions, currentRect, isDrawing, getScaledRegionForDisplay]);
+
+  // Load image when imageDataUrl changes
+  useEffect(() => {
+    if (!imageDataUrl) return;
+
+    const img = new Image();
+    img.onload = () => {
+      imageRef.current = img;
+      draw();
+    };
+    img.src = imageDataUrl;
   }, [imageDataUrl, draw]);
 
+  // Redraw when regions change
   useEffect(() => {
-    // Redraw when existing regions change or display size changes
-    if(imageRef.current) draw();
-  }, [existingOriginalRegions, imageDisplaySize, draw]);
-
-
-  useEffect(() => {
-    const handleResize = () => {
-      if(imageRef.current) draw(); // Redraw on window resize
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [draw]);
-
-
-  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
-  };
+    draw();
+  }, [existingOriginalRegions, draw]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button !== 0) return; // Only left click
-    const pos = getMousePos(e);
-    setStartPoint(pos);
-    setCurrentRect({ id: 'current', ...pos, width: 0, height: 0 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    setStartPoint({ x, y });
     setIsDrawing(true);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !startPoint) return;
-    const pos = getMousePos(e);
-    const width = pos.x - startPoint.x;
-    const height = pos.y - startPoint.y;
-    setCurrentRect({
-      id: 'current',
-      x: width > 0 ? startPoint.x : pos.x,
-      y: height > 0 ? startPoint.y : pos.y,
-      width: Math.abs(width),
-      height: Math.abs(height),
-    });
-    if(imageRef.current) draw(); // Redraw while dragging
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const currentX = e.clientX - rect.left;
+    const currentY = e.clientY - rect.top;
+
+    const newRect: DisplayRegion = {
+      id: 'drawing',
+      x: Math.min(startPoint.x, currentX),
+      y: Math.min(startPoint.y, currentY),
+      width: Math.abs(currentX - startPoint.x),
+      height: Math.abs(currentY - startPoint.y),
+    };
+
+    setCurrentRect(newRect);
+    draw();
   };
 
   const handleMouseUp = () => {
-    if (!isDrawing || !currentRect || !startPoint) return;
-    setIsDrawing(false);
-    if (currentRect.width > 5 && currentRect.height > 5) { // Minimum size for a region
-      onRegionDrawn(currentRect, imageDisplaySize);
+    if (!isDrawing || !currentRect || !imageDisplaySize) return;
+
+    if (currentRect.width > 10 && currentRect.height > 10) {
+      onRegionDrawn(
+        {
+          x: currentRect.x,
+          y: currentRect.y,
+          width: currentRect.width,
+          height: currentRect.height,
+        },
+        imageDisplaySize
+      );
     }
+
+    setIsDrawing(false);
     setStartPoint(null);
     setCurrentRect(null);
-    if(imageRef.current) draw(); // Final draw to clear currentRect display
-  };
-  
-  const handleMouseLeave = () => {
-    // Optional: if you want to cancel drawing if mouse leaves canvas
-    // if (isDrawing) {
-    //   setIsDrawing(false);
-    //   setStartPoint(null);
-    //   setCurrentRect(null);
-    //   if(imageRef.current) draw();
-    // }
+    draw();
   };
 
-
-  if (!imageDataUrl) return <p className="text-center text-muted-foreground">No image loaded.</p>;
+  if (!imageDataUrl) {
+    return (
+      <div className="w-full h-[400px] bg-muted rounded-lg flex items-center justify-center">
+        <p className="text-muted-foreground">No image loaded</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full h-auto relative touch-none select-none border border-border rounded-md shadow-sm overflow-hidden bg-muted/20" style={{aspectRatio: originalImageSize ? `${originalImageSize.width}/${originalImageSize.height}` : '16/9'}}>
+    <div className="relative w-full">
       <canvas
         ref={canvasRef}
+        className="border rounded-lg cursor-crosshair max-w-full"
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave} // Optional: cancel drawing if mouse leaves
-        className="cursor-crosshair w-full h-full block"
-        aria-label="Image canvas for drawing face regions"
+        onMouseLeave={handleMouseUp}
       />
     </div>
   );

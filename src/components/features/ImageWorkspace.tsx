@@ -3,16 +3,27 @@ import React from 'react';
 import ImageCanvas from './ImageCanvas';
 import { Button } from '@/components/ui/button';
 import { Eraser, Users, RotateCcw } from 'lucide-react';
-import { useRoster, useImage, useUI } from '@/contexts';
+import { useRoster, useImage, useUI, useAuth } from '@/contexts';
 import { Card, CardContent } from '@/components/ui/card';
 
 const ImageWorkspace = () => {
+  const { currentUser } = useAuth();
   const { isProcessing } = useUI();
-  const { createRosterFromRegions } = useRoster();
-  const { addDrawnRegion, clearDrawnRegions, drawnRegions } = useImage();
+  const { createRosterFromRegions, originalImageStoragePath, roster, addDrawnRegion, clearDrawnRegions, drawnRegions } = useRoster();
   
   const handleCreateRoster = async () => {
-    await createRosterFromRegions();
+    console.log('=== CREATE ROSTER DEBUG ===');
+    console.log('Current User:', currentUser?.uid);
+    console.log('Original Image Storage Path:', originalImageStoragePath);
+    console.log('Drawn Regions:', drawnRegions);
+    console.log('Current Roster:', roster);
+    
+    try {
+      await createRosterFromRegions();
+      console.log('Create roster completed');
+    } catch (error) {
+      console.error('Create roster error:', error);
+    }
   };
 
   return (

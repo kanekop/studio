@@ -1,15 +1,13 @@
-
 "use client";
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useRoster, useUI } from '@/contexts';
-import { useImage } from '@/contexts/ImageContext';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
 const ImageUploadForm = () => {
   const { isProcessing } = useUI();
-  const { handleImageUpload } = useImage();
+  const { handleImageUpload } = useRoster();
   const [isDragging, setIsDragging] = useState(false);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -57,7 +55,7 @@ const ImageUploadForm = () => {
           type="button"
           variant="default"
           size="sm"
-          className="mt-2 pointer-events-none" // Button is illustrative, dropzone handles click
+          className="mt-2 pointer-events-none"
           disabled={isProcessing}
           aria-hidden="true" 
         >
