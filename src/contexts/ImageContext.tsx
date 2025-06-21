@@ -49,19 +49,25 @@ export const ImageProvider: React.FC<ImageProviderProps> = ({ children }) => {
   const [isUploading, setIsUploading] = useState(false);
 
   const handleImageUpload = async (file: File): Promise<void> => {
+    console.log('ImageContext: handleImageUpload called with file:', file.name, file.size);
+    
     if (!currentUser) {
+      console.error('ImageContext: User not authenticated');
       throw new Error('ユーザーが認証されていません');
     }
 
     // ファイルサイズとタイプの検証
     if (file.size > MAX_FILE_SIZE) {
+      console.error('ImageContext: File size too large:', file.size);
       throw new Error('ファイルサイズが10MBを超えています');
     }
 
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
+      console.error('ImageContext: Unsupported file type:', file.type);
       throw new Error('サポートされていないファイル形式です');
     }
 
+    console.log('ImageContext: Starting upload process...');
     setIsUploading(true);
 
     try {
@@ -69,21 +75,27 @@ export const ImageProvider: React.FC<ImageProviderProps> = ({ children }) => {
       const fileName = `${Date.now()}_${file.name}`;
       const imageRef = storageRef(storage, `users/${currentUser.uid}/rosters/${fileName}`);
       
+      console.log('ImageContext: Uploading to storage path:', `users/${currentUser.uid}/rosters/${fileName}`);
       await uploadBytes(imageRef, file);
       const downloadURL = await getDownloadURL(imageRef);
+      console.log('ImageContext: Upload successful, download URL:', downloadURL);
       
       // 画像サイズを取得
       const img = new Image();
       img.onload = () => {
+        console.log('ImageContext: Image loaded, size:', img.width, 'x', img.height);
         setOriginalImageSize({ width: img.width, height: img.height });
       };
       img.src = downloadURL;
 
+      console.log('ImageContext: Setting image data URL and storage path');
       setImageDataUrl(downloadURL);
       setOriginalImageStoragePath(`users/${currentUser.uid}/rosters/${fileName}`);
       setDrawnRegions([]);
+      
+      console.log('ImageContext: Upload process completed successfully');
     } catch (error) {
-      console.error('画像アップロードエラー:', error);
+      console.error('ImageContext: Upload error:', error);
       throw error;
     } finally {
       setIsUploading(false);

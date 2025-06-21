@@ -1,19 +1,25 @@
 "use client";
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { useFaceRoster, useUI } from '@/contexts';
+import { useImage, useUI } from '@/contexts';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
 const ImageUploadForm = () => {
   const { isProcessing } = useUI();
-  const { handleImageUpload } = useFaceRoster();
+  const { handleImageUpload, isUploading } = useImage();
   const [isDragging, setIsDragging] = useState(false);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setIsDragging(false);
     if (acceptedFiles && acceptedFiles.length > 0) {
-      handleImageUpload(acceptedFiles[0]);
+      try {
+        console.log('ImageUploadForm: Starting upload for file:', acceptedFiles[0].name);
+        await handleImageUpload(acceptedFiles[0]);
+        console.log('ImageUploadForm: Upload completed successfully');
+      } catch (error) {
+        console.error('ImageUploadForm: Upload failed:', error);
+      }
     }
   }, [handleImageUpload]);
 
@@ -56,10 +62,10 @@ const ImageUploadForm = () => {
           variant="default"
           size="sm"
           className="mt-2 pointer-events-none"
-          disabled={isProcessing}
+          disabled={isProcessing || isUploading}
           aria-hidden="true" 
         >
-          {isProcessing ? 'Processing...' : 'Select Image'}
+          {isProcessing || isUploading ? 'Processing...' : 'Select Image'}
         </Button>
       </div>
     </div>
