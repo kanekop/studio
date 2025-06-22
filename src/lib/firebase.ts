@@ -1,4 +1,3 @@
-
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
@@ -9,12 +8,12 @@ import { getStorage, type FirebaseStorage } from "firebase/storage";
 // IMPORTANT: REPLACE THIS ENTIRE OBJECT with the firebaseConfig
 // from your own Firebase project settings.
 const firebaseConfig = {
-  apiKey: "AIzaSyBQMTKCV77S6LI0TkhOLjicsR-j9BU5eK8", // REPLACE ME
-  authDomain: "faceroster.firebaseapp.com", // REPLACE ME
-  projectId: "faceroster", // REPLACE ME
-  storageBucket: "faceroster.firebasestorage.app", // REPLACE ME
-  messagingSenderId: "17864523080", // REPLACE ME
-  appId: "1:17864523080:web:e03c71bdbe26ba4712077d" // REPLACE ME
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 // console.log("FirebaseConfig object in firebase.ts:", firebaseConfig);
 

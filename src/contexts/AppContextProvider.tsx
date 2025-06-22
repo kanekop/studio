@@ -4,7 +4,7 @@ import React, { ReactNode } from 'react';
 import { AuthProvider } from './AuthContext';
 import { ConnectionProvider } from './ConnectionContext';
 import { PeopleProvider } from './PeopleContext';
-import { RosterProvider } from './RosterContext';
+import { FaceRosterProvider } from './FaceRosterContext';
 import { UIProvider } from './UIContext';
 import { ImageProvider } from './ImageContext';
 import { SearchFilterProvider } from './SearchFilterContext';
@@ -34,9 +34,9 @@ export const AppContextProvider: React.FC<AppContextProviderProps> = ({ children
           <SearchFilterProvider>
             <ConnectionProvider>
               <PeopleProvider>
-                <RosterProvider>
+                <FaceRosterProvider>
                   {children}
-                </RosterProvider>
+                </FaceRosterProvider>
               </PeopleProvider>
             </ConnectionProvider>
           </SearchFilterProvider>

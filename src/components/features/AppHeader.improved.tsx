@@ -17,11 +17,13 @@ import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRouter } from 'next/navigation';
 
 export function AppHeader() {
   const { currentUser, isAuthLoading } = useAuth();
-  const { clearAllData } = useFaceRoster();
+  const { clearAllData, clearCurrentRoster } = useFaceRoster();
   const { handleError } = useErrorHandler();
+  const router = useRouter();
 
   const handleLogout = async () => {
     try {
@@ -32,10 +34,15 @@ export function AppHeader() {
     }
   };
 
+  const handleHomeClick = () => {
+    clearCurrentRoster();
+    router.push('/');
+  };
+
   const navLinks = [
-    { href: '/', label: 'Home', icon: Home },
-    { href: '/people', label: 'People', icon: Users },
-    { href: '/connections', label: 'Connections', icon: Network },
+    { label: 'Home', icon: Home, action: handleHomeClick },
+    { label: 'People', icon: Users, href: '/people' },
+    { label: 'Connections', icon: Network, href: '/connections' },
   ];
 
   const renderAuthSection = () => {
@@ -105,10 +112,22 @@ export function AppHeader() {
     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
       {navLinks.map((link) => {
         const Icon = link.icon;
+        if (link.action) {
+          return (
+            <button
+              key={link.label}
+              onClick={link.action}
+              className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center bg-transparent border-none p-0"
+            >
+              <Icon className="mr-2 h-4 w-4" />
+              {link.label}
+            </button>
+          );
+        }
         return (
           <Link
             key={link.href}
-            href={link.href}
+            href={link.href!}
             className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center"
           >
             <Icon className="mr-2 h-4 w-4" />
@@ -133,10 +152,22 @@ export function AppHeader() {
             <nav className="space-y-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
+                if (link.action) {
+                  return (
+                    <button
+                      key={link.label}
+                      onClick={link.action}
+                      className="w-full flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors bg-transparent border-none"
+                    >
+                      <Icon className="mr-3 h-4 w-4" />
+                      {link.label}
+                    </button>
+                  );
+                }
                 return (
                   <Link
                     key={link.href}
-                    href={link.href}
+                    href={link.href!}
                     className="flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
                   >
                     <Icon className="mr-3 h-4 w-4" />

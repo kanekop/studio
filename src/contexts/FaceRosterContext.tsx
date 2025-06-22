@@ -51,7 +51,7 @@ interface FaceRosterContextType {
   addDrawnRegion: (displayRegion: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;
   clearDrawnRegions: () => void;
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
-
+  clearCurrentRoster: () => void;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -335,10 +335,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setOriginalImageStoragePath(rosterData.originalImageStoragePath);
         
         // Set original image dimensions
-        if (rosterData.originalImageDimensions) {
-          setOriginalImageSize(rosterData.originalImageDimensions);
-        } else if (rosterData.originalImageSize) {
-          // Fallback for backward compatibility
+        if (rosterData.originalImageSize) {
           setOriginalImageSize(rosterData.originalImageSize);
         }
         
@@ -456,109 +453,156 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast, fetchUserRosters, currentRosterDocId, clearAllData]);
 
-  const createRosterFromRegions = useCallback(async (
+  const createRosterFromRegions = async (
     regions: Region[],
     imageDataUrl: string,
     originalImageStoragePath: string,
     originalImageSize: { width: number; height: number }
   ) => {
-    if (!currentUser || !db || !appFirebaseStorage) {
-      toast({ 
-        title: "Error", 
-        description: "User not authenticated or services unavailable.", 
-        variant: "destructive" 
-      });
+    if (!currentUser) {
+      console.error("User not authenticated to create a roster.");
       return;
     }
-
     if (regions.length === 0) {
-      toast({ 
-        title: "No Selections", 
-        description: "Please select at least one face region.", 
-        variant: "destructive" 
-      });
+      console.warn("No regions selected, nothing to create.");
       return;
     }
 
     setIsProcessingState(true);
-
     try {
-      const newPeople: EditablePersonInContext[] = [];
+      // 1. Prepare initial data structures
+      const newPeople = await createInitialPersonDataFromRegions(regions, imageDataUrl, originalImageSize);
+      const newRosterRef = doc(collection(db, 'rosters'));
       
-      for (let i = 0; i < regions.length; i++) {
-        const region = regions[i];
+      // 2. Upload face images and prepare person data
+      const peopleWithRealIdsPromises = newPeople.map(async (person) => {
+        const newPersonDocRef = doc(collection(db, 'people'));
         
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error('Failed to get canvas context');
-        
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = imageDataUrl;
-        await new Promise((resolve, reject) => {
-          img.onload = resolve;
-          img.onerror = reject;
-        });
-        
-        canvas.width = region.width;
-        canvas.height = region.height;
-        
-        ctx.drawImage(
-          img,
-          region.x, region.y, region.width, region.height,
-          0, 0, region.width, region.height
-        );
-        
-        const faceDataUri = canvas.toDataURL('image/png');
-        
-        const newPerson: EditablePersonInContext = {
-          id: `temp_${Date.now()}_${i}`,
-          name: `Person ${i + 1}`,
-          faceImageUrl: faceDataUri,
-          isNew: true,
-          tempFaceImageDataUri: faceDataUri,
-          tempOriginalRegion: region,
-          currentRosterAppearance: {
-            rosterId: '',
-            faceImageStoragePath: '',
-            originalRegion: region,
-          },
-          notes: '',
-          company: '',
-          hobbies: '',
-          birthday: '',
-          firstMet: '',
-          firstMetContext: '',
+        // Upload the cropped face image data URI to Storage
+        const faceImageStoragePath = `rosters/${currentUser.uid}/${newRosterRef.id}/face_${newPersonDocRef.id}.jpg`;
+        const faceImageRef = storageRefStandard(appFirebaseStorage, faceImageStoragePath);
+        await uploadString(faceImageRef, person.tempFaceImageDataUri!, StringFormat.DATA_URL);
+
+        const appearanceForThisRoster = { 
+          ...person.currentRosterAppearance, 
+          rosterId: newRosterRef.id,
+          faceImageStoragePath: faceImageStoragePath
         };
         
-        newPeople.push(newPerson);
-      }
+        return {
+          ...person,
+          id: newPersonDocRef.id,
+          isNew: false,
+          currentRosterAppearance: appearanceForThisRoster
+        };
+      });
+
+      const peopleWithRealIds = await Promise.all(peopleWithRealIdsPromises);
+
+      // 3. Create a batch write to commit all changes at once
+      const batch = writeBatch(db);
+
+      batch.set(newRosterRef, {
+        ownerId: currentUser.uid,
+        createdAt: serverTimestamp(),
+        originalImageStoragePath: originalImageStoragePath,
+        originalImageSize: originalImageSize,
+        personCount: regions.length,
+        peopleIds: peopleWithRealIds.map(p => p.id)
+      });
       
-      console.log('FRC: Created new people:', newPeople.map(p => ({ id: p.id, name: p.name })));
-      setRoster(newPeople);
-      
+      peopleWithRealIds.forEach(person => {
+        const personDocRef = doc(db, 'people', person.id);
+        const {
+          isNew,
+          tempFaceImageDataUri,
+          tempOriginalRegion,
+          currentRosterAppearance,
+          ...personDataToSave
+        } = person;
+
+        const finalPersonData = {
+          ...personDataToSave,
+          userId: currentUser.uid,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+          faceAppearances: [currentRosterAppearance]
+        };
+        batch.set(personDocRef, finalPersonData);
+      });
+
+      await batch.commit();
+
+      // 4. On Success, update the local state
+      setRoster(peopleWithRealIds);
+      setCurrentRosterDocId(newRosterRef.id);
+      setOriginalImageStoragePath(originalImageStoragePath);
+      setOriginalImageSize(originalImageSize);
       // Auto-select the first person if any were created
-      if (newPeople.length > 0) {
-        selectPerson(newPeople[0].id);
-        console.log('FRC: Auto-selected first person:', newPeople[0].id, newPeople[0].name);
+      if (peopleWithRealIds.length > 0) {
+        selectPerson(peopleWithRealIds[0].id);
+        console.log('FRC: Auto-selected first person:', peopleWithRealIds[0].id, peopleWithRealIds[0].name);
       }
-      
       toast({ 
         title: "Roster Created", 
         description: `${regions.length} face(s) detected. Please save the roster to persist changes.` 
       });
-      
-    } catch (error: any) {
-      console.error("FRC: Error creating roster from regions:", error);
-      toast({ 
-        title: "Creation Failed", 
-        description: `Could not create roster: ${error.message}`, 
-        variant: "destructive" 
-      });
+
+    } catch (error) {
+      console.error("Error creating new roster: ", error);
+      toast({ title: "Error", description: `Failed to create roster: ${error}`, variant: "destructive" });
     } finally {
       setIsProcessingState(false);
     }
-  }, [currentUser, toast, selectPerson]);
+  };
+
+  const createInitialPersonDataFromRegions = async (
+    regions: Region[],
+    imageDataUrl: string,
+    originalImageSize: { width: number, height: number }
+  ): Promise<EditablePersonInContext[]> => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = imageDataUrl;
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+    });
+
+    return regions.map((region, i) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Failed to get canvas context');
+      canvas.width = region.width;
+      canvas.height = region.height;
+      ctx.drawImage(img, region.x, region.y, region.width, region.height, 0, 0, region.width, region.height);
+      const faceDataUri = canvas.toDataURL('image/png');
+
+      return {
+        id: `temp_${Date.now()}_${i}`,
+        name: `Person ${i + 1}`,
+        isNew: true,
+        tempFaceImageDataUri: faceDataUri,
+        tempOriginalRegion: region,
+        currentRosterAppearance: {
+          rosterId: '',
+          faceImageStoragePath: '',
+          originalRegion: {
+            x: region.x / originalImageSize.width,
+            y: region.y / originalImageSize.height,
+            width: region.width / originalImageSize.width,
+            height: region.height / originalImageSize.height,
+          },
+        },
+        notes: '',
+        company: '',
+        hobbies: '',
+        birthday: '',
+        firstMet: '',
+        firstMetContext: '',
+      };
+    });
+  };
 
   const handleImageUpload = useCallback(async (file: File) => {
     if (!currentUser?.uid) {
@@ -677,9 +721,16 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, [originalImageSize]);
 
-
-
-
+  const clearCurrentRoster = useCallback(() => {
+    setRoster([]);
+    setCurrentRosterDocId(null);
+    setOriginalImageStoragePath(null);
+    setOriginalImageSize(null);
+    setImageDataUrl(null);
+    setDrawnRegions([]);
+    selectPerson(null);
+    console.log('FRC: Current roster cleared.');
+  }, []);
 
   return (
     <FaceRosterContext.Provider value={{
@@ -704,6 +755,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       addDrawnRegion,
       clearDrawnRegions,
       getScaledRegionForDisplay,
+      clearCurrentRoster,
     }}>
       {children}
     </FaceRosterContext.Provider>

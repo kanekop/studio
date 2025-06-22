@@ -17,7 +17,10 @@
       "Bash(npm uninstall:*)",
       "Bash(npm run genkit:dev:*)",
       "Bash(npx tsc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(npx kill-port:*)"
     ],
     "deny": []
   }

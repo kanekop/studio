@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> **Note for AI Assistants:** Before starting any work, please read this document carefully to understand the project's current state, architecture, and conventions.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -37,6 +39,11 @@ Visit `/test` in development to verify:
 - Context provider hierarchy
 - Basic system health
 
+### Debugging Endpoints (Added by Gemini)
+
+*   **/logout**: Forcefully triggers the Firebase sign-out process. Useful for testing login/logout flows when the standard UI is not functioning correctly.
+*   **/firestore-test**: A simple page to test direct write operations to the Firestore database, isolating it from the main application logic.
+
 ### Debug Logging
 ```typescript
 import { debugLog } from '@/lib/debug-logger';
@@ -65,6 +72,8 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 - **Backend**: Firebase (Auth, Firestore, Storage)
 - **AI**: Google Genkit with Gemini 2.0 Flash model
 - **State**: React Context API (Unified FaceRosterContext - central state management)
+
+For future plans on face recognition capabilities, please refer to a separate detailed document: `FACE_RECOGNITION_PLAN.md`.
 
 ### Directory Structure
 ```
@@ -371,3 +380,11 @@ This prevents confusion during code reviews and ensures team members have accura
 - Defensive programming is applied to prevent null/undefined errors
 - Debug logging and error boundaries are implemented for better error tracking
 - `/test` page available for system health checks during development
+
+## Decision Log
+
+- **2025/06/22:** `RosterContext` was deprecated and its functionality was fully merged into `FaceRosterContext` to unify state management. The old `RosterContext.tsx` file has been deleted.
+
+## Current Status & Next Steps
+
+*(Please update this section when you pause your work.)*

@@ -81,6 +81,12 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        // --- Data Compatibility Patch ---
+        // If faceAppearances doesn't exist, try to create it from the legacy `appearances` field.
+        if (!data.faceAppearances && Array.isArray(data.appearances) && data.appearances.length > 0) {
+          data.faceAppearances = data.appearances;
+        }
+
         people.push({
           id: doc.id,
           ...data,

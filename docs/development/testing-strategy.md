@@ -312,4 +312,20 @@ export const seedDatabase = async () => {
   const people = Array.from({ length: 10 }, createPerson);
   await Promise.all(people.map(p => firestore.collection('people').add(p)));
 };
-``` 
+```
+
+## Debugging Endpoints
+
+During development and troubleshooting, several special-purpose endpoints were created for testing specific functionalities. These pages are not part of the standard user-facing application but can be accessed by developers by navigating directly to their URLs.
+
+### `/logout`
+
+*   **Purpose:** Provides a simple, UI-less page to forcefully trigger the Firebase sign-out process.
+*   **Use Case:** This endpoint was created to resolve an issue where the standard logout UI was not functioning correctly or was inaccessible. It ensures a reliable way to clear the user's authentication state for testing login/logout flows.
+*   **How to Use:** Simply navigate to `/logout` in your browser. The page will automatically execute the logout logic and redirect you.
+
+### `/firestore-test`
+
+*   **Purpose:** Offers a basic interface to test direct write operations to the Firestore database.
+*   **Use Case:** This page was instrumental in diagnosing database connectivity and security rule issues. It allows developers to isolate database write functionality from the main application's UI and state management, making it easier to confirm if the Firestore service itself is working as expected.
+*   **How to Use:** Navigate to `/firestore-test`. The page contains a simple button that, when clicked, attempts to write a test document to a `test_writes` collection in Firestore. Check the browser's developer console and the Firebase console for success or error messages. 

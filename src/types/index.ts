@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 // Describes a rectangular region within an image, using original image coordinates.
@@ -21,7 +20,6 @@ export interface FaceAppearance {
   id: string; // Unique identifier for this face appearance
   rosterId: string; // ID of the roster (original image) this face was cropped from
   faceImageStoragePath: string; // Path to the cropped face image in Cloud Storage for this appearance
-  faceImagePath?: string; // Alternative property name for backward compatibility
   originalRegion: Region; // The region in the original image (identified by rosterId) coordinates
   isPrimary?: boolean; // Whether this is the primary appearance for the person
 }
@@ -47,8 +45,6 @@ export interface Person {
   age?: number; // Optional: Person's age
   firstMet?: string; 
   firstMetContext?: string;
-  knownAcquaintances?: string[]; // DEPRECATED: Use connections collection
-  spouse?: string | null; // DEPRECATED: Use connections collection
 
   createdAt: Timestamp | any; // Firestore serverTimestamp for creation (any for FieldValue)
   updatedAt: Timestamp | any; // Firestore serverTimestamp for last update (any for FieldValue)
@@ -57,7 +53,6 @@ export interface Person {
 // Represents an individual person for display and editing within the context of a specific, currently loaded roster.
 export interface EditablePersonInContext {
   id: string; // Firestore document ID of the person, OR a temporary ID for new, unsaved persons
-  faceImageUrl: string; // Cloud Storage Download URL or local data URI for the cropped face specific to the current roster/state
   name: string;
   aiName?: string;
   notes?: string;
@@ -91,9 +86,7 @@ export interface ImageSet {
   description?: string; // Optional description for this roster
   
   originalImageStoragePath: string; // Path to the original uploaded image in Cloud Storage
-  originalImagePath?: string; // Alternative property name for backward compatibility
-  originalImageDimensions: { width: number; height: number }; // Dimensions of the original image
-  originalImageSize?: { width: number; height: number }; // Alternative property name for backward compatibility
+  originalImageSize: { width: number; height: number }; // Dimensions of the original image
   
   peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
   people?: EditablePersonInContext[]; // Optional: Embedded people data for this roster

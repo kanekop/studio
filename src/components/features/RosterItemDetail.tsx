@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { UserCircle, Edit3, CheckSquare, Building, Smile, CalendarDays, Info, Save } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { EditablePersonInContext } from '@/types';
+import { useStorageImage } from '@/hooks/useStorageImage.improved';
 
 const RosterItemDetail = () => {
   const { roster, updatePersonDetails } = useFaceRoster();
@@ -26,10 +27,12 @@ const RosterItemDetail = () => {
   const [isDirty, setIsDirty] = useState(false);
 
   const selectedPerson = useMemo(() => {
-    const person = roster.find(p => p.id === selectedPersonId);
-    console.log('RosterItemDetail: Selected person:', { selectedPersonId, person: person ? { id: person.id, name: person.name } : null });
-    return person;
+    return roster.find(p => p.id === selectedPersonId);
   }, [roster, selectedPersonId]);
+
+  // Use the robust image fetching hook
+  const imagePath = selectedPerson?.currentRosterAppearance?.faceImageStoragePath;
+  const { url: displayImageUrl, isLoading: isImageLoading } = useStorageImage(imagePath);
 
   useEffect(() => {
     if (selectedPerson) {
@@ -150,9 +153,11 @@ const RosterItemDetail = () => {
       <CardContent className="space-y-4 overflow-y-auto max-h-[calc(100vh-300px)]">
         <div className="flex justify-center mb-4">
           <div className="relative">
-            {selectedPerson.faceImageUrl ? (
+            {isImageLoading ? (
+              <Skeleton className="w-32 h-32 rounded-full" />
+            ) : displayImageUrl || selectedPerson.tempFaceImageDataUri ? (
               <Image
-                src={selectedPerson.faceImageUrl}
+                src={displayImageUrl || selectedPerson.tempFaceImageDataUri!}
                 alt={selectedPerson.name || 'Person'}
                 width={128}
                 height={128}
