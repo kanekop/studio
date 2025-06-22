@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
+import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Camera } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth, useFaceRoster } from '@/contexts';
 import { auth } from '@/lib/firebase';
@@ -40,9 +40,10 @@ export function AppHeader() {
   };
 
   const navLinks = [
-    { label: 'Home', icon: Home, action: handleHomeClick },
+    { label: 'Home', icon: Home, action: handleHomeClick, href: '/' },
+    { label: 'Rosters', icon: Camera, href: '/rosters' },
     { label: 'People', icon: Users, href: '/people' },
-    { label: 'Connections', icon: Network, href: '/connections' },
+    { label: 'Network', icon: Network, href: '/network' },
   ];
 
   const renderAuthSection = () => {
@@ -112,12 +113,16 @@ export function AppHeader() {
     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
       {navLinks.map((link) => {
         const Icon = link.icon;
+        const commonProps = {
+          key: link.label,
+          className: "transition-colors hover:text-primary flex items-center",
+        };
         if (link.action) {
           return (
             <button
-              key={link.label}
               onClick={link.action}
-              className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center bg-transparent border-none p-0"
+              {...commonProps}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <Icon className="mr-2 h-4 w-4" />
               {link.label}
@@ -126,9 +131,8 @@ export function AppHeader() {
         }
         return (
           <Link
-            key={link.href}
             href={link.href!}
-            className="transition-colors hover:text-foreground/80 text-foreground/60 flex items-center"
+            {...commonProps}
           >
             <Icon className="mr-2 h-4 w-4" />
             {link.label}
@@ -152,12 +156,17 @@ export function AppHeader() {
             <nav className="space-y-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
+                const commonProps = {
+                  key: link.label,
+                  className: "w-full flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors",
+                };
+
                 if (link.action) {
                   return (
                     <button
-                      key={link.label}
                       onClick={link.action}
-                      className="w-full flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors bg-transparent border-none"
+                      {...commonProps}
+                       style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
                     >
                       <Icon className="mr-3 h-4 w-4" />
                       {link.label}
@@ -166,9 +175,8 @@ export function AppHeader() {
                 }
                 return (
                   <Link
-                    key={link.href}
                     href={link.href!}
-                    className="flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors"
+                    {...commonProps}
                   >
                     <Icon className="mr-3 h-4 w-4" />
                     {link.label}

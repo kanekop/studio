@@ -18,6 +18,206 @@ FaceRosterの統一されたビジュアルデザインとインタラクショ�
 - モバイルファーストの設計
 - タブレット・デスクトップへの最適化
 
+## ナビゲーション
+
+### メインナビゲーション構成
+
+FaceRosterは4つの主要セクションで構成されます：
+
+```
+[Logo] FaceRoster    🏠 Home | 📸 Rosters | 👥 People | 🔗 Network
+```
+
+#### 各セクションの役割
+
+1. **Home（ホーム）**
+   - ダッシュボード機能
+   - AIプロンプト検索
+   - 最近のアクティビティ
+   - クイックアクション
+   - 統計情報表示
+
+2. **Rosters（名簿）**
+   - 画像コレクション管理
+   - 過去の名簿の閲覧・編集
+   - タグやイベントでの整理
+   - 名簿のお気に入り管理
+
+3. **People（人物）**
+   - 人物データベース
+   - リスト/ギャラリー表示切替
+   - 詳細プロフィール編集
+   - 写真履歴管理
+
+4. **Network（ネットワーク）**
+   - 関係性の可視化
+   - コネクション管理
+   - 関係性マップ表示
+   - グループ管理
+
+### ホーム画面レイアウト
+
+```
+┌─────────────────────────────────────────────┐
+│  🔍 なんでも検索...                         │  <- AIプロンプト検索
+├─────────────────────────────────────────────┤
+│                                             │
+│  最近のアクティビティ    クイックアクション │
+│  ┌─────────────┐       ┌─────────────┐   │
+│  │・新規追加    │       │ [📸] 新規   │   │
+│  │  山田さん    │       │     作成     │   │
+│  │・更新        │       │              │   │
+│  │  田中さん    │       │ [📁] 最近の │   │
+│  │・コネクション│       │    名簿     │   │
+│  │  鈴木⇔佐藤  │       │              │   │
+│  └─────────────┘       └─────────────┘   │
+│                                             │
+│  統計情報                                   │
+│  ┌─────────────────────────────────────┐  │
+│  │ 登録人数: 127人 | コネクション: 89   │  │
+│  │ 今月の新規: 12人 | 名簿数: 15        │  │
+│  └─────────────────────────────────────┘  │
+└─────────────────────────────────────────────┘
+```
+
+### ナビゲーションUI仕様
+
+#### デスクトップ表示
+```html
+<header class="sticky top-0 z-50 bg-white border-b">
+  <div class="container flex h-14 items-center">
+    <!-- ロゴ -->
+    <a href="/" class="mr-8 flex items-center">
+      <SmilePlus class="h-6 w-6 mr-2" />
+      <span class="font-bold">FaceRoster</span>
+    </a>
+    
+    <!-- メインナビゲーション -->
+    <nav class="flex items-center space-x-6 text-sm font-medium">
+      <a href="/" class="flex items-center hover:text-primary">
+        <Home class="h-4 w-4 mr-2" />
+        Home
+      </a>
+      <a href="/rosters" class="flex items-center hover:text-primary">
+        <Camera class="h-4 w-4 mr-2" />
+        Rosters
+      </a>
+      <a href="/people" class="flex items-center hover:text-primary">
+        <Users class="h-4 w-4 mr-2" />
+        People
+      </a>
+      <a href="/network" class="flex items-center hover:text-primary">
+        <Network class="h-4 w-4 mr-2" />
+        Network
+      </a>
+    </nav>
+    
+    <!-- 右側ユーティリティ -->
+    <div class="ml-auto flex items-center space-x-4">
+      <button class="relative">
+        <Bell class="h-5 w-5" />
+        <span class="absolute -top-1 -right-1 h-2 w-2 bg-red-500 rounded-full"></span>
+      </button>
+      <UserMenu />
+    </div>
+  </div>
+</header>
+```
+
+#### モバイル表示（ボトムナビゲーション）
+```html
+<nav class="fixed bottom-0 left-0 right-0 bg-white border-t md:hidden">
+  <div class="flex justify-around">
+    <a href="/" class="flex flex-col items-center py-2 px-3">
+      <Home class="h-6 w-6" />
+      <span class="text-xs mt-1">Home</span>
+    </a>
+    <a href="/rosters" class="flex flex-col items-center py-2 px-3">
+      <Camera class="h-6 w-6" />
+      <span class="text-xs mt-1">Rosters</span>
+    </a>
+    <a href="/people" class="flex flex-col items-center py-2 px-3">
+      <Users class="h-6 w-6" />
+      <span class="text-xs mt-1">People</span>
+    </a>
+    <a href="/network" class="flex flex-col items-center py-2 px-3">
+      <Network class="h-6 w-6" />
+      <span class="text-xs mt-1">Network</span>
+    </a>
+  </div>
+</nav>
+```
+
+### アクティブ状態の表示
+
+```css
+/* 現在のページをハイライト */
+.nav-link {
+  position: relative;
+  color: var(--gray-600);
+  transition: color 0.2s;
+}
+
+.nav-link:hover {
+  color: var(--primary-600);
+}
+
+.nav-link.active {
+  color: var(--primary-600);
+}
+
+.nav-link.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary-600);
+}
+
+/* モバイルのアクティブ状態 */
+.mobile-nav-link.active {
+  color: var(--primary-600);
+  background: var(--primary-50);
+  border-radius: 0.5rem;
+}
+```
+
+### 検索バーのデザイン
+
+```css
+.search-bar {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-input {
+  width: 100%;
+  padding: var(--spacing-3) var(--spacing-4);
+  padding-left: var(--spacing-10);
+  border: 2px solid var(--gray-200);
+  border-radius: 9999px;
+  font-size: var(--text-base);
+  transition: all 0.2s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-400);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-icon {
+  position: absolute;
+  left: var(--spacing-4);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray-400);
+}
+```
+
 ## カラーパレット
 
 ### プライマリカラー
@@ -294,4 +494,4 @@ FaceRosterの統一されたビジュアルデザインとインタラクショ�
     --foreground: #f8fafc;
     /* その他のダークモード変数 */
   }
-} 
+}
