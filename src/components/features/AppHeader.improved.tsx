@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Camera } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth, useFaceRoster } from '@/contexts';
-import { auth } from '@/lib/firebase';
+import { auth } from '@/infrastructure/firebase/config';
 import { signOut } from 'firebase/auth';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -113,15 +113,14 @@ export function AppHeader() {
     <nav className="hidden md:flex items-center space-x-6 text-sm font-medium">
       {navLinks.map((link) => {
         const Icon = link.icon;
-        const commonProps = {
-          key: link.label,
-          className: "transition-colors hover:text-primary flex items-center",
-        };
+        const commonClassName = "transition-colors hover:text-primary flex items-center";
+        
         if (link.action) {
           return (
             <button
+              key={link.label}
               onClick={link.action}
-              {...commonProps}
+              className={commonClassName}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
             >
               <Icon className="mr-2 h-4 w-4" />
@@ -131,8 +130,9 @@ export function AppHeader() {
         }
         return (
           <Link
+            key={link.label}
             href={link.href!}
-            {...commonProps}
+            className={commonClassName}
           >
             <Icon className="mr-2 h-4 w-4" />
             {link.label}
@@ -156,16 +156,14 @@ export function AppHeader() {
             <nav className="space-y-1">
               {navLinks.map((link) => {
                 const Icon = link.icon;
-                const commonProps = {
-                  key: link.label,
-                  className: "w-full flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors",
-                };
+                const commonClassName = "w-full flex items-center px-2 py-2 text-sm rounded-md hover:bg-accent hover:text-accent-foreground transition-colors";
 
                 if (link.action) {
                   return (
                     <button
+                      key={link.label}
                       onClick={link.action}
-                      {...commonProps}
+                      className={commonClassName}
                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
                     >
                       <Icon className="mr-3 h-4 w-4" />
@@ -175,8 +173,9 @@ export function AppHeader() {
                 }
                 return (
                   <Link
+                    key={link.label}
                     href={link.href!}
-                    {...commonProps}
+                    className={commonClassName}
                   >
                     <Icon className="mr-3 h-4 w-4" />
                     {link.label}

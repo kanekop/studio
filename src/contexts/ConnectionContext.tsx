@@ -13,10 +13,10 @@ import {
   serverTimestamp,
   Timestamp 
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from './AuthContext';
 import { useUI } from './UIContext';
-import type { Connection } from '@/types';
+import type { Connection } from '@/shared/types';
 import { useToast } from "@/hooks/use-toast";
 
 interface ConnectionContextType {

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person, Connection, FaceAppearance } from '@/types';
+import type { Person, Connection, FaceAppearance } from '@/shared/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -23,12 +23,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from '@/components/ui/card';
 import NextImage from 'next/image';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 import { usePersonImage } from '@/hooks/usePersonImage';
 import { useStorageImage } from '@/hooks/useStorageImage';
 import { useErrorHandler } from '@/hooks/useErrorHandler';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
-import { AppError, ErrorType } from '@/types/errors';
+import { AppError, ErrorCode } from '@/shared/errors';
 
 const editPersonSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -145,7 +145,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   // Async operation for form submission
   const saveOperation = useCallback(async (data: EditPersonFormData) => {
     if (!personToEdit?.id) {
-      throw new AppError('Person ID is missing', ErrorType.VALIDATION);
+      throw new AppError('Person ID is missing', ErrorCode.VALIDATION_ERROR);
     }
     await onSave(personToEdit.id, data);
   }, [onSave, personToEdit?.id]);

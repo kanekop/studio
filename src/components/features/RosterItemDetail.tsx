@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { UserCircle, Edit3, CheckSquare, Building, Smile, CalendarDays, Info, Save } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { EditablePersonInContext } from '@/types';
+import type { EditablePersonInContext } from '@/shared/types';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
 
 const RosterItemDetail = () => {

@@ -1,16 +1,17 @@
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Person, Connection } from '@/types';
+import type { Person, Connection } from '@/shared/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 import { Badge } from '@/components/ui/badge';
-import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/lib/event-utils';
+import { handleCardClick as handleCardClickUtil, setDraggingState, isEventFromInteractiveElement } from '@/shared/utils/event-utils';
 import { useConnections } from '@/contexts/ConnectionContext';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
+import { usePersonConnections } from '@/presentation/hooks/usePersonConnections';
 import OptimizedImage from '@/components/ui/optimized-image';
 import MobileLongPressMenu from './MobileLongPressMenu';
 
@@ -26,12 +27,6 @@ interface PeopleListItemProps {
   generalActionDisabled?: boolean;
   allUserPeople?: Person[];
 }
-
-const GENERAL_CONNECTION_TYPES = ['colleague', 'friend', 'club_member', 'acquaintance', 'fellow_member', 'group_member']; // Added acquaintance
-const FAMILY_CONNECTION_TYPES = ['parent', 'child', 'father', 'mother', 'family_member'];
-const PROFESSIONAL_CONNECTION_TYPES = ['manager', 'reports_to', 'subordinate', 'mentor', 'mentee'];
-const PARTNER_CONNECTION_TYPES = ['spouse', 'partner'];
-
 
 const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   person,
@@ -58,44 +53,8 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
     timeout: 10000
   });
 
-  const connectionCounts = useMemo(() => {
-    let general = 0;
-    let family = 0;
-    let professional = 0;
-    let partner = 0;
-
-    const relevantConnections = (allUserConnections || []).filter(
-      conn => conn?.fromPersonId === person?.id || conn?.toPersonId === person?.id
-    );
-
-    relevantConnections.forEach(conn => {
-      let countedGeneral = false;
-      let countedFamily = false;
-      let countedProfessional = false;
-      let countedPartner = false;
-
-      (conn?.types || []).forEach(type => {
-        if (GENERAL_CONNECTION_TYPES.includes(type) && !countedGeneral) {
-          general++;
-          countedGeneral = true;
-        }
-        if (FAMILY_CONNECTION_TYPES.includes(type) && !countedFamily) {
-          family++;
-          countedFamily = true;
-        }
-        if (PROFESSIONAL_CONNECTION_TYPES.includes(type) && !countedProfessional) {
-          professional++;
-          countedProfessional = true;
-        }
-        if (PARTNER_CONNECTION_TYPES.includes(type) && !countedPartner) {
-          partner++;
-          countedPartner = true;
-        }
-      });
-    });
-    return { general, family, professional, partner };
-  }, [person?.id, allUserConnections]);
-
+  // Use the new domain-driven hook for connection analysis
+  const connectionCounts = usePersonConnections(person?.id, allUserConnections || []);
 
   const rosterCount = person.rosterIds?.length || 0;
 

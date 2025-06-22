@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useMemo, ReactNode } from 'react';
-import { Person, Connection, AdvancedSearchParams } from '@/types';
+import { Person, Connection, AdvancedSearchParams } from '@/shared/types';
 
 interface SearchFilterContextType {
   peopleSearchQuery: string;

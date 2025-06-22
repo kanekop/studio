@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
-import { handleStorageError, AppError } from '@/lib/errors';
+import { storage } from '@/infrastructure/firebase/config';
+import { handleStorageError, AppError } from '@/shared/errors';
 
 interface UseStorageImageOptions {
   fallbackUrl?: string;

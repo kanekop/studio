@@ -1,12 +1,12 @@
 "use client";
 import React, { useState, useMemo, useCallback } from 'react';
-import type { Person, Connection } from '@/types';
+import type { Person, Connection } from '@/shared/types';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Layers, Pencil, Users, Home, Briefcase, Heart } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 import { Badge } from '@/components/ui/badge';
 import { usePersonImage } from '@/hooks/usePersonImage';
 import { useDragHandlers } from '@/hooks/useDragHandlers';

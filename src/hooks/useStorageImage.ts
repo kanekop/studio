@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ref as storageRefStandard, getDownloadURL } from 'firebase/storage';
-import { storage as appFirebaseStorage } from '@/lib/firebase';
+import { storage as appFirebaseStorage } from '@/infrastructure/firebase/config';
 
 interface UseStorageImageResult {
   imageUrl: string | null;

@@ -1,7 +1,7 @@
 
 "use client";
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Person, FieldMergeChoices, FaceAppearance } from '@/types';
+import type { Person, FieldMergeChoices, FaceAppearance } from '@/shared/types';
 import {
   Dialog,
   DialogContent,
@@ -14,9 +14,9 @@ import { AlertCircle, User, Building, Smile, CalendarDays, Info, Combine, Users,
 import { ScrollArea } from '@/components/ui/scroll-area';
 import NextImage from 'next/image';
 import { Skeleton } from '@/components/ui/skeleton';
-import { storage } from '@/lib/firebase';
+import { storage } from '@/infrastructure/firebase/config';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 
 interface MergePeopleDialogProps {
   isOpen: boolean;

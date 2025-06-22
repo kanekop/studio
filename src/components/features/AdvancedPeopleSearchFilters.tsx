@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { format } from 'date-fns';
-import type { AdvancedSearchParams } from '@/types';
+import type { AdvancedSearchParams } from '@/shared/types';
 
 interface AdvancedPeopleSearchFiltersProps {
     searchParams: AdvancedSearchParams;

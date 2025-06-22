@@ -1,7 +1,7 @@
 "use client";
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { useFaceRoster } from '@/contexts/FaceRosterContext';
-import type { DisplayRegion, Region } from '@/types';
+import type { DisplayRegion, Region } from '@/shared/types';
 
 interface ImageCanvasProps {
   onRegionDrawn: (region: Omit<DisplayRegion, 'id'>, imageDisplaySize: { width: number; height: number }) => void;

@@ -63,6 +63,9 @@ export interface EditablePersonInContext {
     faceImageStoragePath: string; 
     originalRegion: Region; 
   };
+  
+  // Face image URL for display (downloaded URL from Firebase Storage)
+  faceImageUrl?: string;
 
   company?: string;
   hobbies?: string;

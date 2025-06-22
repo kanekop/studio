@@ -1,10 +1,10 @@
 import { useCallback, createElement } from 'react';
 import { useToast } from './use-toast';
-import { AppError, ErrorType } from '@/types/errors';
+import { AppError, ErrorCode } from '@/shared/errors';
 
 interface ErrorHandlerOptions {
   showToast?: boolean;
-  customMessages?: Partial<Record<ErrorType, string>>;
+  customMessages?: Partial<Record<ErrorCode, string>>;
   onError?: (error: AppError) => void;
 }
 
@@ -32,48 +32,44 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
   } = options;
 
   const getErrorMessage = useCallback((error: AppError): string => {
-    if (customMessages[error.type]) {
-      return customMessages[error.type]!;
+    if (customMessages[error.code]) {
+      return customMessages[error.code]!;
     }
 
-    switch (error.type) {
-      case ErrorType.NETWORK:
+    switch (error.code) {
+      case ErrorCode.NETWORK_ERROR:
         return "ネットワークエラーが発生しました。インターネット接続を確認してください。";
-      case ErrorType.PERMISSION:
+      case ErrorCode.STORAGE_PERMISSION_DENIED:
         return "この操作を実行する権限がありません。";
-      case ErrorType.NOT_FOUND:
+      case ErrorCode.STORAGE_NOT_FOUND:
         return "要求されたリソースが見つかりません。";
-      case ErrorType.VALIDATION:
+      case ErrorCode.VALIDATION_ERROR:
         return "入力内容に問題があります。";
-      case ErrorType.AUTHENTICATION:
+      case ErrorCode.FIREBASE_AUTH_ERROR:
         return "認証が必要です。再度ログインしてください。";
-      case ErrorType.STORAGE:
-        return "ファイルの処理中にエラーが発生しました。";
-      case ErrorType.FIRESTORE:
+      case ErrorCode.FIRESTORE_ERROR:
         return "データベースエラーが発生しました。";
-      case ErrorType.UNKNOWN:
+      case ErrorCode.UNKNOWN_ERROR:
       default:
         return error.message || "予期しないエラーが発生しました。";
     }
   }, [customMessages]);
 
   const getErrorTitle = useCallback((error: AppError): string => {
-    switch (error.type) {
-      case ErrorType.NETWORK:
+    switch (error.code) {
+      case ErrorCode.NETWORK_ERROR:
         return "ネットワークエラー";
-      case ErrorType.PERMISSION:
+      case ErrorCode.STORAGE_PERMISSION_DENIED:
         return "アクセス権限エラー";
-      case ErrorType.NOT_FOUND:
+      case ErrorCode.STORAGE_NOT_FOUND:
         return "リソースが見つかりません";
-      case ErrorType.VALIDATION:
+      case ErrorCode.VALIDATION_ERROR:
         return "入力エラー";
-      case ErrorType.AUTHENTICATION:
+      case ErrorCode.FIREBASE_AUTH_ERROR:
         return "認証エラー";
-      case ErrorType.STORAGE:
-        return "ストレージエラー";
-      case ErrorType.FIRESTORE:
+      case ErrorCode.FIRESTORE_ERROR:
         return "データベースエラー";
-      case ErrorType.UNKNOWN:
+      case ErrorCode.UNKNOWN_ERROR:
       default:
         return "エラー";
     }
@@ -85,7 +81,12 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
   ) => {
     const appError = error instanceof AppError 
       ? error 
-      : AppError.fromFirebaseError(error);
+      : new AppError(
+          error.message || '予期しないエラーが発生しました',
+          ErrorCode.UNKNOWN_ERROR,
+          error,
+          true
+        );
 
     // Call custom error handler if provided
     if (onError) {
@@ -94,9 +95,8 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
 
     // Log error for debugging
     console.error('Error handled:', {
-      type: appError.type,
-      message: appError.message,
       code: appError.code,
+      message: appError.message,
       originalError: appError.originalError,
     });
 
@@ -112,8 +112,8 @@ export const useErrorHandler = (options: ErrorHandlerOptions = {}) => {
 
       // Add retry button for certain error types
       if (retryCallback && (
-        appError.type === ErrorType.NETWORK || 
-        appError.type === ErrorType.UNKNOWN
+        appError.code === ErrorCode.NETWORK_ERROR || 
+        appError.code === ErrorCode.UNKNOWN_ERROR
       )) {
         toastProps.action = createRetryButton(retryCallback);
         toastProps.duration = 10000; // Longer duration for retry option

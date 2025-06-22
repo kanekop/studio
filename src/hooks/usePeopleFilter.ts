@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Person, AdvancedSearchParams } from '@/types';
+import type { Person, AdvancedSearchParams } from '@/shared/types';
 
 export interface FilterOptions {
   searchQuery: string;

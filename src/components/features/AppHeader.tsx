@@ -13,7 +13,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu, SmilePlus, Users, LogIn, UserPlus, Home, Settings, LogOut, Network, Building } from 'lucide-react';
 import Link from 'next/link';
 import { useFaceRoster } from '@/contexts';
-import { auth } from '@/lib/firebase';
+import { auth } from '@/infrastructure/firebase/config';
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 
 export function AppHeader() {

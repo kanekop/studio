@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import type { Person } from '@/types';
+import type { Person } from '@/shared/types';
 
 interface MobileLongPressMenuProps {
   person: Person;

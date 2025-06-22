@@ -18,7 +18,7 @@ import {
   QueryConstraint,
   Timestamp
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAsyncOperation } from './useAsyncOperation';
 

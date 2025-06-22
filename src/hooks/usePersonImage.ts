@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useStorageImage } from './useStorageImage';
-import type { Person, FaceAppearance } from '@/types';
+import type { Person, FaceAppearance } from '@/shared/types';
 
 interface UsePersonImageResult {
   imageUrl: string | null;
@@ -21,14 +21,14 @@ export const usePersonImage = (person: Person | null): UsePersonImageResult => {
       (appearance: FaceAppearance) => appearance.isPrimary
     );
     
-    if (primaryAppearance?.faceImagePath) {
-      return primaryAppearance.faceImagePath;
+    if (primaryAppearance?.faceImageStoragePath) {
+      return primaryAppearance.faceImageStoragePath;
     }
     
     // Fallback to first available face image
     const firstAppearance = person.faceAppearances?.[0];
-    if (firstAppearance?.faceImagePath) {
-      return firstAppearance.faceImagePath;
+    if (firstAppearance?.faceImageStoragePath) {
+      return firstAppearance.faceImageStoragePath;
     }
     
     // Fallback to general profile image path if available
@@ -63,7 +63,7 @@ export const useFaceAppearanceImages = (
     const results: Record<string, UsePersonImageResult> = {};
     
     faceAppearances.forEach((appearance) => {
-      if (appearance.faceImagePath) {
+      if (appearance.faceImageStoragePath) {
         // Note: This would need to be implemented differently in a real hook
         // as we can't call hooks in a loop. This is a simplified version.
         // In practice, you'd need to restructure this or use a different approach.

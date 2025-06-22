@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth } from '@/infrastructure/firebase/config';
 import { onAuthStateChanged } from 'firebase/auth';
 
 interface AuthContextType {

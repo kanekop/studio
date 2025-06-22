@@ -1,7 +1,7 @@
 "use client";
 import React from 'react';
-import type { EditablePersonInContext } from '@/types';
-import { cn } from '@/lib/utils';
+import type { EditablePersonInContext } from '@/shared/types';
+import { cn } from '@/shared/utils/utils';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User } from 'lucide-react';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';

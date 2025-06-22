@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { ref as storageRefStandard, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage as appFirebaseStorage } from '@/lib/firebase';
+import { storage as appFirebaseStorage } from '@/infrastructure/firebase/config';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAsyncOperation } from './useAsyncOperation';
 import { useToast } from './use-toast';

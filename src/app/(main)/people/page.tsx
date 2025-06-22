@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog';
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
 import CreateConnectionDialog from '@/components/features/CreateConnectionDialog';
-import type { Person, FieldMergeChoices, SuggestedMergePair, Connection, ProcessedConnectionFormData } from '@/types';
+import type { Person, FieldMergeChoices, SuggestedMergePair, Connection, ProcessedConnectionFormData } from '@/shared/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';

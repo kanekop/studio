@@ -7,7 +7,7 @@ import { UploadCloud, History, LogIn, Trash2, Edit3, FileImage } from 'lucide-re
 import ImageUploadForm from './ImageUploadForm';
 import { useAuth, useFaceRoster } from '@/contexts';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ImageSet } from '@/types';
+import type { ImageSet } from '@/shared/types';
 import { format } from 'date-fns';
 
 

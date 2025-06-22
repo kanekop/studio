@@ -1,6 +1,6 @@
 "use client";
 import React from 'react';
-import type { Person } from '@/types';
+import type { Person } from '@/shared/types';
 import PeopleListItem from './PeopleListItem';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from "@/components/ui/card";

@@ -13,10 +13,10 @@ import {
   runTransaction,
   Timestamp 
 } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from './AuthContext';
 import { useUI } from './UIContext';
-import type { Person, AdvancedSearchParams } from '@/types';
+import type { Person, AdvancedSearchParams } from '@/shared/types';
 import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
 import { useToast } from "@/hooks/use-toast";
 

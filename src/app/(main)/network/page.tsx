@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { usePeople } from '@/contexts/PeopleContext';
 import { useConnections } from '@/contexts/ConnectionContext';
-import { Connection, Person } from '@/types';
+import { Connection, Person } from '@/shared/types';
 import { useDialogManager } from '@/hooks/use-dialog-manager';
 import { useToast } from '@/hooks/use-toast';
 import type { Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/infrastructure/firebase/config';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import VirtualizedConnectionsList from '@/components/features/VirtualizedConnectionsList';
 

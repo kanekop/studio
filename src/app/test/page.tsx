@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { auth, db, storage } from '@/lib/firebase';
-import { debugLog } from '@/lib/debug-logger';
+import { auth, db, storage } from '@/infrastructure/firebase/config';
+import { debugLog } from '@/shared/utils/debug-logger';
 
 export default function TestPage() {
   const [status, setStatus] = useState<Record<string, any>>({});

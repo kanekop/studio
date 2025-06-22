@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
-import { AppError } from '@/lib/errors';
+import { AppError } from '@/shared/errors';
 
 interface AsyncOperationState<T> {
   data: T | null;

@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person, Connection, FaceAppearance, ProcessedConnectionFormData } from '@/types';
+import type { Person, Connection, FaceAppearance, ProcessedConnectionFormData } from '@/shared/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -24,9 +24,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from '@/components/ui/card';
 import NextImage from 'next/image';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { storage } from '@/lib/firebase';
+import { storage } from '@/infrastructure/firebase/config';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 import { usePeople, useConnections } from '@/contexts';
 import CreateConnectionDialog from './CreateConnectionDialog';
 import {

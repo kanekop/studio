@@ -1,5 +1,5 @@
 import React from 'react';
-import { debugLog } from '@/lib/debug-logger';
+import { debugLog } from '@/shared/utils/debug-logger';
 
 interface Props {
   children: React.ReactNode;

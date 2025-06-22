@@ -4,10 +4,10 @@ import { useUI } from '@/contexts/UIContext';
 import { useAsyncOperation } from './useAsyncOperation';
 import { useErrorHandler } from './useErrorHandler';
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
-import type { SuggestedMergePair, FieldMergeChoices } from '@/types';
+import type { SuggestedMergePair, FieldMergeChoices } from '@/shared/types';
 import { useToast } from './use-toast';
 import { runTransaction, doc, writeBatch, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface UseMergeFeaturesReturn {

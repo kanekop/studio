@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import type { Person, Connection, ProcessedConnectionFormData } from '@/types';
+import type { Person, Connection, ProcessedConnectionFormData } from '@/shared/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -26,7 +26,7 @@ import {
   Link2, Users, FileText, Save, Sparkles, ArrowRight, FileEdit,
   Handshake, Smile, Briefcase, GraduationCap, Heart, Gem, Home, UserCircle as UserIcon, Users2, Award, Clipboard
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from '@/shared/utils/utils';
 
 
 const createConnectionFormSchema = z.object({

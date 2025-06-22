@@ -5,7 +5,7 @@ import { Edit, Trash2, Users, Heart, Briefcase } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import type { Connection, Person } from '@/types';
+import type { Connection, Person } from '@/shared/types';
 import type { Timestamp } from 'firebase/firestore';
 
 interface VirtualizedConnectionsListProps {

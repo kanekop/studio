@@ -20,7 +20,10 @@
       "Bash(ls:*)",
       "Bash(npm run dev:*)",
       "Bash(curl:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

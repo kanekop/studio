@@ -1,4 +1,4 @@
-import type { StoredAppState } from '@/types';
+import type { StoredAppState } from '@/shared/types';
 import { toast } from "@/hooks/use-toast";
 
 const STORAGE_KEY = 'faceRosterData';

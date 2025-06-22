@@ -10,11 +10,11 @@ import {
   getDocs 
 } from 'firebase/firestore';
 import { ref as storageRef, deleteObject } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, storage } from '@/infrastructure/firebase/config';
 import { useAuth } from './AuthContext';
 import { usePeople } from './PeopleContext';
 import { useConnections } from './ConnectionContext';
-import { Person } from '@/types';
+import { Person } from '@/shared/types';
 import { useToast } from '@/hooks/use-toast';
 
 interface PeopleDeletionContextType {

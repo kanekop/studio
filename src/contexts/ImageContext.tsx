@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/lib/firebase';
+import { storage } from '@/infrastructure/firebase/config';
 import { useAuth } from './AuthContext';
 import { 
   Region, 
   DisplayRegion, 
   EditablePersonInContext 
-} from '@/types';
+} from '@/shared/types';
 
 interface ImageSize {
   width: number;
