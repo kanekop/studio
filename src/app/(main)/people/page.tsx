@@ -8,13 +8,15 @@ import { useSearchFilter } from '@/contexts/SearchFilterContext';
 import { useAuth } from '@/contexts';
 import { useUI } from '@/contexts';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search } from 'lucide-react';
+import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search, UserPlus } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
 import VirtualizedPeopleList from '@/components/features/VirtualizedPeopleList';
 import { Skeleton } from '@/components/ui/skeleton';
 import MergePeopleDialog from '@/components/features/MergePeopleDialog';
 import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
 import CreateConnectionDialog from '@/components/features/CreateConnectionDialog';
+import DeletePersonDialog from '@/components/features/DeletePersonDialog';
+import AddPersonDialog from '@/components/features/AddPersonDialog';
 import type { Person, FieldMergeChoices, SuggestedMergePair, Connection, ProcessedConnectionFormData } from '@/shared/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -40,6 +42,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import PeopleSearchFilters from '@/components/features/PeopleSearchFilters';
 import AdvancedPeopleSearchFilters from '@/components/features/AdvancedPeopleSearchFilters';
+import { PeopleService } from '@/domain/services/PeopleService';
 
 
 export default function ManagePeoplePage() {
@@ -105,6 +108,12 @@ export default function ManagePeoplePage() {
   const [sourcePersonForConnection, setSourcePersonForConnection] = useState<Person | null>(null);
   const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
   const [isSavingConnection, setIsSavingConnection] = useState(false);
+  
+  const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
+  const [isIndividualDeleteDialogOpen, setIsIndividualDeleteDialogOpen] = useState(false);
+  const [connectionCountForDelete, setConnectionCountForDelete] = useState(0);
+  
+  const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
 
   // 高度な検索は専用のコンポーネントで管理されるため、ローカルステートは不要
 
@@ -236,6 +245,30 @@ export default function ManagePeoplePage() {
       setTargetPersonForConnection(null);
     }
   };
+  
+  const handleIndividualDeleteClick = async (person: Person) => {
+    // Get connection count for this person
+    const count = await PeopleService.getConnectionCount(person.id);
+    setConnectionCountForDelete(count);
+    setPersonToDelete(person);
+    setIsIndividualDeleteDialogOpen(true);
+  };
+  
+  const handleConfirmIndividualDelete = async () => {
+    if (!personToDelete) return;
+    // The dialog will handle the actual deletion
+    // Just update the local state here
+    const updatedPeople = allUserPeople.filter(p => p.id !== personToDelete.id);
+    // This will be handled by the context update from the dialog
+    setIsIndividualDeleteDialogOpen(false);
+    setPersonToDelete(null);
+  };
+  
+  const handleAddPerson = (newPerson: Person) => {
+    // The context will be updated by the PeopleService
+    // Just close the dialog
+    setIsAddPersonDialogOpen(false);
+  };
 
   const canManuallyMerge = globallySelectedPeopleForMerge?.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
   const canDeleteSelected = selectedPeopleIdsForDeletion?.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
@@ -253,6 +286,14 @@ export default function ManagePeoplePage() {
           Manage People
         </h1>
         <div className="flex flex-wrap gap-2 items-center">
+          <Button
+            onClick={() => setIsAddPersonDialogOpen(true)}
+            disabled={generalActionDisabled}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <UserPlus className="mr-2 h-4 w-4" />
+            新しい人物を追加
+          </Button>
           <Select value={peopleSortOption} onValueChange={(value) => setPeopleSortOption(value as PeopleSortOptionValue)} disabled={generalActionDisabled}>
             <SelectTrigger className="w-auto sm:w-[200px] text-sm">
               <ListFilter className="mr-2 h-4 w-4" />
@@ -516,6 +557,7 @@ export default function ManagePeoplePage() {
             isLoading={isLoadingAllUserPeople}
             onEditClick={handleOpenEditPersonDialog}
             onInitiateConnection={handleInitiateConnection}
+            onDeleteClick={handleIndividualDeleteClick}
             selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
             selectedForMergeIds={globallySelectedPeopleForMerge || []}
             onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
@@ -531,6 +573,7 @@ export default function ManagePeoplePage() {
             isLoading={isLoadingAllUserPeople}
             onEditClick={handleOpenEditPersonDialog}
             onInitiateConnection={handleInitiateConnection}
+            onDeleteClick={handleIndividualDeleteClick}
             selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
             selectedForMergeIds={globallySelectedPeopleForMerge || []}
             onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
@@ -575,6 +618,25 @@ export default function ManagePeoplePage() {
           allUserPeople={allUserPeople || []}
         />
       )}
+      
+      {personToDelete && (
+        <DeletePersonDialog
+          person={personToDelete}
+          isOpen={isIndividualDeleteDialogOpen}
+          onClose={() => {
+            setIsIndividualDeleteDialogOpen(false);
+            setPersonToDelete(null);
+          }}
+          onConfirm={handleConfirmIndividualDelete}
+          connectionCount={connectionCountForDelete}
+        />
+      )}
+      
+      <AddPersonDialog
+        isOpen={isAddPersonDialogOpen}
+        onClose={() => setIsAddPersonDialogOpen(false)}
+        onAdd={handleAddPerson}
+      />
     </div>
   );
 }

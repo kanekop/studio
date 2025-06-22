@@ -26,6 +26,7 @@ interface MobileLongPressMenuProps {
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
   onToggleMergeSelection?: () => void;
   onToggleDeleteSelection?: () => void;
+  onDeleteClick?: () => void;
   isSelectedForMerge?: boolean;
   isSelectedForDeletion?: boolean;
   selectionMode?: 'merge' | 'delete' | 'none';
@@ -39,6 +40,7 @@ export default function MobileLongPressMenu({
   onInitiateConnection,
   onToggleMergeSelection,
   onToggleDeleteSelection,
+  onDeleteClick,
   isSelectedForMerge = false,
   isSelectedForDeletion = false,
   selectionMode = 'none',
@@ -48,9 +50,23 @@ export default function MobileLongPressMenu({
   const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Debug state for dropdown
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const safePerson = person || {};
   const safeAllPeople = allPeople || [];
+  
+  // Debug log component mount
+  useEffect(() => {
+    console.log('[MobileLongPressMenu] Component mounted with props:', {
+      person: safePerson,
+      disabled,
+      selectionMode,
+      isSelectedForMerge,
+      isSelectedForDeletion
+    });
+  }, []);
   
   // モバイルデバイスかどうかを判定
   const isMobile = () => {
@@ -120,21 +136,55 @@ export default function MobileLongPressMenu({
 
   const availableConnections = safeAllPeople.filter(p => p.id !== ('id' in safePerson ? safePerson.id : ''));
 
+  // Debug logging for dropdown open state change
+  const handleDropdownOpenChange = (open: boolean) => {
+    console.log('[MobileLongPressMenu] Dropdown open state changing to:', open);
+    console.log('[MobileLongPressMenu] Current disabled state:', disabled);
+    console.log('[MobileLongPressMenu] Person:', safePerson);
+    setIsDropdownOpen(open);
+  };
+
+  // Debug click handler
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    console.log('[MobileLongPressMenu] Trigger button clicked');
+    console.log('[MobileLongPressMenu] Event:', e);
+    console.log('[MobileLongPressMenu] Is dropdown currently open:', isDropdownOpen);
+    // Prevent event bubbling
+    e.stopPropagation();
+  };
+
   // 通常のドロップダウンメニュー（デスクトップ用）
   const DropdownMenuComponent = (
-    <DropdownMenu>
+    <DropdownMenu open={isDropdownOpen} onOpenChange={handleDropdownOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+          className="h-8 w-8 opacity-70 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
           disabled={disabled}
+          onClick={handleTriggerClick}
+          data-testid="mobile-menu-trigger"
         >
           <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem onClick={onEditClick} disabled={disabled}>
+      <DropdownMenuContent 
+        align="end" 
+        className="w-48 z-[100]" 
+        sideOffset={5}
+        onOpenAutoFocus={(e) => {
+          console.log('[MobileLongPressMenu] Dropdown content opened and focused');
+        }}
+      >
+        {console.log('[MobileLongPressMenu] Rendering dropdown content, isDropdownOpen:', isDropdownOpen)}
+        <DropdownMenuItem 
+          onClick={(e) => {
+            console.log('[MobileLongPressMenu] Edit menu item clicked');
+            e.stopPropagation();
+            onEditClick();
+          }} 
+          disabled={disabled}
+        >
           <Edit className="mr-2 h-4 w-4" />
           編集
         </DropdownMenuItem>
@@ -165,6 +215,19 @@ export default function MobileLongPressMenu({
             </DropdownMenuItem>
           </>
         )}
+        {selectionMode === 'none' && onDeleteClick && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={onDeleteClick} 
+              disabled={disabled}
+              className="text-destructive"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              削除
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -176,7 +239,12 @@ export default function MobileLongPressMenu({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
-        className="absolute top-2 right-2 z-10"
+        onClick={(e) => {
+          console.log('[MobileLongPressMenu] Wrapper div clicked');
+          e.stopPropagation();
+        }}
+        className="absolute top-2 right-2 z-50"
+        style={{ pointerEvents: 'auto', isolation: 'isolate' }}
       >
         {DropdownMenuComponent}
       </div>

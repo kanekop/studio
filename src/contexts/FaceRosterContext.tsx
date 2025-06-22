@@ -248,121 +248,66 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const loadRosterForEditing = useCallback(async (rosterId: string) => {
     if (!db || !appFirebaseStorage || !currentUser) {
-      toast({ title: "Error", description: "Firebase services not available or user not logged in.", variant: "destructive" });
+      toast({ title: "Cannot Load Roster", description: "Not authenticated or services unavailable.", variant: "destructive" });
       return;
     }
-    setIsProcessingState(true);
+    
+    setIsLoading(true);
     clearAllData(false);
 
     try {
-      const rosterDocRef = doc(db, "rosters", rosterId);
-      const rosterSnap = await getDoc(rosterDocRef);
+      const rosterDocRef = doc(db, 'rosters', rosterId);
+      const rosterDoc = await getDoc(rosterDocRef);
 
-      if (!rosterSnap.exists()) {
-        toast({ title: "Not Found", description: "The selected roster could not be found.", variant: "destructive" });
-        setIsProcessingState(false);
-        await fetchUserRosters();
-        return;
+      if (!rosterDoc.exists()) {
+        throw new Error('Roster not found.');
       }
 
-      const rosterData = rosterSnap.data() as ImageSet;
-      if (rosterData.ownerId !== currentUser.uid) {
-        toast({ title: "Access Denied", description: "You do not have permission to load this roster.", variant: "destructive" });
-        setIsProcessingState(false);
-        return;
+      const rosterData = rosterDoc.data() as ImageSet;
+      
+      // Convert storage path to a displayable data URL
+      const dataUrl = await imageStoragePathToDataURI(rosterData.originalImageStoragePath);
+      if (dataUrl) {
+        setImageDataUrl(dataUrl);
+      } else {
+        throw new Error('Could not load image from storage.');
       }
 
       setCurrentRosterDocId(rosterId);
-
-      const peopleForRosterUI: EditablePersonInContext[] = [];
-      if (rosterData.peopleIds && rosterData.peopleIds.length > 0) {
-        const peopleChunks = [];
-        for (let i = 0; i < rosterData.peopleIds.length; i += FIRESTORE_IN_QUERY_LIMIT) {
-          peopleChunks.push(rosterData.peopleIds.slice(i, i + FIRESTORE_IN_QUERY_LIMIT));
-        }
-
-        for (const chunk of peopleChunks) {
-          if (chunk.length === 0) continue;
-          const peopleQuery = query(collection(db, "people"), where("__name__", "in", chunk));
-          const peopleSnapshots = await getDocs(peopleQuery);
-
-          for (const personDoc of peopleSnapshots.docs) {
-            const personData = { id: personDoc.id, ...personDoc.data() } as Person;
-
-            const appearanceForThisRoster = personData.faceAppearances?.find(app => app.rosterId === rosterId);
-
-            let faceImgUrl = "https://placehold.co/100x100.png";
-            let currentAppearanceDetails: EditablePersonInContext['currentRosterAppearance'] = undefined;
-
-            if (appearanceForThisRoster && appearanceForThisRoster.faceImageStoragePath) {
-              try {
-                const faceRef = storageRefStandard(appFirebaseStorage, appearanceForThisRoster.faceImageStoragePath);
-                faceImgUrl = await getDownloadURL(faceRef);
-                currentAppearanceDetails = {
-                  rosterId: rosterId,
-                  faceImageStoragePath: appearanceForThisRoster.faceImageStoragePath,
-                  originalRegion: appearanceForThisRoster.originalRegion,
-                };
-              } catch (storageError) {
-                console.error(`FRC: Error getting download URL for face image ${appearanceForThisRoster.faceImageStoragePath}:`, storageError);
-                toast({ title: "Image Load Error", description: `Could not load face for ${personData.name}.`, variant: "destructive" });
-              }
-            } else {
-              console.warn(`FRC: No matching face appearance found for person ${personData.id} in roster ${rosterId}, or path missing.`);
-            }
-
-            peopleForRosterUI.push({
-              id: personDoc.id,
-              isNew: false,
-              name: personData.name,
-              aiName: personData.aiName,
-              notes: personData.notes,
-              company: personData.company,
-              hobbies: personData.hobbies,
-              birthday: personData.birthday,
-              firstMet: personData.firstMet,
-              firstMetContext: personData.firstMetContext,
-              faceImageUrl: faceImgUrl,
-              currentRosterAppearance: currentAppearanceDetails,
-            });
-          }
-        }
-      }
-      setRoster(peopleForRosterUI);
-
-      // Load the original image for the canvas
-      if (rosterData.originalImageStoragePath) {
-        setOriginalImageStoragePath(rosterData.originalImageStoragePath);
+      setOriginalImageStoragePath(rosterData.originalImageStoragePath);
+      setOriginalImageSize(rosterData.originalImageSize);
+      
+      const peopleIds = rosterData.peopleIds || [];
+      if (peopleIds.length > 0) {
+        const peoplePromises = peopleIds.map(id => getDoc(doc(db, 'people', id)));
+        const peopleDocs = await Promise.all(peoplePromises);
         
-        // Set original image dimensions
-        if (rosterData.originalImageSize) {
-          setOriginalImageSize(rosterData.originalImageSize);
-        }
-        
-        // Convert the Firebase Storage path to a data URL for canvas operations
-        const dataUrl = await imageStoragePathToDataURI(rosterData.originalImageStoragePath);
-        if (dataUrl) {
-          setImageDataUrl(dataUrl);
-        } else {
-          console.error('FRC: Failed to load original image from storage');
-          toast({ 
-            title: "Image Load Warning", 
-            description: "Could not load the original image, but you can still edit person details.", 
-            variant: "destructive" 
-          });
-        }
+        const peopleForRoster: EditablePersonInContext[] = peopleDocs.map(pDoc => {
+          if (!pDoc.exists()) return null;
+          const personData = pDoc.data() as Person;
+          const appearance = rosterData.people?.find(p => p.id === personData.id)?.currentRosterAppearance;
+          return {
+            ...personData,
+            isNew: false,
+            currentRosterAppearance: appearance,
+          };
+        }).filter((p): p is EditablePersonInContext => p !== null);
+
+        setRoster(peopleForRoster);
+      } else {
+        setRoster([]);
       }
-
-      toast({ title: "Roster Loaded", description: `${rosterData.rosterName} is ready for editing.` });
-
+      
+      selectPerson(null);
+      
     } catch (error: any) {
-      console.error("FRC: Error loading roster for editing:", error);
-      toast({ title: "Load Failed", description: `Could not load the roster: ${error.message}`, variant: "destructive" });
+      console.error(`FRC: Error loading roster (ID: ${rosterId}):`, error);
+      toast({ title: "Failed to Load Roster", description: error.message, variant: "destructive" });
       clearAllData(false);
     } finally {
-      setIsProcessingState(false);
+      setIsLoading(false);
     }
-  }, [currentUser, toast, fetchUserRosters, clearAllData]);
+  }, [currentUser, toast, clearAllData, selectPerson]);
 
 
   const deleteRoster = useCallback(async (rosterId: string) => {

@@ -11,6 +11,7 @@ interface VirtualizedPeopleListProps {
   isLoading: boolean;
   onEditClick: (person: Person) => void;
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
+  onDeleteClick?: (person: Person) => void;
   selectionMode?: 'merge' | 'delete' | 'none';
   selectedForMergeIds?: string[];
   onToggleMergeSelection?: (personId: string) => void;
@@ -37,6 +38,7 @@ export default function VirtualizedPeopleList({
   isLoading,
   onEditClick,
   onInitiateConnection,
+  onDeleteClick,
   selectionMode = 'none',
   selectedForMergeIds = [],
   onToggleMergeSelection,
@@ -180,6 +182,7 @@ export default function VirtualizedPeopleList({
                       person={person}
                       onEditClick={() => onEditClick(person)}
                       onInitiateConnection={onInitiateConnection}
+                      onDeleteClick={onDeleteClick ? () => onDeleteClick(person) : undefined}
                       selectionMode={selectionMode}
                       isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? safeSelectedForMergeIds.includes(person.id) : false}
                       onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}

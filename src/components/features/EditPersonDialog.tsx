@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Person, Connection, FaceAppearance, ProcessedConnectionFormData } from '@/shared/types';
+import { PeopleService } from '@/domain/services/PeopleService';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -28,6 +29,7 @@ import { storage } from '@/infrastructure/firebase/config';
 import { ref as storageRef, getDownloadURL } from 'firebase/storage';
 import { cn } from '@/shared/utils/utils';
 import { usePeople, useConnections } from '@/contexts';
+import { useToast } from '@/hooks/use-toast';
 import CreateConnectionDialog from './CreateConnectionDialog';
 import {
   AlertDialog,
@@ -124,6 +126,8 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
 }) => {
   const { updateGlobalPersonDetails } = usePeople();
   const { deleteConnection, updateConnection } = useConnections();
+  const { toast } = useToast();
+  const [isDirectSaving, setIsDirectSaving] = useState(false);
 
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const [isDeleteConfirmDialogOpen, setIsDeleteConfirmDialogOpen] = useState(false);
@@ -213,8 +217,46 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
   }, [isOpen]);
 
   const onSubmit = async (data: EditPersonFormData) => {
-    if (personToEdit) {
-      await onSave(personToEdit.id, data);
+    if (!personToEdit) return;
+
+    // Try direct save to Firestore first
+    setIsDirectSaving(true);
+    try {
+      await PeopleService.updatePerson(personToEdit.id, {
+        name: data.name,
+        company: data.company,
+        hobbies: data.hobbies,
+        birthday: data.birthday,
+        firstMet: data.firstMet,
+        firstMetContext: data.firstMetContext,
+        notes: data.notes,
+        primaryFaceAppearancePath: data.primaryFaceAppearancePath
+      });
+
+      // Update local state
+      updateGlobalPersonDetails(personToEdit.id, data);
+      
+      toast({
+        title: "更新完了",
+        description: "人物情報を更新しました"
+      });
+      
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Direct save failed, falling back to onSave prop:', error);
+      // Fallback to original onSave prop if direct save fails
+      try {
+        await onSave(personToEdit.id, data);
+      } catch (saveError) {
+        console.error('Both save methods failed:', saveError);
+        toast({
+          title: "エラー",
+          description: "更新に失敗しました",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setIsDirectSaving(false);
     }
   };
 
@@ -283,7 +325,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
       .filter(item => item.otherPerson);
   }, [personToEdit, allUserConnections, allUserPeople, isLoadingConnections, isLoadingPeople]);
 
-  const overallIsProcessing = isSaveProcessing || isDeletingConnection || isAttemptingConnectionSave;
+  const overallIsProcessing = isSaveProcessing || isDirectSaving || isDeletingConnection || isAttemptingConnectionSave;
 
   const renderFieldChoice = (
     fieldKey: keyof EditPersonFormData,
@@ -559,7 +601,7 @@ const EditPersonDialog: React.FC<EditPersonDialogProps> = ({
               disabled={overallIsProcessing || !isDirty}
               className="min-w-[100px]"
             >
-              {isSaveProcessing ? (
+              {(isSaveProcessing || isDirectSaving) ? (
                 <>
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

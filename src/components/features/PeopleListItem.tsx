@@ -19,6 +19,7 @@ interface PeopleListItemProps {
   person: Person;
   onEditClick: () => void;
   onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
+  onDeleteClick?: () => void;
   selectionMode?: 'merge' | 'delete' | 'none';
   isSelectedForMerge?: boolean;
   onToggleMergeSelection?: () => void;
@@ -32,6 +33,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   person,
   onEditClick,
   onInitiateConnection,
+  onDeleteClick,
   selectionMode = 'none',
   isSelectedForMerge = false,
   onToggleMergeSelection,
@@ -193,6 +195,7 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
         onInitiateConnection={onInitiateConnection}
         onToggleMergeSelection={onToggleMergeSelection}
         onToggleDeleteSelection={onToggleDeleteSelection}
+        onDeleteClick={onDeleteClick}
         isSelectedForMerge={isSelectedForMerge}
         isSelectedForDeletion={isSelectedForDeletion}
         selectionMode={selectionMode}

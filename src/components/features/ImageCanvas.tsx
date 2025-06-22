@@ -15,49 +15,54 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [currentRect, setCurrentRect] = useState<DisplayRegion | null>(null);
   const [imageDisplaySize, setImageDisplaySize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // This effect calculates and sets the display size of the image
+    const calculateDisplaySize = () => {
+      if (!originalImageSize || !containerRef.current) return;
+      
+      const containerWidth = containerRef.current.clientWidth;
+      const aspectRatio = originalImageSize.width / originalImageSize.height;
+      let displayWidth = containerWidth;
+      let displayHeight = containerWidth / aspectRatio;
+
+      if (displayHeight > (window.innerHeight * 0.7)) { // Max height constraint
+          displayHeight = window.innerHeight * 0.7;
+          displayWidth = displayHeight * aspectRatio;
+      }
+      
+      if (imageDisplaySize.width !== displayWidth || imageDisplaySize.height !== displayHeight) {
+        setImageDisplaySize({ width: displayWidth, height: displayHeight });
+      }
+    };
+
+    calculateDisplaySize(); // Initial calculation
+    
+    window.addEventListener('resize', calculateDisplaySize);
+    return () => window.removeEventListener('resize', calculateDisplaySize);
+  }, [originalImageSize, imageDisplaySize.width, imageDisplaySize.height]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
-    if (!ctx || !canvas || !imageRef.current || !originalImageSize) {
-      console.log('Draw skipped - missing requirements:', {
-        ctx: !!ctx,
-        canvas: !!canvas,
-        image: !!imageRef.current,
-        originalSize: !!originalImageSize
-      });
+    if (!ctx || !canvas || !imageRef.current || !originalImageSize || imageDisplaySize.width === 0) {
       return;
     }
 
+    // Set canvas dimensions based on calculated display size
+    canvas.width = imageDisplaySize.width;
+    canvas.height = imageDisplaySize.height;
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Calculate display size maintaining aspect ratio
-    const containerWidth = canvas.parentElement?.clientWidth || canvas.width;
-    const aspectRatio = originalImageSize.width / originalImageSize.height;
-    let displayWidth = containerWidth;
-    let displayHeight = containerWidth / aspectRatio;
-
-    if (displayHeight > (window.innerHeight * 0.7)) { // Max height constraint
-        displayHeight = window.innerHeight * 0.7;
-        displayWidth = displayHeight * aspectRatio;
-    }
-    
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
-    
-    console.log('Canvas dimensions:', { width: canvas.width, height: canvas.height });
-    
-    if (imageDisplaySize.width !== displayWidth || imageDisplaySize.height !== displayHeight) {
-      setImageDisplaySize({ width: displayWidth, height: displayHeight });
-    }
     
     // Draw image
-    ctx.drawImage(imageRef.current, 0, 0, displayWidth, displayHeight);
+    ctx.drawImage(imageRef.current, 0, 0, imageDisplaySize.width, imageDisplaySize.height);
 
     // Draw existing regions (converted to display coordinates)
     existingOriginalRegions.forEach(originalRegion => {
-      const displayRegion = getScaledRegionForDisplay(originalRegion, {width: displayWidth, height: displayHeight});
+      const displayRegion = getScaledRegionForDisplay(originalRegion, imageDisplaySize);
       ctx.strokeStyle = 'rgba(255, 255, 0, 0.7)'; // Yellow for saved regions
       ctx.lineWidth = 2;
       ctx.strokeRect(displayRegion.x, displayRegion.y, displayRegion.width, displayRegion.height);
@@ -68,7 +73,6 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
       ctx.strokeStyle = 'rgba(74, 222, 128, 0.9)'; // Green for current drawing
       ctx.lineWidth = 2;
       ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
-      console.log('Drawing rect:', currentRect);
     }
   }, [originalImageSize, currentRect, existingOriginalRegions, getScaledRegionForDisplay, imageDisplaySize]);
 
@@ -79,27 +83,31 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
       img.onload = () => {
         console.log('Image loaded successfully');
         imageRef.current = img;
-        draw(); // Initial draw
+        // The draw call is now handled by the effect below
       };
       img.onerror = (e) => {
         console.error('Image failed to load:', e);
       };
       img.src = imageDataUrl;
     }
-  }, [imageDataUrl, draw]);
+  }, [imageDataUrl]);
 
   useEffect(() => {
-    // Redraw when existing regions change or display size changes
-    if(imageRef.current) draw();
-  }, [existingOriginalRegions, imageDisplaySize, draw]);
+    // Redraw when image, regions, or display size change
+    if(imageRef.current) {
+      draw();
+    }
+  }, [imageRef.current, existingOriginalRegions, imageDisplaySize, draw]);
 
   useEffect(() => {
-    const handleResize = () => {
-      if(imageRef.current) draw(); // Redraw on window resize
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [draw]);
+    // This effect is now covered by the new display size calculation effect.
+    // Keeping it could cause redundant calls, so we remove it.
+    // const handleResize = () => {
+    //   if(imageRef.current) draw(); // Redraw on window resize
+    // };
+    // window.addEventListener('resize', handleResize);
+    // return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
     const canvas = canvasRef.current;
@@ -136,7 +144,8 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
     };
     console.log('Drawing rect:', newRect);
     setCurrentRect(newRect);
-    if(imageRef.current) draw(); // Redraw while dragging
+    // No need to draw on every mouse move, it's handled by the effect on currentRect change.
+    // if(imageRef.current) draw(); 
   };
 
   const handleMouseUp = () => {
@@ -149,7 +158,8 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
     }
     setStartPoint(null);
     setCurrentRect(null);
-    if(imageRef.current) draw(); // Final draw to clear currentRect display
+    // No need for a final draw call, the effect on currentRect change handles it.
+    // if(imageRef.current) draw(); 
   };
   
   const handleMouseLeave = () => {
@@ -165,7 +175,7 @@ const ImageCanvas: React.FC<ImageCanvasProps> = ({ onRegionDrawn }) => {
   if (!imageDataUrl) return <p className="text-center text-muted-foreground">No image loaded.</p>;
 
   return (
-    <div className="w-full h-auto relative touch-none select-none border border-border rounded-md shadow-sm overflow-hidden bg-muted/20" style={{aspectRatio: originalImageSize ? `${originalImageSize.width}/${originalImageSize.height}` : '16/9'}}>
+    <div ref={containerRef} className="w-full h-auto relative touch-none select-none border border-border rounded-md shadow-sm overflow-hidden bg-muted/20" style={{aspectRatio: originalImageSize ? `${originalImageSize.width}/${originalImageSize.height}` : '16/9'}}>
       <canvas
         ref={canvasRef}
         onMouseDown={handleMouseDown}

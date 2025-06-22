@@ -1,166 +1,664 @@
-# FaceRoster 修正アクションプラン
+# FaceRoster 基本UX改善計画書
 
-## 🎯 目標
-現在動作している基本機能を維持しながら、データの永続化（保存）機能を追加する
+## 概要
+FaceRosterの基本的なユーザー体験（UX）を改善するための実装計画書です。現在の最大の問題である「Peopleページで人物情報を編集できない」という根本的な問題を解決し、期待通りに動作するアプリケーションにすることを目的とします。
 
-## 📋 推奨アプローチ：段階的な修正
+## 現在の根本的な問題
 
-### Phase 1: 現在のバグ修正（1-2時間）
-**目的**: エラーを解消して基本機能を安定させる
+### 🔴 最重要問題：データ編集フローの破綻
+- **Peopleページで人物情報を編集できない**（編集ボタンがあるのに機能しない）
+- Roster画面に戻らないと編集できない
+- ユーザーの期待と実際の動作が完全に乖離している
 
-#### 1.1 CORS問題の修正
-- [ ] `FaceRosterContext.tsx`の`createRosterFromRegions`で画像作成時に`crossOrigin`属性を追加
-- [ ] エラーが解消されることを確認
+## 基本的UX改善の実装計画
 
-#### 1.2 一時的なエラー回避
-- [ ] `updatePersonDetails`のエラーチェックを調整
-- [ ] `currentRosterDocId`がnullの場合は、ローカル更新のみ行う
-- [ ] エラーメッセージを「保存するにはRosterを先に保存してください」に変更
+### 1. 人物情報編集の即時対応 🔧
 
-#### 📝 1.3 ドキュメント更新
-- [ ] `progress.md`を作成/更新：現在の問題点と解決状況を記録
-- [ ] `KNOWN_ISSUES.md`を更新：CORS問題と回避策を文書化
+#### 1.1 EditPersonDialogの完全実装
 
-### Phase 2: 自動保存機能の実装（2-3時間）
-**目的**: ユーザーが意識せずにデータが保存される仕組みを作る
-
-#### 2.1 createRosterFromRegionsの拡張
 ```typescript
-// 以下の処理を追加
-1. Roster作成時に自動的にFirestoreに保存
-2. currentRosterDocIdを設定
-3. 各人物データも同時に保存
+// src/components/features/EditPersonDialog.tsx の修正
+
+import { useState } from 'react';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { toast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
+
+interface EditPersonFormData {
+  name: string;
+  company?: string;
+  hobbies?: string;
+  birthday?: string;
+  firstMet?: string;
+  firstMetContext?: string;
+  notes?: string;
+}
+
+const EditPersonDialog = ({ 
+  person, 
+  isOpen, 
+  onClose,
+  onUpdate // 親コンポーネントのステート更新用
+}: EditPersonDialogProps) => {
+  const [formData, setFormData] = useState<EditPersonFormData>({
+    name: person.name || '',
+    company: person.company || '',
+    hobbies: person.hobbies || '',
+    birthday: person.birthday || '',
+    firstMet: person.firstMet || '',
+    firstMetContext: person.firstMetContext || '',
+    notes: person.notes || ''
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const handleSave = async () => {
+    // バリデーション
+    if (!formData.name.trim()) {
+      toast({
+        title: "エラー",
+        description: "名前は必須です",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      // Firestoreに直接更新
+      await updateDoc(doc(db, 'people', person.id), {
+        ...formData,
+        updatedAt: serverTimestamp()
+      });
+      
+      // 親コンポーネントのステートも更新
+      if (onUpdate) {
+        onUpdate(person.id, formData);
+      }
+      
+      toast({
+        title: "更新完了",
+        description: "人物情報を更新しました"
+      });
+      
+      onClose();
+    } catch (error) {
+      console.error('Update error:', error);
+      toast({
+        title: "エラー",
+        description: "更新に失敗しました",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>人物情報を編集</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {/* 基本情報 */}
+          <div>
+            <Label htmlFor="name">名前 *</Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({...formData, name: e.target.value})}
+              placeholder="山田 太郎"
+              disabled={isSaving}
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="company">会社・所属</Label>
+            <Input
+              id="company"
+              value={formData.company}
+              onChange={(e) => setFormData({...formData, company: e.target.value})}
+              placeholder="株式会社ABC"
+              disabled={isSaving}
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="hobbies">趣味</Label>
+            <Input
+              id="hobbies"
+              value={formData.hobbies}
+              onChange={(e) => setFormData({...formData, hobbies: e.target.value})}
+              placeholder="ゴルフ、読書"
+              disabled={isSaving}
+            />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="birthday">誕生日</Label>
+              <Input
+                id="birthday"
+                type="date"
+                value={formData.birthday}
+                onChange={(e) => setFormData({...formData, birthday: e.target.value})}
+                disabled={isSaving}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="firstMet">初対面の日</Label>
+              <Input
+                id="firstMet"
+                type="date"
+                value={formData.firstMet}
+                onChange={(e) => setFormData({...formData, firstMet: e.target.value})}
+                disabled={isSaving}
+              />
+            </div>
+          </div>
+          
+          <div>
+            <Label htmlFor="firstMetContext">初対面の文脈</Label>
+            <Input
+              id="firstMetContext"
+              value={formData.firstMetContext}
+              onChange={(e) => setFormData({...formData, firstMetContext: e.target.value})}
+              placeholder="新年会で紹介された"
+              disabled={isSaving}
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="notes">メモ</Label>
+            <Textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({...formData, notes: e.target.value})}
+              placeholder="その他の情報..."
+              rows={3}
+              disabled={isSaving}
+            />
+          </div>
+        </div>
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isSaving}>
+            キャンセル
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              '保存'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
 ```
 
-- [ ] Rosterドキュメントの自動作成
-- [ ] 人物データの一括保存
-- [ ] 顔画像のStorage保存
-- [ ] 保存完了通知の表示
+#### 1.2 PeopleListItemの修正
 
-#### 2.2 保存フローの実装
-- [ ] ローディング表示の追加
-- [ ] エラーハンドリングの強化
-- [ ] 保存状態のUI表示（「保存済み」「未保存」など）
+```typescript
+// src/components/features/PeopleListItem.tsx の修正
 
-#### 📝 2.3 ドキュメント更新
-- [ ] `ARCHITECTURE.md`を更新：自動保存の仕組みを設計文書に追加
-- [ ] `src/contexts/FaceRosterContext.tsx`にJSDocコメントを追加：新しいメソッドの説明
-- [ ] `progress.md`を更新：保存機能の実装状況を記録
+const PeopleListItem = ({ person, onEditClick, ... }) => {
+  const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  
+  const handleEdit = () => {
+    onEditClick(person); // 親コンポーネントに編集要求を伝える
+  };
+  
+  const handleDelete = async () => {
+    // 削除処理（後述）
+  };
+  
+  return (
+    <Card>
+      {/* カードヘッダー */}
+      <div className="absolute top-2 right-2 z-10">
+        <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleEdit}>
+              <Edit className="mr-2 h-4 w-4" />
+              編集
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              onClick={() => setShowDeleteDialog(true)}
+              className="text-red-600"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              削除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      
+      {/* 既存のカード内容 */}
+      {/* ... */}
+    </Card>
+  );
+};
+```
 
-### Phase 3: UI/UXの改善（1-2時間）
-**目的**: ユーザーが保存状態を理解できるようにする
+### 2. データの一貫性確保 🔄
 
-#### 3.1 保存状態インジケーター
-- [ ] ヘッダーに保存状態を表示
-- [ ] 未保存の変更がある場合の警告
-- [ ] 自動保存中の表示
+#### 2.1 統一されたPeopleサービス
 
-#### 3.2 Roster名の入力
-- [ ] Roster作成時に名前入力ダイアログ
-- [ ] デフォルト名の自動生成（例：「Roster_2024-01-15」）
+```typescript
+// src/services/peopleService.ts
 
-#### 📝 3.3 ドキュメント更新
-- [ ] `USER_GUIDE.md`を作成：新しい保存機能の使い方を説明
-- [ ] `README.md`を更新：主要機能として自動保存を追加
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
 
-### Phase 4: 既存機能との統合（1時間）
-**目的**: 全体的な機能の整合性を確保
+export class PeopleService {
+  static async createPerson(data: CreatePersonData): Promise<Person> {
+    const docRef = await addDoc(collection(db, 'people'), {
+      ...data,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    return {
+      id: docRef.id,
+      ...data
+    } as Person;
+  }
+  
+  static async updatePerson(id: string, data: Partial<Person>): Promise<void> {
+    await updateDoc(doc(db, 'people', id), {
+      ...data,
+      updatedAt: serverTimestamp()
+    });
+  }
+  
+  static async deletePerson(id: string): Promise<void> {
+    // 関連するコネクションも削除
+    const connectionsQuery = query(
+      collection(db, 'connections'),
+      where('fromPersonId', '==', id)
+    );
+    const connectionsQuery2 = query(
+      collection(db, 'connections'),
+      where('toPersonId', '==', id)
+    );
+    
+    const [connections1, connections2] = await Promise.all([
+      getDocs(connectionsQuery),
+      getDocs(connectionsQuery2)
+    ]);
+    
+    const deletePromises = [
+      ...connections1.docs.map(doc => deleteDoc(doc.ref)),
+      ...connections2.docs.map(doc => deleteDoc(doc.ref)),
+      deleteDoc(doc(db, 'people', id))
+    ];
+    
+    await Promise.all(deletePromises);
+  }
+  
+  static async getPerson(id: string): Promise<Person | null> {
+    const docSnap = await getDoc(doc(db, 'people', id));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Person;
+    }
+    return null;
+  }
+}
+```
 
-#### 4.1 読み込み機能の確認
-- [ ] 保存したRosterが正しく読み込めることを確認
-- [ ] 編集・更新が正常に動作することを確認
+### 3. 削除機能の実装 🗑️
 
-#### 4.2 削除機能の確認
-- [ ] Roster削除時に関連データも削除されることを確認
+#### 3.1 削除確認ダイアログ
 
-#### 📝 4.3 最終ドキュメント更新
-- [ ] `CHANGELOG.md`を作成：実装した変更の履歴を記録
-- [ ] `TODO.md`を更新：完了したタスクをチェック、次の課題を追加
-- [ ] `CLAUDE.md`を更新：新しいアーキテクチャの変更を反映
+```typescript
+// src/components/features/DeletePersonDialog.tsx
 
-## 🔄 実装順序の推奨
+interface DeletePersonDialogProps {
+  person: Person;
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+  connectionCount?: number;
+}
 
-### 今すぐ実装（最優先）
-1. **CORS修正**（30分）
-   - 最小限の修正で現在の機能を動作させる
+const DeletePersonDialog = ({ 
+  person, 
+  isOpen, 
+  onClose, 
+  onConfirm,
+  connectionCount = 0 
+}: DeletePersonDialogProps) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onConfirm();
+      toast({
+        title: "削除完了",
+        description: `${person.name}を削除しました`
+      });
+      onClose();
+    } catch (error) {
+      toast({
+        title: "エラー",
+        description: "削除に失敗しました",
+        variant: "destructive"
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+  
+  return (
+    <AlertDialog open={isOpen} onOpenChange={onClose}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>本当に削除しますか？</AlertDialogTitle>
+          <AlertDialogDescription>
+            <div className="space-y-2">
+              <p>
+                <strong>{person.name}</strong> を削除しようとしています。
+              </p>
+              {connectionCount > 0 && (
+                <p className="text-orange-600">
+                  ⚠️ この人物には {connectionCount} 件の関係性が登録されています。
+                  削除すると、これらの関係性も全て削除されます。
+                </p>
+              )}
+              <p className="text-red-600 font-semibold">
+                この操作は取り消すことができません。
+              </p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>
+            キャンセル
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                削除中...
+              </>
+            ) : (
+              '削除する'
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+```
+
+### 4. 新規追加フローの改善 ➕
+
+#### 4.1 AddPersonDialog
+
+```typescript
+// src/components/features/AddPersonDialog.tsx
+
+interface AddPersonDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (person: Person) => void;
+}
+
+const AddPersonDialog = ({ isOpen, onClose, onAdd }: AddPersonDialogProps) => {
+  const [formData, setFormData] = useState<CreatePersonData>({
+    name: '',
+    company: '',
+    hobbies: '',
+    birthday: '',
+    firstMet: '',
+    firstMetContext: '',
+    notes: ''
+  });
+  const [isAdding, setIsAdding] = useState(false);
+  
+  const handleAdd = async () => {
+    if (!formData.name.trim()) {
+      toast({
+        title: "エラー",
+        description: "名前は必須です",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsAdding(true);
+    try {
+      const newPerson = await PeopleService.createPerson(formData);
+      onAdd(newPerson);
+      toast({
+        title: "追加完了",
+        description: `${formData.name}を追加しました`
+      });
+      onClose();
+    } catch (error) {
+      toast({
+        title: "エラー",
+        description: "追加に失敗しました",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAdding(false);
+    }
+  };
+  
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>新しい人物を追加</DialogTitle>
+          <DialogDescription>
+            顔写真なしで人物情報を登録できます。後から写真を追加することも可能です。
+          </DialogDescription>
+        </DialogHeader>
+        
+        {/* EditPersonDialogと同じフォームフィールド */}
+        {/* ... */}
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isAdding}>
+            キャンセル
+          </Button>
+          <Button onClick={handleAdd} disabled={isAdding}>
+            {isAdding ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                追加中...
+              </>
+            ) : (
+              <>
+                <UserPlus className="mr-2 h-4 w-4" />
+                追加
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+```
+
+### 5. Peopleページの統合 📄
+
+#### 5.1 ページコンポーネントの修正
+
+```typescript
+// src/app/(main)/people/page.tsx の修正
+
+const PeoplePage = () => {
+  const [people, setPeople] = useState<Person[]>([]);
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
+  
+  // 人物リストの取得
+  useEffect(() => {
+    const fetchPeople = async () => {
+      // Firestoreから取得
+      const peopleData = await PeopleService.getAllPeople();
+      setPeople(peopleData);
+    };
+    fetchPeople();
+  }, []);
+  
+  // 編集処理
+  const handleEditClick = (person: Person) => {
+    setSelectedPerson(person);
+    setShowEditDialog(true);
+  };
+  
+  // 更新処理
+  const handleUpdate = (personId: string, updates: Partial<Person>) => {
+    setPeople(prev => 
+      prev.map(p => p.id === personId ? { ...p, ...updates } : p)
+    );
+  };
+  
+  // 追加処理
+  const handleAdd = (newPerson: Person) => {
+    setPeople(prev => [...prev, newPerson]);
+  };
+  
+  // 削除処理
+  const handleDelete = async (person: Person) => {
+    await PeopleService.deletePerson(person.id);
+    setPeople(prev => prev.filter(p => p.id !== person.id));
+    setPersonToDelete(null);
+  };
+  
+  return (
+    <div className="container mx-auto p-6">
+      {/* ヘッダー */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">People</h1>
+        <Button onClick={() => setShowAddDialog(true)}>
+          <UserPlus className="mr-2 h-4 w-4" />
+          新しい人物を追加
+        </Button>
+      </div>
+      
+      {/* 検索・フィルター */}
+      <PeopleSearchFilters />
+      
+      {/* 人物リスト */}
+      <PeopleList
+        people={people}
+        onEditClick={handleEditClick}
+        onDeleteClick={setPersonToDelete}
+      />
+      
+      {/* ダイアログ */}
+      {selectedPerson && (
+        <EditPersonDialog
+          person={selectedPerson}
+          isOpen={showEditDialog}
+          onClose={() => {
+            setShowEditDialog(false);
+            setSelectedPerson(null);
+          }}
+          onUpdate={handleUpdate}
+        />
+      )}
+      
+      <AddPersonDialog
+        isOpen={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+        onAdd={handleAdd}
+      />
+      
+      {personToDelete && (
+        <DeletePersonDialog
+          person={personToDelete}
+          isOpen={!!personToDelete}
+          onClose={() => setPersonToDelete(null)}
+          onConfirm={() => handleDelete(personToDelete)}
+          connectionCount={getConnectionCount(personToDelete.id)}
+        />
+      )}
+    </div>
+  );
+};
+```
+
+## 実装優先順位
+
+### 🔴 今すぐ修正すべき（1-2日）
+
+1. **EditPersonDialogの修正**
+   - Peopleページから編集可能に
+   - Firestoreへの直接保存実装
    
-2. **エラーメッセージ改善**（30分）
-   - ユーザーが混乱しないようにする
+2. **PeopleServiceの作成**
+   - 統一されたCRUD操作
+   - エラーハンドリング
 
-### 次に実装
-3. **自動保存の基本実装**（2時間）
-   - `createRosterFromRegions`でFirestore保存
-   - 最低限の動作を確保
+### 🟠 次に修正（3-5日）
 
-### 余裕があれば実装
-4. **UI改善**（1-2時間）
-   - 保存状態の表示
-   - より良いユーザー体験
+3. **削除機能の実装**
+   - 削除確認ダイアログ
+   - 関連データの削除
 
-## 📚 ドキュメント管理の重要性
+4. **新規追加フロー**
+   - AddPersonDialog実装
+   - 顔写真なしでの登録対応
 
-### なぜドキュメント更新が重要か
-1. **知識の継承**: あなたや他の開発者が後で理解できる
-2. **進捗の可視化**: 何が完了して何が残っているか明確
-3. **問題の記録**: 同じ問題を繰り返さない
-4. **AIとの連携**: Claude/Agentが現状を正確に把握できる
+### 🟡 その後の改善（1週間）
 
-### 推奨ドキュメント構成
-```
-docs/
-├── progress.md         # 現在の進捗と課題
-├── KNOWN_ISSUES.md    # 既知の問題と回避策
-├── ARCHITECTURE.md    # システム設計の詳細
-├── USER_GUIDE.md      # ユーザー向け使用方法
-├── CHANGELOG.md       # 変更履歴
-└── TODO.md           # 残タスクリスト
-```
+5. **フィードバック改善**
+   - 全操作へのトースト通知
+   - ローディング状態の統一
 
-### シンプルに始める
-- 完璧を求めず、まず動作することを優先
-- 複雑な機能は後回し
+6. **データ同期**
+   - リアルタイム更新
+   - オプティミスティック更新
 
-### 既存コードを活用
-- `loadRosterForEditing`の逆の処理として実装
-- 既存の型定義やメソッドを再利用
+## 成功指標
 
-### テストしながら進める
-- 各ステップで動作確認
-- バグが出たら即修正
+- ✅ 編集ボタンを押したら即座に編集できる
+- ✅ 全ての変更が確実に保存される
+- ✅ 削除機能が安全に動作する
+- ✅ どのページからでも同じデータが見える
+- ✅ 操作結果が明確にフィードバックされる
 
-## 🚫 避けるべきこと
+## まとめ
 
-1. **大規模なリファクタリング**
-   - 現在動いている部分は触らない
-   - 必要最小限の変更に留める
-
-2. **過度な最適化**
-   - まず動作させる
-   - パフォーマンスは後で考える
-
-3. **複雑な状態管理**
-   - シンプルな自動保存で十分
-   - 複雑なオプションは不要
-
-## ✅ 成功の基準
-
-1. 画像アップロード → 顔選択 → Roster作成が**エラーなく**動作
-2. 作成したRosterが**自動的に保存**される
-3. 保存したRosterを**後で読み込める**
-4. 人物情報の編集が**正常に保存**される
-
-## 📝 実装メモ
-
-### 必要な情報
-- Firebase プロジェクトID: 既存の設定を使用
-- Storage パス: `/users/{userId}/rosters/{rosterId}/`
-- Firestore構造: 既存の型定義に従う
-
-### 参考にすべきコード
-- `loadRosterForEditing` - 読み込み処理の逆を実装
-- `deleteRoster` - データ構造の理解
-- 既存の型定義 - データの整合性維持
-
----
-
-このプランに従って段階的に実装することで、確実に動作する保存機能を追加できます。まずはPhase 1から始めて、動作を確認しながら進めることをお勧めします。
+これらの基本的な改善により、FaceRosterは「期待通りに動作する」アプリケーションになります。まずは最も基本的な「編集機能」から着手し、段階的に改善を進めていきます。派手な機能よりも、確実に動作する基本機能の実装を優先します。
