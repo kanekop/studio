@@ -75,12 +75,21 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 
 For future plans on face recognition capabilities, please refer to a separate detailed document: `FACE_RECOGNITION_PLAN.md`.
 
+### Future Architecture Direction (IMPORTANT)
+The project is undergoing a significant architectural refactoring towards a **Layered Architecture** (Presentation, Domain, Infrastructure, Application). The primary goal is to clearly separate business logic from the UI layer.
+
+- **All new feature development and refactoring should adhere to this new architecture.**
+- Before making any changes, please consult the detailed plan.
+
+For the full architecture proposal and migration plan, see:
+[faceroster-architecture-refactoring.md](./docs/architecture/faceroster-architecture-refactoring.md)
+
 ### Directory Structure
 ```
 src/
 ├── app/              # Next.js App Router pages
 │   ├── (auth)/      # Login, signup pages
-│   ├── (main)/      # Main app pages (people, connections, rosters)
+│   ├── (main)/      # Main app pages (people, network, rosters)
 │   └── test/        # System status and debugging page
 ├── components/
 │   ├── features/    # Feature-specific components
@@ -120,7 +129,7 @@ src/
 - Stored in Firestore: `/rosters/{rosterId}`
 - Images in Cloud Storage: `/users/{userId}/rosters/`
 
-### 3. Connection Management
+### 3. Network (Connection Management)
 - Bidirectional relationships between people
 - Connection types: colleague, friend, family, other
 - Stored in Firestore: `/connections/{connectionId}`
