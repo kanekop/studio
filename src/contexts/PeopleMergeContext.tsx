@@ -23,6 +23,7 @@ import {
 } from '@/shared/types';
 import { useToast } from '@/hooks/use-toast';
 import { suggestPeopleMerges } from '@/ai/flows/suggest-people-merges-flow';
+import { PeopleService } from '@/domain/services/people/PeopleService';
 
 interface PeopleMergeContextType {
   selectedPeopleForMerge: string[];
@@ -51,7 +52,7 @@ interface PeopleMergeProviderProps {
 
 export const PeopleMergeProvider: React.FC<PeopleMergeProviderProps> = ({ children }) => {
   const { currentUser } = useAuth();
-  const { allUserPeople, fetchAllUserPeople } = usePeople();
+  const { people, setPeople } = usePeople();
   const { fetchAllUserConnections } = useConnections();
   const { toast } = useToast();
   
@@ -75,18 +76,18 @@ export const PeopleMergeProvider: React.FC<PeopleMergeProviderProps> = ({ childr
   }, []);
 
   const getSelectedPeopleData = useCallback((): Person[] => {
-    return allUserPeople.filter(person => selectedPeopleForMerge.includes(person.id));
-  }, [allUserPeople, selectedPeopleForMerge]);
+    return people.filter(person => selectedPeopleForMerge.includes(person.id));
+  }, [people, selectedPeopleForMerge]);
 
   const fetchMergeSuggestions = useCallback(async (): Promise<void> => {
-    if (!currentUser?.uid || allUserPeople.length < 2) {
+    if (!currentUser?.uid || people.length < 2) {
       setMergeSuggestions([]);
       return;
     }
 
     setIsLoadingMergeSuggestions(true);
     try {
-      const input = allUserPeople.map(person => ({
+      const input = people.map(person => ({
         id: person.id,
         name: person.name || '',
         company: person.company || '',
@@ -120,7 +121,7 @@ export const PeopleMergeProvider: React.FC<PeopleMergeProviderProps> = ({ childr
     } finally {
       setIsLoadingMergeSuggestions(false);
     }
-  }, [currentUser?.uid, allUserPeople, toast]);
+  }, [currentUser?.uid, people, toast]);
 
   const clearMergeSuggestions = useCallback((): void => {
     setMergeSuggestions([]);
@@ -214,7 +215,7 @@ export const PeopleMergeProvider: React.FC<PeopleMergeProviderProps> = ({ childr
       });
 
       // 成功した場合、ローカルデータを更新
-      await fetchAllUserPeople();
+      await setPeople([]);
       await fetchAllUserConnections();
       
       // 選択状態をクリア
@@ -237,7 +238,7 @@ export const PeopleMergeProvider: React.FC<PeopleMergeProviderProps> = ({ childr
     } finally {
       setIsProcessing(false);
     }
-  }, [currentUser?.uid, fetchAllUserPeople, fetchAllUserConnections, toast]);
+  }, [currentUser?.uid, setPeople, fetchAllUserConnections, toast]);
 
   const value: PeopleMergeContextType = {
     selectedPeopleForMerge,

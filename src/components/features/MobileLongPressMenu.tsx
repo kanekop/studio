@@ -157,75 +157,75 @@ export default function MobileLongPressMenu({
   const DropdownMenuComponent = (
     <DropdownMenu open={isDropdownOpen} onOpenChange={handleDropdownOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 opacity-70 hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+        <button
+          className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-accent hover:text-accent-foreground h-8 w-8 opacity-70 hover:opacity-100 focus-visible:opacity-100"
           disabled={disabled}
           onClick={handleTriggerClick}
           data-testid="mobile-menu-trigger"
+          type="button"
         >
           <MoreVertical className="h-4 w-4" />
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent 
         align="end" 
         className="w-48 z-[100]" 
         sideOffset={5}
-        onOpenAutoFocus={(e) => {
-          console.log('[MobileLongPressMenu] Dropdown content opened and focused');
-        }}
+        onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        {console.log('[MobileLongPressMenu] Rendering dropdown content, isDropdownOpen:', isDropdownOpen)}
-        <DropdownMenuItem 
-          onClick={(e) => {
-            console.log('[MobileLongPressMenu] Edit menu item clicked');
-            e.stopPropagation();
-            onEditClick();
-          }} 
-          disabled={disabled}
-        >
-          <Edit className="mr-2 h-4 w-4" />
-          編集
-        </DropdownMenuItem>
-        {selectionMode === 'none' && (
-          <DropdownMenuItem 
-            onClick={() => setIsConnectionDialogOpen(true)}
-            disabled={disabled || availableConnections.length === 0}
-          >
-            <Link2 className="mr-2 h-4 w-4" />
-            コネクション作成
-          </DropdownMenuItem>
-        )}
-        {selectionMode === 'merge' && onToggleMergeSelection && (
+        {isDropdownOpen && (
           <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onToggleMergeSelection} disabled={disabled}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              {isSelectedForMerge ? 'マージ選択解除' : 'マージ対象として選択'}
-            </DropdownMenuItem>
-          </>
-        )}
-        {selectionMode === 'delete' && onToggleDeleteSelection && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onToggleDeleteSelection} disabled={disabled}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              {isSelectedForDeletion ? '削除選択解除' : '削除対象として選択'}
-            </DropdownMenuItem>
-          </>
-        )}
-        {selectionMode === 'none' && onDeleteClick && (
-          <>
-            <DropdownMenuSeparator />
             <DropdownMenuItem 
-              onClick={onDeleteClick} 
+              onClick={(e) => {
+                console.log('[MobileLongPressMenu] Edit menu item clicked');
+                e.stopPropagation();
+                onEditClick();
+              }} 
               disabled={disabled}
-              className="text-destructive"
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              削除
+              <Edit className="mr-2 h-4 w-4" />
+              編集
             </DropdownMenuItem>
+            {selectionMode === 'none' && (
+              <DropdownMenuItem 
+                onClick={() => setIsConnectionDialogOpen(true)}
+                disabled={disabled || availableConnections.length === 0}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                コネクション作成
+              </DropdownMenuItem>
+            )}
+            {selectionMode === 'merge' && onToggleMergeSelection && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onToggleMergeSelection} disabled={disabled}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  {isSelectedForMerge ? 'マージ選択解除' : 'マージ対象として選択'}
+                </DropdownMenuItem>
+              </>
+            )}
+            {selectionMode === 'delete' && onToggleDeleteSelection && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onToggleDeleteSelection} disabled={disabled}>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isSelectedForDeletion ? '削除選択解除' : '削除対象として選択'}
+                </DropdownMenuItem>
+              </>
+            )}
+            {selectionMode === 'none' && onDeleteClick && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={onDeleteClick} 
+                  disabled={disabled}
+                  className="text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  削除
+                </DropdownMenuItem>
+              </>
+            )}
           </>
         )}
       </DropdownMenuContent>
@@ -239,10 +239,6 @@ export default function MobileLongPressMenu({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchMove={handleTouchMove}
-        onClick={(e) => {
-          console.log('[MobileLongPressMenu] Wrapper div clicked');
-          e.stopPropagation();
-        }}
         className="absolute top-2 right-2 z-50"
         style={{ pointerEvents: 'auto', isolation: 'isolate' }}
       >

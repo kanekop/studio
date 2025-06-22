@@ -7,14 +7,25 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { UserCircle, Edit3, CheckSquare, Building, Smile, CalendarDays, Info, Save } from 'lucide-react';
+import { UserCircle, Edit3, CheckSquare, Building, Smile, CalendarDays, Info, Save, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { EditablePersonInContext } from '@/shared/types';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
+import { PeopleService, CreatePersonData } from '@/domain/services/people/PeopleService';
+import { useToast } from '@/hooks/use-toast';
 
 const RosterItemDetail = () => {
-  const { roster, updatePersonDetails } = useFaceRoster();
-  const { isProcessing: isGlobalProcessing, selectedPersonId } = useUI();
+  const { roster, selectedPersonId, setRoster } = useFaceRoster();
+  const { toast } = useToast();
+  const { isProcessing: isGlobalProcessing } = useUI();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const selectedPerson = useMemo(() => {
+    if (!roster || !selectedPersonId) return null;
+    return roster.find(p => p.id === selectedPersonId) || null;
+  }, [roster, selectedPersonId]);
+
+  // Local form state
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [company, setCompany] = useState('');
@@ -26,17 +37,13 @@ const RosterItemDetail = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  const selectedPerson = useMemo(() => {
-    return roster.find(p => p.id === selectedPersonId);
-  }, [roster, selectedPersonId]);
-
   // Use the robust image fetching hook
-  const imagePath = selectedPerson?.currentRosterAppearance?.faceImageStoragePath;
+  const imagePath = selectedPerson?.currentRosterAppearance?.faceImageStoragePath || selectedPerson?.tempFaceImageDataUri;
   const { url: displayImageUrl, isLoading: isImageLoading } = useStorageImage(imagePath);
 
   useEffect(() => {
     if (selectedPerson) {
-      setName(selectedPerson.name);
+      setName(selectedPerson.name || '');
       setNotes(selectedPerson.notes || '');
       setCompany(selectedPerson.company || '');
       setHobbies(selectedPerson.hobbies || '');
@@ -47,6 +54,15 @@ const RosterItemDetail = () => {
       if (selectedPerson.name === '' || selectedPerson.isNew) {
         setIsEditing(true);
       }
+    } else {
+      // Clear fields if no person is selected
+      setName('');
+      setNotes('');
+      setCompany('');
+      setHobbies('');
+      setBirthday('');
+      setFirstMet('');
+      setFirstMetContext('');
     }
   }, [selectedPerson]);
 
@@ -81,9 +97,10 @@ const RosterItemDetail = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedPerson || !isDirty) return;
+    if (!selectedPerson) return;
+    setIsSaving(true);
 
-    await updatePersonDetails(selectedPerson.id, {
+    const personData = {
       name,
       notes,
       company,
@@ -91,10 +108,24 @@ const RosterItemDetail = () => {
       birthday,
       firstMet,
       firstMetContext,
-    });
-
-    setIsDirty(false);
-    setIsEditing(false);
+    };
+    
+    try {
+      if (selectedPerson.isNew) {
+        // We need to cast here because createPerson has a more specific type
+        const newPerson = await PeopleService.createPerson(personData as CreatePersonData);
+        setRoster(prev => prev?.map(p => (p.id === selectedPerson.id ? { ...newPerson, isNew: false } : p)) || []);
+      } else {
+        await PeopleService.updatePerson(selectedPerson.id, personData);
+        setRoster(prev => prev?.map(p => (p.id === selectedPerson.id ? { ...p, ...personData } : p)) || []);
+      }
+      toast({ title: "Success", description: "Person details saved." });
+    } catch (error) {
+      console.error("Failed to save person:", error);
+      toast({ title: "Error", description: "Could not save details.", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEdit = () => {
@@ -103,7 +134,7 @@ const RosterItemDetail = () => {
 
   const handleCancel = () => {
     if (selectedPerson) {
-      setName(selectedPerson.name);
+      setName(selectedPerson.name || '');
       setNotes(selectedPerson.notes || '');
       setCompany(selectedPerson.company || '');
       setHobbies(selectedPerson.hobbies || '');
@@ -155,9 +186,9 @@ const RosterItemDetail = () => {
           <div className="relative">
             {isImageLoading ? (
               <Skeleton className="w-32 h-32 rounded-full" />
-            ) : displayImageUrl || selectedPerson.tempFaceImageDataUri ? (
+            ) : imagePath ? (
               <Image
-                src={displayImageUrl || selectedPerson.tempFaceImageDataUri!}
+                src={imagePath}
                 alt={selectedPerson.name || 'Person'}
                 width={128}
                 height={128}
@@ -326,6 +357,7 @@ const RosterItemDetail = () => {
             onClick={handleSave}
             disabled={!isDirty || isGlobalProcessing}
           >
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             <Save className="h-4 w-4 mr-1" />
             Save Changes
           </Button>

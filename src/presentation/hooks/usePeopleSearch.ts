@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Person } from '@/shared/types';
 import { PeopleService, PersonSearchCriteria } from '@/domain/services';
 import { SortOption } from '@/shared/constants';
@@ -27,6 +27,30 @@ export function usePeopleSearch(
 } {
   const { query, company, rosterId, sortBy = 'createdAt_desc' } = options;
 
+  const [searchResults, setSearchResults] = useState<Person[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const search = async () => {
+      if (!query && !company && !rosterId) {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearching(true);
+      const searchCriteria: PersonSearchCriteria = {
+        query,
+        company,
+        rosterId,
+        rostersCount: 0, // Default value
+      };
+      const results = PeopleService.searchPeople(people, searchCriteria);
+      setSearchResults(results);
+      setIsSearching(false);
+    };
+
+    search();
+  }, [query, company, rosterId]);
+
   // Get unique companies for filtering
   const companies = useMemo(() => 
     PeopleService.getUniqueCompanies(people),
@@ -39,6 +63,7 @@ export function usePeopleSearch(
       query,
       company,
       rosterId,
+      rostersCount: 0, // Default value
     };
 
     // Search and filter

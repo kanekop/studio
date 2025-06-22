@@ -1,8 +1,5 @@
 "use client";
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,28 +8,14 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { UserPlus, User, Building, Smile, CalendarDays, Info, FileText, Loader2 } from 'lucide-react';
-import { PeopleService, CreatePersonData } from '@/domain/services/PeopleService';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, UserPlus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts';
+import { PeopleService, CreatePersonData } from '@/domain/services/people/PeopleService';
 import type { Person } from '@/shared/types';
-
-const addPersonSchema = z.object({
-  name: z.string().min(1, "名前は必須です"),
-  company: z.string().optional(),
-  hobbies: z.string().optional(),
-  birthday: z.string().optional(),
-  firstMet: z.string().optional(),
-  firstMetContext: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-export type AddPersonFormData = z.infer<typeof addPersonSchema>;
 
 interface AddPersonDialogProps {
   isOpen: boolean;
@@ -40,159 +23,99 @@ interface AddPersonDialogProps {
   onAdd: (person: Person) => void;
 }
 
-const AddPersonDialog: React.FC<AddPersonDialogProps> = ({ 
-  isOpen, 
-  onClose, 
-  onAdd 
-}) => {
+const initialFormData = {
+  name: '',
+  company: '',
+  hobbies: '',
+  birthday: '',
+  firstMet: '',
+  firstMetContext: '',
+  notes: '',
+};
+
+export const AddPersonDialog: React.FC<AddPersonDialogProps> = ({ isOpen, onClose, onAdd }) => {
+  const [formData, setFormData] = useState(initialFormData);
   const [isAdding, setIsAdding] = useState(false);
   const { toast } = useToast();
-  const { currentUser } = useAuth();
-  
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<AddPersonFormData>({
-    resolver: zodResolver(addPersonSchema),
-    defaultValues: {
-      name: '',
-      company: '',
-      hobbies: '',
-      birthday: '',
-      firstMet: '',
-      firstMetContext: '',
-      notes: ''
-    }
-  });
-  
-  const handleAdd = async (data: AddPersonFormData) => {
-    if (!currentUser?.uid) {
-      toast({
-        title: "エラー",
-        description: "ログインが必要です",
-        variant: "destructive"
-      });
+
+  const handleAdd = async () => {
+    if (!formData.name.trim()) {
+      toast({ title: "Validation Error", description: "Name is required.", variant: "destructive" });
       return;
     }
-    
+
     setIsAdding(true);
     try {
-      const createData: CreatePersonData = {
-        name: data.name,
-        company: data.company,
-        hobbies: data.hobbies,
-        birthday: data.birthday,
-        firstMet: data.firstMet,
-        firstMetContext: data.firstMetContext,
-        notes: data.notes,
-        userId: currentUser.uid,
-        faceAppearances: []
-      };
-      
-      const newPerson = await PeopleService.createPerson(createData);
+      const newPerson = await PeopleService.createPerson(formData);
       onAdd(newPerson);
-      
-      toast({
-        title: "追加完了",
-        description: `${data.name}を追加しました`
-      });
-      
-      reset();
+      toast({ title: "Success", description: `${newPerson.name} has been added.` });
+      setFormData(initialFormData); // Reset form
       onClose();
     } catch (error) {
-      console.error('Add person error:', error);
-      toast({
-        title: "エラー",
-        description: "追加に失敗しました",
-        variant: "destructive"
-      });
+      console.error('Failed to add person:', error);
+      toast({ title: "Error", description: "Failed to add person. You might need to be logged in.", variant: "destructive" });
     } finally {
       setIsAdding(false);
     }
   };
-  
-  const renderFieldChoice = (
-    fieldKey: keyof AddPersonFormData,
-    label: string,
-    IconComponent?: React.ElementType,
-    isTextArea: boolean = false
-  ) => {
-    return (
-      <div>
-        <Label htmlFor={fieldKey} className="flex items-center text-sm font-medium text-muted-foreground mb-1">
-          {IconComponent && <IconComponent className="mr-1.5 h-4 w-4" />}{label}
-        </Label>
-        {isTextArea ? (
-          <Textarea
-            id={fieldKey}
-            {...register(fieldKey as any)}
-            className="min-h-[60px]"
-            disabled={isAdding}
-          />
-        ) : (
-          <Input
-            id={fieldKey}
-            {...register(fieldKey as any)}
-            disabled={isAdding}
-            type={fieldKey === 'birthday' || fieldKey === 'firstMet' ? 'date' : 'text'}
-          />
-        )}
-        {errors[fieldKey] && (
-          <p className="text-xs text-destructive mt-1">{errors[fieldKey]?.message}</p>
-        )}
-      </div>
-    );
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.id]: e.target.value });
   };
   
+  if (!isOpen) return null;
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle className="flex items-center">
-            <UserPlus className="mr-2 h-6 w-6 text-primary" />
-            新しい人物を追加
-          </DialogTitle>
+          <DialogTitle>Add New Person</DialogTitle>
           <DialogDescription>
-            顔写真なしで人物情報を登録できます。後から写真を追加することも可能です。
+            You can add a person without a photo. Photos can be added later.
           </DialogDescription>
         </DialogHeader>
-        
-        <form onSubmit={handleSubmit(handleAdd)} id="add-person-form" className="space-y-4">
-          {renderFieldChoice('name', '名前*', User)}
-          {renderFieldChoice('company', '会社・所属', Building)}
-          {renderFieldChoice('hobbies', '趣味', Smile, true)}
-          
-          <div className="grid grid-cols-2 gap-4">
-            {renderFieldChoice('birthday', '誕生日', CalendarDays)}
-            {renderFieldChoice('firstMet', '初対面の日', CalendarDays)}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name *</Label>
+            <Input id="name" value={formData.name} onChange={handleChange} placeholder="Taro Yamada" disabled={isAdding} />
           </div>
-          
-          {renderFieldChoice('firstMetContext', '初対面の文脈', Info, true)}
-          {renderFieldChoice('notes', 'メモ', FileText, true)}
-        </form>
-        
+          <div className="space-y-2">
+            <Label htmlFor="company">Company</Label>
+            <Input id="company" value={formData.company} onChange={handleChange} placeholder="ABC Inc." disabled={isAdding} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="hobbies">Hobbies</Label>
+            <Input id="hobbies" value={formData.hobbies} onChange={handleChange} placeholder="Golf, Reading" disabled={isAdding} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="birthday">Birthday</Label>
+            <Input id="birthday" type="date" value={formData.birthday} onChange={handleChange} disabled={isAdding} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="firstMet">First Met Date</Label>
+            <Input id="firstMet" type="date" value={formData.firstMet} onChange={handleChange} disabled={isAdding} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="firstMetContext">First Met Context</Label>
+            <Input id="firstMetContext" value={formData.firstMetContext} onChange={handleChange} placeholder="At the new year party" disabled={isAdding} />
+          </div>
+          <div className="col-span-1 md:col-span-2 space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea id="notes" value={formData.notes} onChange={handleChange} placeholder="Other information..." rows={4} disabled={isAdding} />
+          </div>
+        </div>
+
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isAdding}>
-              キャンセル
-            </Button>
-          </DialogClose>
-          <Button
-            type="submit"
-            form="add-person-form"
-            disabled={isAdding}
-          >
+          <Button variant="outline" onClick={onClose} disabled={isAdding}>Cancel</Button>
+          <Button onClick={handleAdd} disabled={isAdding}>
             {isAdding ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                追加中...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding...
               </>
             ) : (
               <>
-                <UserPlus className="mr-2 h-4 w-4" />
-                追加
+                <UserPlus className="mr-2 h-4 w-4" /> Add Person
               </>
             )}
           </Button>
@@ -201,5 +124,3 @@ const AddPersonDialog: React.FC<AddPersonDialogProps> = ({
     </Dialog>
   );
 };
-
-export default AddPersonDialog;

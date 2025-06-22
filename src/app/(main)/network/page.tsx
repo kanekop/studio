@@ -19,8 +19,8 @@ import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import VirtualizedConnectionsList from '@/components/features/VirtualizedConnectionsList';
 
 export default function ManageConnectionsPage() {
-    const { allUserPeople, isLoadingAllUserPeople } = usePeople();
-    const { allUserConnections, isLoadingAllUserConnections, deleteConnection } = useConnections();
+    const { people, isLoading: isPeopleLoading } = usePeople();
+    const { allUserConnections, isLoadingAllUserConnections, deleteConnection, fetchAllUserConnections } = useConnections();
     const { openDialog } = useDialogManager();
     const { toast } = useToast();
     
@@ -33,6 +33,11 @@ export default function ManageConnectionsPage() {
     const [showAllConnections, setShowAllConnections] = useState<boolean>(false);
     const [allFirestoreConnections, setAllFirestoreConnections] = useState<Connection[]>([]);
     const [isLoadingAllConnections, setIsLoadingAllConnections] = useState<boolean>(false);
+
+    // ページマウント時に必ずデータを再取得
+    React.useEffect(() => {
+        fetchAllUserConnections();
+    }, []); // 空の依存配列で、マウント時のみ実行
 
     // コネクションの種類で分類するためのヘルパー関数
     const getConnectionCategory = (types: string[]) => {
@@ -56,13 +61,13 @@ export default function ManageConnectionsPage() {
     // 人物データのMapキャッシュ化（パフォーマンス改善）
     const peopleMap = useMemo(() => {
         const map = new Map<string, Person>();
-        allUserPeople?.forEach(person => {
+        people?.forEach(person => {
             if (person?.id) {
                 map.set(person.id, person);
             }
         });
         return map;
-    }, [allUserPeople]);
+    }, [people]);
 
     // 安全な人物情報取得関数
     const getPersonInfo = useCallback((personId: string | null | undefined): Person | null => {
@@ -152,7 +157,7 @@ export default function ManageConnectionsPage() {
                 ? allFirestoreConnections 
                 : allUserConnections;
             
-            if (!Array.isArray(connectionsToProcess) || !Array.isArray(allUserPeople)) {
+            if (!Array.isArray(connectionsToProcess) || !Array.isArray(people)) {
                 return [];
             }
 
@@ -273,7 +278,7 @@ export default function ManageConnectionsPage() {
             setError('データの処理中にエラーが発生しました。ページを再読み込みしてください。');
             return [];
         }
-    }, [allUserConnections, allUserPeople, allFirestoreConnections, showAllConnections, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
+    }, [allUserConnections, people, allFirestoreConnections, showAllConnections, searchQuery, typeFilter, strengthFilter, sortBy, getPersonInfo, safeStringIncludes]);
 
     const handleEditConnection = (connection: Connection) => {
         openDialog('connection');
@@ -320,7 +325,7 @@ export default function ManageConnectionsPage() {
 
     // 安全な新規作成ハンドラー
     const handleCreateNewConnection = useCallback(() => {
-        const peopleCount = Array.isArray(allUserPeople) ? allUserPeople.length : 0;
+        const peopleCount = Array.isArray(people) ? people.length : 0;
         
         if (peopleCount < 2) {
             toast({
@@ -341,19 +346,19 @@ export default function ManageConnectionsPage() {
                 variant: "destructive"
             });
         }
-    }, [allUserPeople, openDialog, toast]);
+    }, [people, openDialog, toast]);
 
     // データの有効性チェック
-    const hasValidData = Array.isArray(allUserConnections) && Array.isArray(allUserPeople);
+    const hasValidData = Array.isArray(allUserConnections) && Array.isArray(people);
     const hasAllConnectionsData = Array.isArray(allFirestoreConnections);
-    const isLoading = isLoadingAllUserConnections || isLoadingAllUserPeople || isLoadingAllConnections;
+    const isLoading = isLoadingAllUserConnections || isLoadingAllConnections;
 
     // デバッグ情報（開発用）
     React.useEffect(() => {
         if (hasValidData && !isLoading) {
             console.log('=== Connections Debug Info ===');
-            console.log('Total people:', allUserPeople?.length || 0);
-            console.log('People IDs:', allUserPeople?.map(p => p.id) || []);
+            console.log('Total people:', people?.length || 0);
+            console.log('People IDs:', people?.map(p => p.id) || []);
             console.log('Total connections found:', allUserConnections?.length || 0);
             console.log('Connections:', allUserConnections?.map(c => ({
                 id: c.id,
@@ -363,7 +368,7 @@ export default function ManageConnectionsPage() {
             })) || []);
             console.log('================================');
         }
-    }, [allUserConnections, allUserPeople, hasValidData, isLoading]);
+    }, [allUserConnections, people, hasValidData, isLoading]);
 
     return (
         <div className="container mx-auto py-8 px-4">
@@ -383,7 +388,7 @@ export default function ManageConnectionsPage() {
                     </div>
                     <Button 
                         onClick={handleCreateNewConnection}
-                        disabled={isLoading || !hasValidData || (allUserPeople?.length || 0) < 2}
+                        disabled={isLoading || !hasValidData || (people?.length || 0) < 2}
                         className="flex items-center gap-2"
                     >
                         <Plus className="h-4 w-4" />
@@ -418,8 +423,8 @@ export default function ManageConnectionsPage() {
                                 ) : (
                                     <div>
                                         <p>👤 <strong>あなたの人物に関連するコネクションのみ表示中</strong></p>
-                                        <p>あなたが追加した{allUserPeople?.length || 0}人の人物に関連するコネクションのみが表示されます。</p>
-                                        {(allUserPeople?.length || 0) < 2 && (
+                                        <p>あなたが追加した{people?.length || 0}人の人物に関連するコネクションのみが表示されます。</p>
+                                        {(people?.length || 0) < 2 && (
                                             <p className="text-amber-600 mt-1">
                                                 💡 より多くのコネクションを見るには、まず人物を追加してください。
                                             </p>

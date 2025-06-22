@@ -89,7 +89,7 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
 
       // 2. Create roster document in Firestore
       const rosterRepo = new FirebaseRosterRepository();
-      const newRosterData: Omit<ImageSet, 'id' | 'createdAt' | 'updatedAt'> = {
+      const newRosterData = {
         ownerId: currentUser.uid,
         rosterName,
         description,

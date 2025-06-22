@@ -123,13 +123,22 @@ export default function VirtualizedPeopleList({
               key={person.id}
               person={person}
               onEditClick={() => onEditClick(person)}
-              onInitiateConnection={onInitiateConnection}
-              selectionMode={selectionMode}
-              isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? safeSelectedForMergeIds.includes(person.id) : false}
-              onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
-              isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? safeSelectedForDeletionIds.includes(person.id) : false}
-              onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
-              generalActionDisabled={generalActionDisabled}
+              isSelected={selectedForMergeIds?.includes(person.id) || selectedForDeletionIds?.includes(person.id)}
+              onSelectionChange={(isSelected) => {
+                if (isSelected) {
+                  if (selectionMode === 'merge') {
+                    onToggleMergeSelection?.(person.id);
+                  } else if (selectionMode === 'delete') {
+                    onToggleDeleteSelection?.(person.id);
+                  }
+                } else {
+                  if (selectionMode === 'merge') {
+                    onToggleMergeSelection?.(person.id);
+                  } else if (selectionMode === 'delete') {
+                    onToggleDeleteSelection?.(person.id);
+                  }
+                }
+              }}
               allUserPeople={allUserPeople}
             />
           );
@@ -181,13 +190,23 @@ export default function VirtualizedPeopleList({
                       key={person.id}
                       person={person}
                       onEditClick={() => onEditClick(person)}
-                      onInitiateConnection={onInitiateConnection}
                       onDeleteClick={onDeleteClick ? () => onDeleteClick(person) : undefined}
-                      selectionMode={selectionMode}
-                      isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? safeSelectedForMergeIds.includes(person.id) : false}
-                      onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
-                      isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? safeSelectedForDeletionIds.includes(person.id) : false}
-                      onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
+                      isSelected={selectedForMergeIds?.includes(person.id) || selectedForDeletionIds?.includes(person.id)}
+                      onSelectionChange={(isSelected) => {
+                        if (isSelected) {
+                          if (selectionMode === 'merge') {
+                            onToggleMergeSelection?.(person.id);
+                          } else if (selectionMode === 'delete') {
+                            onToggleDeleteSelection?.(person.id);
+                          }
+                        } else {
+                          if (selectionMode === 'merge') {
+                            onToggleMergeSelection?.(person.id);
+                          } else if (selectionMode === 'delete') {
+                            onToggleDeleteSelection?.(person.id);
+                          }
+                        }
+                      }}
                       generalActionDisabled={generalActionDisabled}
                       allUserPeople={allUserPeople}
                     />

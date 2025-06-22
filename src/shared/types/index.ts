@@ -13,6 +13,8 @@ export interface Region {
 // with coordinates and dimensions relative to the displayed image on canvas.
 export interface DisplayRegion extends Region {
   id: string; // Required unique ID for display purposes
+  personId?: string;
+  personName?: string;
 }
 
 // Represents a single appearance of a person's face in a specific roster (original image).
@@ -51,34 +53,16 @@ export interface Person {
 }
 
 // Represents an individual person for display and editing within the context of a specific, currently loaded roster.
-export interface EditablePersonInContext {
-  id: string; // Firestore document ID of the person, OR a temporary ID for new, unsaved persons
-  name: string;
-  aiName?: string;
-  notes?: string;
-  
-  // These fields are specific to the person's appearance in the *current* roster
+export type EditablePersonInContext = Person & {
+  isNew?: boolean;
   currentRosterAppearance?: {
-    rosterId: string; // Will be the currentRosterDocId when saved
-    faceImageStoragePath: string; 
-    originalRegion: Region; 
+    rosterId: string;
+    faceImageStoragePath: string;
+    originalRegion: Region;
   };
-  
-  // Face image URL for display (downloaded URL from Firebase Storage)
-  faceImageUrl?: string;
-
-  company?: string;
-  hobbies?: string;
-  birthday?: string;
-  firstMet?: string;
-  firstMetContext?: string;
-
-  // Fields for temporary, unsaved persons
-  isNew?: boolean; // Flag to indicate if this person is new and not yet saved to Firestore
-  tempFaceImageDataUri?: string; // To store the raw data URI before upload for new persons
-  tempOriginalRegion?: Region; // To store the original region for new persons before they are linked to a FaceAppearance
-}
-
+  aiName?: string;
+  tempFaceImageDataUri?: string;
+};
 
 // Represents a single image upload and its associated roster.
 // This corresponds to a document in Firestore's 'rosters' collection.
@@ -96,6 +80,8 @@ export interface ImageSet {
   
   createdAt: Timestamp | any; // Firestore serverTimestamp for creation
   updatedAt: Timestamp | any; // Firestore serverTimestamp for last update
+  
+  tags: string[];
 }
 
 // Defines the user's choices for merging conflicting fields between two Person objects.

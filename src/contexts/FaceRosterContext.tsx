@@ -5,13 +5,18 @@ import { auth, db, storage as appFirebaseStorage } from '@/infrastructure/fireba
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref as storageRefStandard, uploadBytes, getDownloadURL, uploadString, StringFormat, deleteObject } from 'firebase/storage';
 import { doc, setDoc, addDoc, updateDoc, collection, serverTimestamp, arrayUnion, arrayRemove, query, where, getDocs, orderBy, getDoc, writeBatch, deleteDoc, runTransaction, FirestoreError, Timestamp } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-import type { Person, Region, DisplayRegion, ImageSet, EditablePersonInContext, FaceAppearance, FieldMergeChoices, SuggestedMergePair, Connection, AdvancedSearchParams } from '@/shared/types';
+import type { Person, Region, DisplayRegion, ImageSet, FaceAppearance, FieldMergeChoices, SuggestedMergePair, Connection, AdvancedSearchParams } from '@/shared/types';
 import { useToast } from "@/hooks/use-toast";
 import { suggestPeopleMerges, type SuggestMergeInput, type SuggestMergeOutput } from '@/ai/flows/suggest-people-merges-flow';
-import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
 import { useUI } from '@/contexts/UIContext';
+import type { Roster } from '@/domain/entities';
+import { PeopleService } from '@/domain/services/people/PeopleService';
+import { useAuth } from './AuthContext';
 
+// This type seems to be obsolete after refactoring EditPersonDialog.
+// import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
 
 const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -20,12 +25,14 @@ const FIRESTORE_IN_QUERY_LIMIT = 30;
 
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
+export type EditablePersonInContext = (Person | { isNew: true, currentRosterAppearance: { rosterId: string, faceImageStoragePath: string, originalRegion: Region } }) & { aiName?: string; };
 
 interface FaceRosterContextType {
   currentUser: FirebaseUser | null;
-  roster: EditablePersonInContext[];
-  isLoading: boolean;
-  isProcessing: boolean;
+  roster: EditablePersonInContext[] | null;
+  setRoster: React.Dispatch<React.SetStateAction<EditablePersonInContext[] | null>>;
+  selectedPersonId: string | null;
+  selectPerson: (id: string | null) => void;
   currentRosterDocId: string | null;
   userRosters: ImageSet[];
   isLoadingUserRosters: boolean;
@@ -52,6 +59,8 @@ interface FaceRosterContextType {
   clearDrawnRegions: () => void;
   getScaledRegionForDisplay: (originalRegion: Region, imageDisplaySize: { width: number; height: number }) => DisplayRegion;
   clearCurrentRoster: () => void;
+
+  isProcessing: boolean;
 }
 
 const FaceRosterContext = createContext<FaceRosterContextType | undefined>(undefined);
@@ -82,14 +91,13 @@ async function imageStoragePathToDataURI(path: string): Promise<string | undefin
   }
 }
 
-
 export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { toast } = useToast();
-  const { selectPerson } = useUI();
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [roster, setRoster] = useState<EditablePersonInContext[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isProcessing, setIsProcessingState] = useState<boolean>(false);
+  const { selectPerson: selectPersonInUI, isProcessing, setIsProcessing } = useUI();
+  const { currentUser } = useAuth();
+
+  const [roster, setRoster] = useState<EditablePersonInContext[] | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [currentRosterDocId, setCurrentRosterDocId] = useState<string | null>(null);
   const [userRosters, setUserRosters] = useState<ImageSet[]>([]);
   const [isLoadingUserRosters, setIsLoadingUserRosters] = useState<boolean>(false);
@@ -99,8 +107,13 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [originalImageSize, setOriginalImageSize] = useState<{ width: number; height: number } | null>(null);
   const [drawnRegions, setDrawnRegions] = useState<Region[]>([]);
 
+  const selectPerson = useCallback((id: string | null) => {
+    setSelectedPersonId(id);
+    selectPersonInUI(id);
+  }, [selectPersonInUI]);
+
   const clearAllData = useCallback((showToast = true) => {
-    setRoster([]);
+    setRoster(null);
     setCurrentRosterDocId(null);
     setImageDataUrl(null);
     setOriginalImageStoragePath(null);
@@ -145,12 +158,8 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, toast]);
 
-
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setIsLoading(false);
       if (!user) {
         clearAllData(false);
         setUserRosters([]);
@@ -165,13 +174,6 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser, fetchUserRosters]);
 
-
-
-
-
-
-
-
   const updatePersonDetails = useCallback(async (
     personIdToUpdate: string,
     details: Partial<Omit<EditablePersonInContext, 'id' | 'currentRosterAppearance' | 'faceImageUrl' | 'isNew' | 'tempFaceImageDataUri' | 'tempOriginalRegion'>>
@@ -181,24 +183,23 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    setIsProcessingState(true);
+    setIsProcessing(true);
     const localPersonEntry = roster.find(p => p.id === personIdToUpdate);
     if (!localPersonEntry) {
       toast({ title: "Error", description: "Person to update not found in current roster view.", variant: "destructive" });
-      setIsProcessingState(false);
+      setIsProcessing(false);
       return;
     }
     if (localPersonEntry.isNew) {
       toast({ title: "Error", description: "Cannot update 'new' person directly. This should have been handled by createRosterFromRegions.", variant: "destructive" });
-      setIsProcessingState(false);
+      setIsProcessing(false);
       return;
     }
-
 
     const finalName = (details.name || localPersonEntry.name || `Unnamed Person`).trim();
     if (!finalName) {
       toast({ title: "Validation Error", description: "Person's name cannot be empty.", variant: "destructive" });
-      setIsProcessingState(false);
+      setIsProcessing(false);
       return;
     }
 
@@ -241,88 +242,57 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.error(`FRC: Error updating person details (ID: ${personIdToUpdate}) in Firestore:`, error);
       toast({ title: "Save Failed", description: `Could not save changes for ${finalName || 'person'}: ${error.message}`, variant: "destructive" });
     } finally {
-      setIsProcessingState(false);
+      setIsProcessing(false);
     }
   }, [currentUser, currentRosterDocId, toast, roster]);
 
-
   const loadRosterForEditing = useCallback(async (rosterId: string) => {
-    if (!db || !appFirebaseStorage || !currentUser) {
-      toast({ title: "Cannot Load Roster", description: "Not authenticated or services unavailable.", variant: "destructive" });
-      return;
-    }
-    
-    setIsLoading(true);
-    clearAllData(false);
-
+    setCurrentRosterDocId(rosterId);
+    setIsProcessing(true);
     try {
-      const rosterDocRef = doc(db, 'rosters', rosterId);
-      const rosterDoc = await getDoc(rosterDocRef);
-
+      const rosterDoc = await getDoc(doc(db, 'rosters', rosterId));
       if (!rosterDoc.exists()) {
-        throw new Error('Roster not found.');
+        throw new Error("Roster not found");
       }
+      const rosterData = rosterDoc.data() as Roster;
 
-      const rosterData = rosterDoc.data() as ImageSet;
-      
-      // Convert storage path to a displayable data URL
-      const dataUrl = await imageStoragePathToDataURI(rosterData.originalImageStoragePath);
-      if (dataUrl) {
-        setImageDataUrl(dataUrl);
-      } else {
-        throw new Error('Could not load image from storage.');
-      }
+      // This part is tricky. The `people` array in Firestore might not match EditablePersonInContext perfectly.
+      // We need to fetch full person details for each ID.
+      const personDocs = await PeopleService.getPeopleByIds(rosterData.peopleIds);
 
-      setCurrentRosterDocId(rosterId);
-      setOriginalImageStoragePath(rosterData.originalImageStoragePath);
-      setOriginalImageSize(rosterData.originalImageSize);
-      
-      const peopleIds = rosterData.peopleIds || [];
-      if (peopleIds.length > 0) {
-        const peoplePromises = peopleIds.map(id => getDoc(doc(db, 'people', id)));
-        const peopleDocs = await Promise.all(peoplePromises);
-        
-        const peopleForRoster: EditablePersonInContext[] = peopleDocs.map(pDoc => {
-          if (!pDoc.exists()) return null;
-          const personData = pDoc.data() as Person;
-          const appearance = rosterData.people?.find(p => p.id === personData.id)?.currentRosterAppearance;
-          return {
-            ...personData,
-            isNew: false,
-            currentRosterAppearance: appearance,
-          };
-        }).filter((p): p is EditablePersonInContext => p !== null);
+      const editablePeople = personDocs.map(p => ({
+          ...p,
+          isNew: false, // Mark as existing
+      }));
 
-        setRoster(peopleForRoster);
+      setRoster(editablePeople);
+      if (editablePeople.length > 0) {
+        selectPerson(editablePeople[0].id);
       } else {
         setRoster([]);
       }
-      
-      selectPerson(null);
-      
-    } catch (error: any) {
-      console.error(`FRC: Error loading roster (ID: ${rosterId}):`, error);
-      toast({ title: "Failed to Load Roster", description: error.message, variant: "destructive" });
-      clearAllData(false);
+    } catch (error) {
+      console.error("Error loading roster:", error);
+      toast({ title: "Error", description: "Failed to load roster.", variant: "destructive" });
+      setRoster(null);
     } finally {
-      setIsLoading(false);
+      setIsProcessing(false);
     }
-  }, [currentUser, toast, clearAllData, selectPerson]);
-
+  }, [toast, selectPerson, setIsProcessing]);
 
   const deleteRoster = useCallback(async (rosterId: string) => {
     if (!db || !appFirebaseStorage || !currentUser) {
       toast({ title: "Error", description: "Cannot delete: Not logged in or Firebase services unavailable.", variant: "destructive" });
       return;
     }
-    setIsProcessingState(true);
+    setIsProcessing(true);
     try {
       const rosterDocRef = doc(db, "rosters", rosterId);
       const rosterSnap = await getDoc(rosterDocRef);
 
       if (!rosterSnap.exists()) {
         toast({ title: "Not Found", description: "Roster to delete was not found.", variant: "destructive" });
-        setIsProcessingState(false);
+        setIsProcessing(false);
         await fetchUserRosters();
         return;
       }
@@ -330,7 +300,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (rosterData.ownerId !== currentUser.uid) {
         toast({ title: "Access Denied", description: "You cannot delete this roster.", variant: "destructive" });
-        setIsProcessingState(false);
+        setIsProcessing(false);
         return;
       }
 
@@ -394,7 +364,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.error("FRC: Error deleting roster:", error);
       toast({ title: "Delete Failed", description: `Could not delete roster: ${error.message}`, variant: "destructive" });
     } finally {
-      setIsProcessingState(false);
+      setIsProcessing(false);
     }
   }, [currentUser, toast, fetchUserRosters, currentRosterDocId, clearAllData]);
 
@@ -413,7 +383,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    setIsProcessingState(true);
+    setIsProcessing(true);
     try {
       // 1. Prepare initial data structures
       const newPeople = await createInitialPersonDataFromRegions(regions, imageDataUrl, originalImageSize);
@@ -497,7 +467,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.error("Error creating new roster: ", error);
       toast({ title: "Error", description: `Failed to create roster: ${error}`, variant: "destructive" });
     } finally {
-      setIsProcessingState(false);
+      setIsProcessing(false);
     }
   };
 
@@ -578,7 +548,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
 
     try {
-      setIsProcessingState(true);
+      setIsProcessing(true);
       clearAllData(false);
 
       // Convert file to data URL for canvas operations
@@ -618,7 +588,7 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         variant: "destructive",
       });
     } finally {
-      setIsProcessingState(false);
+      setIsProcessing(false);
     }
   }, [currentUser?.uid, clearAllData, toast]);
 
@@ -677,31 +647,77 @@ export const FaceRosterProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     console.log('FRC: Current roster cleared.');
   }, []);
 
+  const addPersonToRoster = useCallback((
+    faceImageStoragePath: string, 
+    originalRegion: Region,
+    rosterId: string,
+    aiSuggestedName?: string
+  ) => {
+    const newPerson: EditablePersonInContext = {
+      id: `new_${new Date().getTime()}`, // Temporary unique ID
+      isNew: true,
+      name: aiSuggestedName || '',
+      aiName: aiSuggestedName,
+      currentRosterAppearance: {
+        rosterId: rosterId,
+        faceImageStoragePath,
+        originalRegion,
+      },
+      // Initialize other Person properties to default values
+      company: '',
+      hobbies: '',
+      birthday: '',
+      firstMet: '',
+      firstMetContext: '',
+      notes: '',
+      rosterIds: [rosterId],
+      faceAppearances: [],
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+      userId: currentUser?.uid || '',
+      addedBy: currentUser?.uid || '',
+    };
+
+    setRoster(prevRoster => [...(prevRoster || []), newPerson]);
+    selectPerson(newPerson.id);
+  }, [currentUser?.uid, selectPerson]);
+
+  const removePersonFromRoster = useCallback(async (personIdToRemove: string) => {
+    if (!currentRosterDocId) return;
+    // ... existing code ...
+  }, [currentRosterDocId]);
+
+  const value = {
+    currentUser,
+    roster,
+    setRoster,
+    selectedPersonId,
+    selectPerson,
+    currentRosterDocId,
+    userRosters,
+    isLoadingUserRosters,
+    imageDataUrl,
+    originalImageStoragePath,
+    originalImageSize,
+    drawnRegions,
+    updatePersonDetails,
+    clearAllData,
+    fetchUserRosters,
+    loadRosterForEditing,
+    deleteRoster,
+    createRosterFromRegions,
+    handleImageUpload,
+    addDrawnRegion,
+    clearDrawnRegions,
+    getScaledRegionForDisplay,
+    clearCurrentRoster,
+    addPersonToRoster,
+    removePersonFromRoster,
+    isProcessing,
+  };
+
   return (
-    <FaceRosterContext.Provider value={{
-      currentUser,
-      roster,
-      isLoading,
-      isProcessing,
-      currentRosterDocId,
-      userRosters,
-      isLoadingUserRosters,
-      imageDataUrl,
-      originalImageStoragePath,
-      originalImageSize,
-      drawnRegions,
-      updatePersonDetails,
-      clearAllData,
-      fetchUserRosters,
-      loadRosterForEditing,
-      deleteRoster,
-      createRosterFromRegions,
-      handleImageUpload,
-      addDrawnRegion,
-      clearDrawnRegions,
-      getScaledRegionForDisplay,
-      clearCurrentRoster,
-    }}>
+    <FaceRosterContext.Provider value={value}>
       {children}
     </FaceRosterContext.Provider>
   );

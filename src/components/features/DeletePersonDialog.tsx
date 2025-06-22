@@ -12,7 +12,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { AlertTriangle, Loader2 } from 'lucide-react';
-import { PeopleService } from '@/domain/services/PeopleService';
 import { useToast } from '@/hooks/use-toast';
 
 interface DeletePersonDialogProps {
@@ -36,58 +35,57 @@ const DeletePersonDialog: React.FC<DeletePersonDialogProps> = ({
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      // Delete from Firestore directly
-      await PeopleService.deletePerson(person.id);
-      
-      // Call the onConfirm callback for parent state update
       await onConfirm();
-      
       toast({
-        title: "削除完了",
-        description: `${person.name}を削除しました`
+        title: "Success",
+        description: `${person.name} has been deleted.`
       });
-      
-      onClose();
-    } catch (error) {
-      console.error('Delete error:', error);
+      // No need to call onClose here, parent will handle it
+    } catch (e: any) {
+      console.error('Delete error:', e);
       toast({
-        title: "エラー",
-        description: "削除に失敗しました",
+        title: "Error",
+        description: `Failed to delete the person: ${e.message || 'Unknown error'}`,
         variant: "destructive"
       });
+      // Close the dialog on failure
+      onClose();
     } finally {
       setIsDeleting(false);
     }
   };
   
+  if (!isOpen) return null;
+
   return (
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center">
             <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-            本当に削除しますか？
+            Are you sure you want to delete?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            <div className="space-y-2">
+            <div className="space-y-3 py-2">
               <p>
-                <strong>{person.name}</strong> を削除しようとしています。
+                You are about to permanently delete <strong>{person.name}</strong>.
               </p>
               {connectionCount > 0 && (
-                <p className="text-orange-600">
-                  ⚠️ この人物には {connectionCount} 件の関係性が登録されています。
-                  削除すると、これらの関係性も全て削除されます。
-                </p>
+                <div className="p-3 bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-800/50 rounded-md">
+                  <p className="font-semibold text-orange-700 dark:text-orange-300">
+                    ⚠️ This person has {connectionCount} connection(s). Deleting them will also remove all these relationships.
+                  </p>
+                </div>
               )}
-              <p className="text-red-600 font-semibold">
-                この操作は取り消すことができません。
+              <p className="font-semibold text-destructive">
+                This action cannot be undone.
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>
-            キャンセル
+          <AlertDialogCancel onClick={onClose} disabled={isDeleting}>
+            Cancel
           </AlertDialogCancel>
           <AlertDialogAction
             onClick={handleDelete}
@@ -97,10 +95,10 @@ const DeletePersonDialog: React.FC<DeletePersonDialogProps> = ({
             {isDeleting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                削除中...
+                Deleting...
               </>
             ) : (
-              '削除する'
+              'Yes, Delete'
             )}
           </AlertDialogAction>
         </AlertDialogFooter>

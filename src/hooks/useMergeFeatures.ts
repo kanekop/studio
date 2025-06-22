@@ -9,6 +9,7 @@ import { useToast } from './use-toast';
 import { runTransaction, doc, writeBatch, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeopleMerge } from '@/contexts/PeopleMergeContext';
 
 interface UseMergeFeaturesReturn {
   mergeSuggestions: SuggestedMergePair[];
@@ -26,21 +27,25 @@ interface UseMergeFeaturesReturn {
 
 export const useMergeFeatures = (): UseMergeFeaturesReturn => {
   const { currentUser } = useAuth();
-  const { allUserPeople, fetchAllUserPeople } = usePeople();
+  const { people } = usePeople();
   const { setIsProcessing } = useUI();
   const { handleError } = useErrorHandler();
   const { toast } = useToast();
+  const { 
+    selectedPeopleForMerge,
+    setSelectedPeopleForMerge,
+  } = usePeopleMerge();
 
   const [mergeSuggestions, setMergeSuggestions] = useState<SuggestedMergePair[]>([]);
 
   // Async operations
   const fetchSuggestionsOperation = useCallback(async () => {
-    if (!currentUser?.uid || allUserPeople.length === 0) {
+    if (!currentUser?.uid || people.length === 0) {
       setMergeSuggestions([]);
       return;
     }
 
-    const input: SuggestMergeInput = allUserPeople.map(person => ({
+    const input: SuggestMergeInput = people.map(person => ({
       id: person.id,
       name: person.name || '',
       company: person.company || '',
@@ -62,7 +67,7 @@ export const useMergeFeatures = (): UseMergeFeaturesReturn => {
       setMergeSuggestions([]);
       throw error;
     }
-  }, [currentUser?.uid, allUserPeople, toast]);
+  }, [currentUser?.uid, people, toast]);
 
   const mergeOperation = useCallback(async (
     targetPersonId: string,
@@ -135,13 +140,13 @@ export const useMergeFeatures = (): UseMergeFeaturesReturn => {
     });
 
     // Refresh people list
-    await fetchAllUserPeople();
+    await fetchSuggestionsOperation();
 
     toast({
       title: "マージ完了",
       description: "人物の統合が完了しました",
     });
-  }, [currentUser?.uid, fetchAllUserPeople, toast]);
+  }, [currentUser?.uid, fetchSuggestionsOperation, toast]);
 
   const { execute: fetchMergeSuggestions, isLoading: isLoadingMergeSuggestions } = useAsyncOperation(fetchSuggestionsOperation);
   const { execute: performGlobalPeopleMerge, isLoading: isMerging } = useAsyncOperation(mergeOperation);

@@ -16,34 +16,35 @@ import {
 import { db } from '@/infrastructure/firebase/config';
 import { useAuth } from './AuthContext';
 import { useUI } from './UIContext';
-import type { Person, AdvancedSearchParams } from '@/shared/types';
-import type { EditPersonFormData } from '@/components/features/EditPersonDialog';
+import type { Person, AdvancedSearchParams, Connection } from '@/shared/types';
 import { useToast } from "@/hooks/use-toast";
+import { PeopleService } from '@/domain/services/people/PeopleService';
 
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
 interface PeopleContextType {
-  allUserPeople: Person[];
-  isLoadingAllUserPeople: boolean;
-  peopleSortOption: PeopleSortOptionValue;
-  peopleSearchQuery: string;
-  peopleCompanyFilter: string | null;
+  people: Person[];
+  setPeople: React.Dispatch<React.SetStateAction<Person[]>>;
   filteredPeople: Person[];
-  advancedSearchParams: AdvancedSearchParams;
-  availableHobbies: string[];
-  availableConnectionTypes: string[];
-
-  fetchAllUserPeople: () => Promise<void>;
-  updateGlobalPersonDetails: (personId: string, details: EditPersonFormData) => Promise<boolean>;
+  searchParams: AdvancedSearchParams;
+  setSearchParams: React.Dispatch<React.SetStateAction<AdvancedSearchParams>>;
+  sortOption: PeopleSortOptionValue;
+  setSortOption: React.Dispatch<React.SetStateAction<PeopleSortOptionValue>>;
+  addPerson: (personData: Omit<Person, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => Promise<Person | undefined>;
+  getPersonById: (id: string) => Person | undefined;
+  isLoading: boolean;
+  error: Error | null;
+  selectedForMerge: Person[];
+  toggleMergeSelection: (person: Person) => void;
+  clearMergeSelection: () => void;
+  selectedForDeletion: Person[];
+  toggleDeletionSelection: (person: Person) => void;
+  clearDeletionSelection: () => void;
   deleteSelectedPeople: () => Promise<void>;
-  setPeopleSortOption: (option: PeopleSortOptionValue) => void;
-  setPeopleSearchQuery: (query: string) => void;
-  setPeopleCompanyFilter: (company: string | null) => void;
-  getUniqueCompanies: () => string[];
-  setAdvancedSearchParams: (params: AdvancedSearchParams) => void;
-  clearAllSearchFilters: () => void;
-  getAvailableHobbies: () => string[];
-  getAvailableConnectionTypes: () => string[];
+  isDeleting: boolean;
+  connections: Connection[];
+  fetchConnections: (personId: string) => Promise<void>;
+  getConnectionsForPerson: (personId: string) => Connection[];
 }
 
 const PeopleContext = createContext<PeopleContextType | undefined>(undefined);
@@ -53,12 +54,10 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { selectedPeopleIdsForDeletion, clearPeopleSelectionForDeletion, setIsProcessing } = useUI();
   const { toast } = useToast();
 
-  const [allUserPeople, setAllUserPeople] = useState<Person[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
   const [isLoadingAllUserPeople, setIsLoadingAllUserPeople] = useState(false);
-  const [peopleSortOption, setPeopleSortOption] = useState<PeopleSortOptionValue>('createdAt_desc');
-  const [peopleSearchQuery, setPeopleSearchQuery] = useState('');
-  const [peopleCompanyFilter, setPeopleCompanyFilter] = useState<string | null>(null);
-  const [advancedSearchParams, setAdvancedSearchParams] = useState<AdvancedSearchParams>({
+  const [sortOption, setSortOption] = useState<PeopleSortOptionValue>('createdAt_desc');
+  const [searchParams, setSearchParams] = useState<AdvancedSearchParams>({
     ageRange: { min: null, max: null },
     hobbies: [],
     hasConnections: null,
@@ -95,7 +94,7 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } as Person);
       });
 
-      setAllUserPeople(people);
+      setPeople(people);
     } catch (error) {
       console.error('Error fetching people:', error);
       toast({
@@ -107,42 +106,6 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setIsLoadingAllUserPeople(false);
     }
   }, [currentUser?.uid, toast]);
-
-  const updateGlobalPersonDetails = useCallback(async (
-    personId: string, 
-    details: EditPersonFormData
-  ): Promise<boolean> => {
-    if (!currentUser?.uid) return false;
-
-    try {
-      setIsProcessing(true);
-      const personRef = doc(db, 'people', personId);
-      
-      await updateDoc(personRef, {
-        ...details,
-        updatedAt: Timestamp.fromDate(new Date()),
-      });
-
-      await fetchAllUserPeople();
-      
-      toast({
-        title: "更新完了",
-        description: "人物情報を更新しました",
-      });
-      
-      return true;
-    } catch (error) {
-      console.error('Error updating person:', error);
-      toast({
-        title: "エラー",
-        description: "人物情報の更新に失敗しました",
-        variant: "destructive",
-      });
-      return false;
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [currentUser?.uid, fetchAllUserPeople, setIsProcessing, toast]);
 
   const deleteSelectedPeople = useCallback(async () => {
     if (!currentUser?.uid || selectedPeopleIdsForDeletion.length === 0) return;
@@ -176,76 +139,59 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [currentUser?.uid, selectedPeopleIdsForDeletion, clearPeopleSelectionForDeletion, fetchAllUserPeople, setIsProcessing, toast]);
 
-  const getUniqueCompanies = useCallback(() => {
-    const companies = allUserPeople
-      .map(person => person.company)
-      .filter((company): company is string => Boolean(company))
-      .filter((company, index, arr) => arr.indexOf(company) === index)
-      .sort();
-    return companies;
-  }, [allUserPeople]);
+  const addPerson = async (personData: Omit<Person, 'id' | 'createdAt' | 'updatedAt' | 'userId'>): Promise<Person | undefined> => {
+    if (!currentUser?.uid) {
+      toast({ title: "Authentication Error", description: "You must be logged in to add a person.", variant: "destructive" });
+      return undefined;
+    }
 
-  const getAvailableHobbies = useCallback(() => {
-    const hobbies = allUserPeople
-      .flatMap(person => person.hobbies || [])
-      .filter((hobby, index, arr) => arr.indexOf(hobby) === index)
-      .sort();
-    return hobbies;
-  }, [allUserPeople]);
+    setIsProcessing(true);
+    try {
+      const newPerson = await PeopleService.createPerson(personData);
+      setPeople(currentPeople => [...currentPeople, newPerson]);
+      toast({
+        title: "Success",
+        description: `${newPerson.name} has been added.`,
+      });
+      return newPerson;
+    } catch (error: any) {
+      console.error('Error adding person:', error);
+      toast({
+        title: "Error",
+        description: `Failed to add person: ${error.message}`,
+        variant: "destructive",
+      });
+      return undefined;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-  const getAvailableConnectionTypes = useCallback(() => {
-    // This would need to be integrated with ConnectionContext
-    return ['colleague', 'friend', 'family', 'other'];
-  }, []);
+  const getPersonById = useCallback((id: string) => {
+    return people.find(person => person.id === id);
+  }, [people]);
 
-  const clearAllSearchFilters = useCallback(() => {
-    setPeopleSearchQuery('');
-    setPeopleCompanyFilter(null);
-    setAdvancedSearchParams({
-      ageRange: { min: null, max: null },
-      hobbies: [],
-      hasConnections: null,
-      connectionTypes: [],
-    });
-  }, []);
-
-  // Filtered people calculation
   const filteredPeople = useMemo(() => {
-    let filtered = [...allUserPeople];
+    let filtered = [...people];
 
     // Basic search query
-    if (peopleSearchQuery) {
-      const query = peopleSearchQuery.toLowerCase();
+    if (searchParams.ageRange.min !== null) {
       filtered = filtered.filter(person => 
-        person.name?.toLowerCase().includes(query) ||
-        person.company?.toLowerCase().includes(query) ||
-        person.notes?.toLowerCase().includes(query)
+        person.age !== undefined && person.age >= searchParams.ageRange.min!
       );
     }
 
-    // Company filter
-    if (peopleCompanyFilter) {
-      filtered = filtered.filter(person => person.company === peopleCompanyFilter);
-    }
-
-    // Advanced search filters
-    if (advancedSearchParams.ageRange.min !== null) {
+    if (searchParams.ageRange.max !== null) {
       filtered = filtered.filter(person => 
-        person.age !== undefined && person.age >= advancedSearchParams.ageRange.min!
+        person.age !== undefined && person.age <= searchParams.ageRange.max!
       );
     }
 
-    if (advancedSearchParams.ageRange.max !== null) {
-      filtered = filtered.filter(person => 
-        person.age !== undefined && person.age <= advancedSearchParams.ageRange.max!
-      );
-    }
-
-    if (advancedSearchParams.hobbies.length > 0) {
+    if (searchParams.hobbies.length > 0) {
       filtered = filtered.filter(person => {
         if (!person.hobbies) return false;
         const personHobbies = person.hobbies.toLowerCase();
-        return advancedSearchParams.hobbies?.some(hobby => 
+        return searchParams.hobbies?.some(hobby => 
           personHobbies.includes(hobby.toLowerCase())
         ) || false;
       });
@@ -253,7 +199,7 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Sort
     filtered.sort((a, b) => {
-      switch (peopleSortOption) {
+      switch (sortOption) {
         case 'name_asc':
           return (a.name || '').localeCompare(b.name || '');
         case 'name_desc':
@@ -267,7 +213,7 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return filtered;
-  }, [allUserPeople, peopleSearchQuery, peopleCompanyFilter, advancedSearchParams, peopleSortOption]);
+  }, [people, searchParams, sortOption]);
 
   useEffect(() => {
     if (currentUser?.uid) {
@@ -276,26 +222,28 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [currentUser?.uid, fetchAllUserPeople]);
 
   const value: PeopleContextType = {
-    allUserPeople,
-    isLoadingAllUserPeople,
-    peopleSortOption,
-    peopleSearchQuery,
-    peopleCompanyFilter,
+    people,
+    setPeople,
     filteredPeople,
-    advancedSearchParams,
-    availableHobbies: getAvailableHobbies(),
-    availableConnectionTypes: getAvailableConnectionTypes(),
-    fetchAllUserPeople,
-    updateGlobalPersonDetails,
+    searchParams,
+    setSearchParams,
+    sortOption,
+    setSortOption,
+    addPerson,
+    getPersonById,
+    isLoading: isLoadingAllUserPeople,
+    error: null,
+    selectedForMerge: [],
+    toggleMergeSelection: () => {},
+    clearMergeSelection: () => {},
+    selectedForDeletion: [],
+    toggleDeletionSelection: () => {},
+    clearDeletionSelection: () => {},
     deleteSelectedPeople,
-    setPeopleSortOption,
-    setPeopleSearchQuery,
-    setPeopleCompanyFilter,
-    getUniqueCompanies,
-    setAdvancedSearchParams,
-    clearAllSearchFilters,
-    getAvailableHobbies,
-    getAvailableConnectionTypes,
+    isDeleting: false,
+    connections: [],
+    fetchConnections: async () => {},
+    getConnectionsForPerson: () => [],
   };
 
   return (

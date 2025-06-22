@@ -36,7 +36,7 @@ interface PeopleDeletionProviderProps {
 
 export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ children }) => {
   const { currentUser } = useAuth();
-  const { allUserPeople, fetchAllUserPeople } = usePeople();
+  const { people, setPeople } = usePeople();
   const { fetchAllUserConnections } = useConnections();
   const { toast } = useToast();
   
@@ -58,8 +58,8 @@ export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ 
   }, []);
 
   const getSelectedPeopleData = useCallback((): Person[] => {
-    return allUserPeople.filter(person => selectedPeopleForDeletion.includes(person.id));
-  }, [allUserPeople, selectedPeopleForDeletion]);
+    return people.filter(person => selectedPeopleForDeletion.includes(person.id));
+  }, [people, selectedPeopleForDeletion]);
 
   const deletePeopleWithCleanup = useCallback(async (peopleIds: string[]): Promise<void> => {
     if (!currentUser?.uid || peopleIds.length === 0) {
@@ -71,7 +71,7 @@ export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ 
 
     try {
       // 削除対象の人物データを取得
-      const peopleToDelete = allUserPeople.filter(person => peopleIds.includes(person.id));
+      const peopleToDelete = people.filter(person => peopleIds.includes(person.id));
 
       // 関連する画像パスを収集
       peopleToDelete.forEach(person => {
@@ -127,14 +127,14 @@ export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ 
       await Promise.allSettled(deleteImagePromises);
 
       // ローカルデータを更新
-      await fetchAllUserPeople();
+      await setPeople(people.filter(p => !peopleIds.includes(p.id)));
       await fetchAllUserConnections();
 
     } catch (error) {
       console.error('人物削除エラー:', error);
       throw error;
     }
-  }, [currentUser?.uid, allUserPeople, fetchAllUserPeople, fetchAllUserConnections]);
+  }, [currentUser?.uid, people, setPeople, fetchAllUserConnections]);
 
   const deleteSelectedPeople = useCallback(async (): Promise<void> => {
     if (selectedPeopleForDeletion.length === 0) {
@@ -172,7 +172,7 @@ export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ 
       // 選択リストからも削除
       setSelectedPeopleForDeletion(prev => prev.filter(id => id !== personId));
       
-      const person = allUserPeople.find(p => p.id === personId);
+      const person = people.find(p => p.id === personId);
       toast({
         title: "削除完了",
         description: `${person?.name || '人物'}を削除しました`,
@@ -188,7 +188,7 @@ export const PeopleDeletionProvider: React.FC<PeopleDeletionProviderProps> = ({ 
     } finally {
       setIsProcessing(false);
     }
-  }, [deletePeopleWithCleanup, allUserPeople, toast]);
+  }, [deletePeopleWithCleanup, people, toast]);
 
   const value: PeopleDeletionContextType = {
     selectedPeopleForDeletion,

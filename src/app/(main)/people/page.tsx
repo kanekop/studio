@@ -1,634 +1,131 @@
 "use client";
 import React, { useEffect, useState } from 'react';
-import { usePeople, type PeopleSortOptionValue } from '@/contexts/PeopleContext';
-import { useConnections } from '@/contexts/ConnectionContext';
-import { usePeopleMerge } from '@/contexts/PeopleMergeContext';
-import { usePeopleDeletion } from '@/contexts/PeopleDeletionContext';
-import { useSearchFilter } from '@/contexts/SearchFilterContext';
-import { useAuth } from '@/contexts';
-import { useUI } from '@/contexts';
 import { Button } from '@/components/ui/button';
-import { UserCheck, Users, Brain, Merge, XCircle, SearchCheck, FileWarning, Trash2, ListChecks, ListFilter, Pencil, X, Link2, Search, UserPlus } from 'lucide-react';
+import { UserPlus, Loader2 } from 'lucide-react';
 import PeopleList from '@/components/features/PeopleList';
-import VirtualizedPeopleList from '@/components/features/VirtualizedPeopleList';
-import { Skeleton } from '@/components/ui/skeleton';
-import MergePeopleDialog from '@/components/features/MergePeopleDialog';
-import EditPersonDialog, { type EditPersonFormData } from '@/components/features/EditPersonDialog';
-import CreateConnectionDialog from '@/components/features/CreateConnectionDialog';
+import { EditPersonDialog } from '@/components/features/EditPersonDialog';
 import DeletePersonDialog from '@/components/features/DeletePersonDialog';
-import AddPersonDialog from '@/components/features/AddPersonDialog';
-import type { Person, FieldMergeChoices, SuggestedMergePair, Connection, ProcessedConnectionFormData } from '@/shared/types';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { useToast } from '@/hooks/use-toast';
-import PeopleSearchFilters from '@/components/features/PeopleSearchFilters';
-import AdvancedPeopleSearchFilters from '@/components/features/AdvancedPeopleSearchFilters';
-import { PeopleService } from '@/domain/services/PeopleService';
-
+import { AddPersonDialog } from '@/components/features/AddPersonDialog';
+import type { Person, Connection } from '@/shared/types';
+import { PeopleService, UpdatePersonData } from '@/domain/services/people/PeopleService';
+import PeopleSearchFilters from '@/components/features/PeopleSearchFilters'; // Assuming this is mostly self-contained
 
 export default function ManagePeoplePage() {
-  const { currentUser } = useAuth();
-  const { isProcessing } = useUI();
-  const {
-    allUserPeople,
-    isLoadingAllUserPeople,
-    peopleSortOption,
-    setPeopleSortOption,
-    updateGlobalPersonDetails,
-  } = usePeople();
-  const {
-    allUserConnections,
-    isLoadingAllUserConnections,
-    addConnection,
-  } = useConnections();
-  const {
-    selectedPeopleForMerge: globallySelectedPeopleForMerge,
-    togglePersonSelectionForMerge: toggleGlobalPersonSelectionForMerge,
-    clearMergeSelection: clearGlobalMergeSelection,
-    performPeopleMerge: performGlobalPeopleMerge,
-    fetchMergeSuggestions,
-    mergeSuggestions,
-    clearMergeSuggestions,
-    isLoadingMergeSuggestions,
-  } = usePeopleMerge();
-  const {
-    selectedPeopleForDeletion: selectedPeopleIdsForDeletion,
-    togglePersonSelectionForDeletion,
-    clearDeletionSelection: clearPeopleSelectionForDeletion,
-    deleteSelectedPeople,
-  } = usePeopleDeletion();
-  const {
-    peopleSearchQuery,
-    setPeopleSearchQuery,
-    peopleCompanyFilter,
-    setPeopleCompanyFilter,
-    filterPeople,
-    getUniqueCompanies,
-    advancedSearchParams,
-    setAdvancedSearchParams,
-    clearAllSearchFilters,
-    getAvailableHobbies,
-    getAvailableConnectionTypes,
-  } = useSearchFilter();
+  const [people, setPeople] = useState<Person[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
-  const filteredPeople = filterPeople(allUserPeople, allUserConnections);
-  const availableHobbies = getAvailableHobbies(allUserPeople);
-  const availableConnectionTypes = getAvailableConnectionTypes(allUserConnections);
-  const { toast } = useToast();
-
-  const [isMergeSelectionMode, setIsMergeSelectionMode] = useState(false);
-  const [isDeleteSelectionMode, setIsDeleteSelectionMode] = useState(false);
-  const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-
   const [personToEdit, setPersonToEdit] = useState<Person | null>(null);
-  const [isEditPersonDialogOpen, setIsEditPersonDialogOpen] = useState(false);
-  const [isSavingPersonDetails, setIsSavingPersonDetails] = useState(false);
-
-  const [isCreateConnectionDialogOpen, setIsCreateConnectionDialogOpen] = useState(false);
-  const [sourcePersonForConnection, setSourcePersonForConnection] = useState<Person | null>(null);
-  const [targetPersonForConnection, setTargetPersonForConnection] = useState<Person | null>(null);
-  const [isSavingConnection, setIsSavingConnection] = useState(false);
-  
   const [personToDelete, setPersonToDelete] = useState<Person | null>(null);
-  const [isIndividualDeleteDialogOpen, setIsIndividualDeleteDialogOpen] = useState(false);
-  const [connectionCountForDelete, setConnectionCountForDelete] = useState(0);
   
   const [isAddPersonDialogOpen, setIsAddPersonDialogOpen] = useState(false);
 
-  // 高度な検索は専用のコンポーネントで管理されるため、ローカルステートは不要
-
+  // Initial data fetching
   useEffect(() => {
-    if (!isMergeSelectionMode) {
-      clearGlobalMergeSelection();
-    }
-    if (isMergeSelectionMode && isDeleteSelectionMode) {
-      setIsDeleteSelectionMode(false);
-      clearPeopleSelectionForDeletion();
-    }
-  }, [isMergeSelectionMode, clearGlobalMergeSelection, isDeleteSelectionMode, clearPeopleSelectionForDeletion]);
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const [peopleData, connectionsData] = await Promise.all([
+          PeopleService.getAllPeople(),
+          // Assuming a method to get all connections exists or can be added.
+          // For now, let's create a placeholder.
+          (async () => {
+            const allPeople = await PeopleService.getAllPeople();
+            const allConnections = await Promise.all(allPeople.map(p => PeopleService.getConnectionsForPerson(p.id)));
+            return allConnections.flat();
+          })()
+        ]);
+        setPeople(peopleData);
+        setConnections(connectionsData);
+      } catch (error) {
+        console.error("Failed to fetch data:", error);
+        // Add user-facing error handling (e.g., toast notification)
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  useEffect(() => {
-    if (!isDeleteSelectionMode) {
-      clearPeopleSelectionForDeletion();
-    }
-    if (isDeleteSelectionMode && isMergeSelectionMode) {
-      setIsMergeSelectionMode(false);
-      clearGlobalMergeSelection();
-    }
-  }, [isDeleteSelectionMode, clearPeopleSelectionForDeletion, isMergeSelectionMode, clearGlobalMergeSelection]);
+    fetchData();
+  }, []);
 
-  const handleToggleMergeMode = () => {
-    setIsMergeSelectionMode(!isMergeSelectionMode);
-    if (!isMergeSelectionMode) setIsDeleteSelectionMode(false);
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false);
-  };
-
-  const handleToggleDeleteMode = () => {
-    setIsDeleteSelectionMode(!isDeleteSelectionMode);
-    if (!isDeleteSelectionMode) setIsMergeSelectionMode(false);
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false);
-  };
-
-  const handleInitiateMergeFromSelection = () => {
-    if (globallySelectedPeopleForMerge.length === 2) {
-      setIsMergeDialogOpen(true);
-    }
-  };
-
-  const handleInitiateMergeFromSuggestion = (suggestion: SuggestedMergePair) => {
-    clearGlobalMergeSelection();
-    toggleGlobalPersonSelectionForMerge(suggestion.person1Id);
-    toggleGlobalPersonSelectionForMerge(suggestion.person2Id);
-    setIsMergeSelectionMode(true);
-    setIsDeleteSelectionMode(false);
-    setPersonToEdit(null); setIsEditPersonDialogOpen(false);
-    setTimeout(() => {
-      setIsMergeDialogOpen(true);
-    }, 0);
-  };
-
-  const handleConfirmMergeFromDialog = async (
-    targetPersonId: string,
-    sourcePersonId: string,
-    fieldChoices: FieldMergeChoices,
-    chosenPrimaryPhotoPath: string | null
-  ) => {
-    await performGlobalPeopleMerge(targetPersonId, sourcePersonId, fieldChoices, chosenPrimaryPhotoPath);
-    setIsMergeDialogOpen(false);
-    setIsMergeSelectionMode(false);
-  };
-
-  const handleConfirmDelete = async () => {
-    await deleteSelectedPeople();
-    setIsDeleteSelectionMode(false);
-    setIsDeleteDialogOpen(false);
-  };
-
-  const handleOpenEditPersonDialog = (person: Person) => {
-    console.log('handleOpenEditPersonDialog called with person:', person);
-    setIsMergeSelectionMode(false);
-    setIsDeleteSelectionMode(false);
+  const handleEditClick = (person: Person) => {
     setPersonToEdit(person);
-    setIsEditPersonDialogOpen(true);
-    console.log('isEditPersonDialogOpen set to true');
   };
 
-  const handleSavePersonDetails = async (personId: string, data: EditPersonFormData) => {
-    setIsSavingPersonDetails(true);
-    const success = await updateGlobalPersonDetails(personId, data);
-    setIsSavingPersonDetails(false);
-    if (success) {
-      setIsEditPersonDialogOpen(false);
-      setPersonToEdit(null);
-    }
-  };
-
-  const handleInitiateConnection = (sourcePersonId: string, targetPersonId: string) => {
-    if (!allUserPeople || allUserPeople.length === 0) {
-      toast({ title: "Error", description: "People data not available.", variant: "destructive" });
-      return;
-    }
-    
-    if (sourcePersonId === targetPersonId) {
-      toast({ title: "Cannot connect person to themself", variant: "default" });
-      return;
-    }
-    
-    const source = allUserPeople.find(p => p.id === sourcePersonId);
-    const target = allUserPeople.find(p => p.id === targetPersonId);
-
-    if (source && target) {
-      setSourcePersonForConnection(source);
-      setTargetPersonForConnection(target);
-      setIsCreateConnectionDialogOpen(true);
-    } else {
-      toast({ title: "Error", description: "Could not find persons to connect.", variant: "destructive" });
-    }
-  };
-
-  const handleSaveConnection = async (data: ProcessedConnectionFormData) => {
-    if (!sourcePersonForConnection || !targetPersonForConnection) return;
-    setIsSavingConnection(true);
-
-    const connectionId = await addConnection(
-      sourcePersonForConnection.id,
-      targetPersonForConnection.id,
-      data.types,
-      data.reasons,
-      data.strength,
-      data.notes
-    );
-    setIsSavingConnection(false);
-    if (connectionId) {
-      setIsCreateConnectionDialogOpen(false);
-      setSourcePersonForConnection(null);
-      setTargetPersonForConnection(null);
-    }
-  };
-  
-  const handleIndividualDeleteClick = async (person: Person) => {
-    // Get connection count for this person
-    const count = await PeopleService.getConnectionCount(person.id);
-    setConnectionCountForDelete(count);
+  const handleDeleteClick = (person: Person) => {
     setPersonToDelete(person);
-    setIsIndividualDeleteDialogOpen(true);
+  };
+
+  const handleUpdatePerson = (personId: string, updates: UpdatePersonData) => {
+    setPeople(prevPeople =>
+      prevPeople.map(p => (p.id === personId ? { ...p, ...updates } : p))
+    );
   };
   
-  const handleConfirmIndividualDelete = async () => {
+  const handleConfirmDelete = async () => {
     if (!personToDelete) return;
-    // The dialog will handle the actual deletion
-    // Just update the local state here
-    const updatedPeople = allUserPeople.filter(p => p.id !== personToDelete.id);
-    // This will be handled by the context update from the dialog
-    setIsIndividualDeleteDialogOpen(false);
-    setPersonToDelete(null);
+    
+    try {
+      await PeopleService.deletePerson(personToDelete.id);
+      setPeople(prevPeople => prevPeople.filter(p => p.id !== personToDelete.id));
+      // Also refetch/update connections if necessary
+      const newConnections = connections.filter(c => c.fromPersonId !== personToDelete.id && c.toPersonId !== personToDelete.id);
+      setConnections(newConnections);
+      
+      setPersonToDelete(null);
+    } catch (error) {
+       console.error("Failed to delete person:", error);
+       // Add user-facing error handling
+    }
   };
-  
+
   const handleAddPerson = (newPerson: Person) => {
-    // The context will be updated by the PeopleService
-    // Just close the dialog
-    setIsAddPersonDialogOpen(false);
+    setPeople(prev => [...prev, newPerson]);
   };
 
-  const canManuallyMerge = globallySelectedPeopleForMerge?.length === 2 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
-  const canDeleteSelected = selectedPeopleIdsForDeletion?.length > 0 && !isProcessing && !isSavingPersonDetails && !isSavingConnection;
-  const generalActionDisabled = isProcessing || isSavingPersonDetails || isSavingConnection || isLoadingAllUserConnections || isLoadingAllUserPeople;
-
-  // Safe access to people data for dialog
-  const person1ForDialog = allUserPeople?.find(p => p.id === globallySelectedPeopleForMerge?.[0]) || null;
-  const person2ForDialog = allUserPeople?.find(p => p.id === globallySelectedPeopleForMerge?.[1]) || null;
+  // TODO: Implement search and filtering logic based on simplified state
+  const filteredPeople = people; // Placeholder
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-headline font-bold text-primary flex items-center">
-          <Users className="inline-block mr-3 h-8 w-8" />
-          Manage People
-        </h1>
-        <div className="flex flex-wrap gap-2 items-center">
-          <Button
-            onClick={() => setIsAddPersonDialogOpen(true)}
-            disabled={generalActionDisabled}
-            className="bg-green-600 hover:bg-green-700 text-white"
-          >
-            <UserPlus className="mr-2 h-4 w-4" />
-            新しい人物を追加
-          </Button>
-          <Select value={peopleSortOption} onValueChange={(value) => setPeopleSortOption(value as PeopleSortOptionValue)} disabled={generalActionDisabled}>
-            <SelectTrigger className="w-auto sm:w-[200px] text-sm">
-              <ListFilter className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Sort by..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="createdAt_desc">Date Added (Newest)</SelectItem>
-              <SelectItem value="createdAt_asc">Date Added (Oldest)</SelectItem>
-              <SelectItem value="name_asc">Name (A-Z)</SelectItem>
-              <SelectItem value="name_desc">Name (Z-A)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            onClick={() => fetchMergeSuggestions()}
-            disabled={generalActionDisabled || isLoadingMergeSuggestions || (allUserPeople?.length || 0) < 2 || isDeleteSelectionMode}
-            title={isDeleteSelectionMode ? "Finish deletion first" : "Find merge suggestions"}
-          >
-            {isLoadingMergeSuggestions ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Finding...
-              </>
-            ) : (
-              <>
-                <Brain className="mr-2 h-4 w-4" /> AI Merge Suggestions
-              </>
-            )}
-          </Button>
-
-          <Button
-            variant={isMergeSelectionMode ? "default" : "outline"}
-            onClick={handleToggleMergeMode}
-            disabled={generalActionDisabled || (allUserPeople?.length || 0) < 2 || isDeleteSelectionMode}
-            className={isMergeSelectionMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
-            title={isDeleteSelectionMode ? "Finish deletion first" : (isMergeSelectionMode ? "Cancel Merge Selection" : "Select to Merge Manually")}
-          >
-            {isMergeSelectionMode ? (
-              <>
-                <XCircle className="mr-2 h-4 w-4" /> Cancel Merge
-              </>
-            ) : (
-              <>
-                <UserCheck className="mr-2 h-4 w-4" /> Merge Manually
-              </>
-            )}
-          </Button>
-
-          <Button
-            variant={isDeleteSelectionMode ? "default" : "outline"}
-            onClick={handleToggleDeleteMode}
-            disabled={generalActionDisabled || (allUserPeople?.length || 0) < 1 || isMergeSelectionMode}
-            className={isDeleteSelectionMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}
-            title={isMergeSelectionMode ? "Finish merging first" : (isDeleteSelectionMode ? "Cancel Deletion" : "Select to Delete")}
-          >
-            {isDeleteSelectionMode ? (
-              <>
-                <XCircle className="mr-2 h-4 w-4" /> Cancel Deletion
-              </>
-            ) : (
-              <>
-                <ListChecks className="mr-2 h-4 w-4" /> Select to Delete
-              </>
-            )}
-          </Button>
-
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div className='space-y-1'>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">People</h1>
+          <p className="text-sm text-muted-foreground">Manage all individuals in your network.</p>
         </div>
+        <Button onClick={() => setIsAddPersonDialogOpen(true)}>
+          <UserPlus className="mr-2 h-4 w-4" />
+          Add Person
+        </Button>
       </div>
-
-      <div className="mb-6">
-        <AdvancedPeopleSearchFilters
-          searchParams={advancedSearchParams || {}}
-          onSearchParamsChange={setAdvancedSearchParams}
-          availableCompanies={getUniqueCompanies?.(allUserPeople) || []}
-          availableHobbies={availableHobbies || []}
-          availableConnectionTypes={availableConnectionTypes || []}
-          onClearFilters={clearAllSearchFilters}
-        />
-      </div>
-
-      <div className="mb-4 flex justify-between items-center">
-        <p className="text-sm text-muted-foreground">
-          {isLoadingAllUserPeople ? 'Loading...' : `Showing ${filteredPeople?.length || 0} of ${allUserPeople?.length || 0} people.`}
-        </p>
-        <div className="flex gap-2">
-          {/* ... Action buttons like Merge, Delete ... */}
-        </div>
-      </div>
-
-      {isMergeSelectionMode && (
-        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-md text-center">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            Merge Mode: Select exactly two people from the list to merge.
-            The first selected will be the primary.
-          </p>
-          {(globallySelectedPeopleForMerge?.length || 0) > 0 && (
-            <Button
-              onClick={handleInitiateMergeFromSelection}
-              disabled={!canManuallyMerge}
-              size="sm"
-              className="mt-2 bg-green-600 hover:bg-green-700 text-white"
-            >
-              <Merge className="mr-2 h-4 w-4" /> Merge Selected ({globallySelectedPeopleForMerge?.length || 0})
-            </Button>
-          )}
-        </div>
-      )}
-
-      {isDeleteSelectionMode && (
-        <div className="mb-4 p-3 bg-orange-500/10 border border-orange-500/30 rounded-md text-center">
-          <p className="text-sm text-orange-700 dark:text-orange-300">
-            Delete Mode: Select one or more people from the list to delete.
-          </p>
-          {(selectedPeopleIdsForDeletion?.length || 0) > 0 && (
-            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="mt-2"
-                  disabled={!canDeleteSelected}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" /> Delete Selected ({selectedPeopleIdsForDeletion?.length || 0})
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirm Deletion</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to delete {selectedPeopleIdsForDeletion?.length || 0} selected person(s)?
-                    This will remove them from all rosters and delete their associated face images. This action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleConfirmDelete} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90">
-                    {isProcessing ? "Deleting..." : "Yes, Delete"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      )}
-
-      {!isMergeSelectionMode && !isDeleteSelectionMode && (
-        <div className="mb-4 p-3 bg-green-500/5 border border-green-500/20 rounded-md text-center">
-          <p className="text-sm text-green-700 dark:text-green-300 flex items-center justify-center">
-            <Link2 className="mr-2 h-4 w-4" />
-            To create a connection, drag one person's card and drop it onto another person's card.
-          </p>
-        </div>
-      )}
-
-      {(mergeSuggestions?.length || 0) > 0 && !isLoadingMergeSuggestions && !isDeleteSelectionMode && (
-        <Card className="mb-6 shadow-md">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle className="font-headline text-xl flex items-center">
-                <SearchCheck className="mr-2 h-5 w-5 text-primary" /> AI Merge Suggestions
-              </CardTitle>
-              <CardDescription>
-                The AI has found these potential duplicates. Review and merge if appropriate.
-              </CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={clearMergeSuggestions}
-              className="text-muted-foreground hover:text-destructive"
-              title="Dismiss suggestions"
-            >
-              <X className="h-5 w-5" />
-              <span className="sr-only">Dismiss suggestions</span>
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="max-h-[300px] pr-3">
-              <div className="space-y-3">
-                {mergeSuggestions?.map((suggestion, index) => (
-                  <div key={`${suggestion.person1Id}-${suggestion.person2Id}-${index}`} className="p-3 border rounded-md bg-card/80 hover:shadow-sm">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                      <div>
-                        <p className="font-medium text-sm">
-                          Merge <strong className="text-accent">{suggestion.person1Name}</strong> (ID: ...{suggestion.person1Id.slice(-4)})
-                          <br />with <strong className="text-accent">{suggestion.person2Name}</strong> (ID: ...{suggestion.person2Id.slice(-4)})?
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">Reason: {suggestion.reason}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Confidence: <span className="font-medium">{suggestion.confidence || 'N/A'}</span></p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleInitiateMergeFromSuggestion(suggestion)}
-                        disabled={generalActionDisabled || isDeleteSelectionMode}
-                        className="mt-2 sm:mt-0 shrink-0"
-                      >
-                        <Merge className="mr-2 h-4 w-4" /> Review & Merge Pair
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      )}
-      {isLoadingMergeSuggestions && mergeSuggestions.length === 0 && !isDeleteSelectionMode && (
-        <div className="mb-6 p-4 text-center text-muted-foreground">
-          <svg className="animate-spin mx-auto h-8 w-8 text-primary mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          Looking for merge suggestions...
-        </div>
-      )}
-      {!isLoadingMergeSuggestions && (mergeSuggestions?.length || 0) === 0 && (allUserPeople?.length || 0) > 1 && !isDeleteSelectionMode && (
-        <Card className="mb-6 shadow-sm border-dashed">
-          <CardContent className="p-6 text-center">
-            <FileWarning className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">
-              No merge suggestions found by the AI. <br />
-              You can still select people manually to merge them.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-
-      {isLoadingAllUserPeople || (isLoadingAllUserConnections && (allUserPeople?.length || 0) > 0) ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="flex flex-col space-y-3 p-4 border rounded-lg">
-              <Skeleton className="h-32 w-32 rounded-full mx-auto bg-muted" />
-              <Skeleton className="h-4 w-3/4 mx-auto bg-muted" />
-              <Skeleton className="h-4 w-1/2 mx-auto bg-muted" />
-              <Skeleton className="h-4 w-full mt-2 bg-muted" />
-            </div>
-          ))}
-        </div>
-      ) : (allUserPeople?.length || 0) === 0 ? (
-        <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
-          <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <p className="font-semibold">No people registered yet.</p>
-          <p className="text-sm">Upload images and create rosters to add people to your list.</p>
-        </div>
-      ) : (filteredPeople?.length || 0) === 0 ? (
-        <div className="text-center text-muted-foreground text-lg py-10 border border-dashed rounded-md">
-          <Search className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-          <p className="font-semibold">No people found matching your filters.</p>
-          <p className="text-sm">Try adjusting your search query or clearing filters.</p>
-        </div>
-      ) : (
-        (filteredPeople?.length || 0) > 100 ? (
-          <VirtualizedPeopleList
-            people={filteredPeople || []}
-            isLoading={isLoadingAllUserPeople}
-            onEditClick={handleOpenEditPersonDialog}
-            onInitiateConnection={handleInitiateConnection}
-            onDeleteClick={handleIndividualDeleteClick}
-            selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
-            selectedForMergeIds={globallySelectedPeopleForMerge || []}
-            onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
-            selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
-            onToggleDeleteSelection={togglePersonSelectionForDeletion}
-            generalActionDisabled={generalActionDisabled}
-            containerHeight={600}
-            allUserPeople={allUserPeople || []}
-          />
-        ) : (
-          <PeopleList
-            people={filteredPeople || []}
-            isLoading={isLoadingAllUserPeople}
-            onEditClick={handleOpenEditPersonDialog}
-            onInitiateConnection={handleInitiateConnection}
-            onDeleteClick={handleIndividualDeleteClick}
-            selectionMode={isMergeSelectionMode ? 'merge' : isDeleteSelectionMode ? 'delete' : 'none'}
-            selectedForMergeIds={globallySelectedPeopleForMerge || []}
-            onToggleMergeSelection={toggleGlobalPersonSelectionForMerge}
-            selectedForDeletionIds={selectedPeopleIdsForDeletion || []}
-            onToggleDeleteSelection={togglePersonSelectionForDeletion}
-            generalActionDisabled={generalActionDisabled}
-            allUserPeople={allUserPeople || []}
-          />
-        )
-      )}
-
-      {person1ForDialog && person2ForDialog && isMergeDialogOpen && (
-        <MergePeopleDialog
-          isOpen={isMergeDialogOpen}
-          onOpenChange={setIsMergeDialogOpen}
-          person1={person1ForDialog}
-          person2={person2ForDialog}
-          onConfirmMerge={handleConfirmMergeFromDialog}
-        />
-      )}
-
-      <EditPersonDialog
-        personToEdit={personToEdit}
-        allUserPeople={allUserPeople || []}
-        allUserConnections={allUserConnections || []}
-        isLoadingConnections={isLoadingAllUserConnections}
-        isLoadingPeople={isLoadingAllUserPeople}
-        isOpen={isEditPersonDialogOpen}
-        onOpenChange={setIsEditPersonDialogOpen}
-        onSave={handleSavePersonDetails}
-        isProcessing={isSavingPersonDetails}
+      
+      {/* Search and filter components can be progressively re-integrated */}
+      {/* <PeopleSearchFilters /> */}
+      
+      <PeopleList
+        people={filteredPeople}
+        connections={connections}
+        isLoading={isLoading}
+        onEditClick={handleEditClick}
+        onDeleteClick={handleDeleteClick}
       />
-
-      {sourcePersonForConnection && targetPersonForConnection && (
-        <CreateConnectionDialog
-          isOpen={isCreateConnectionDialogOpen}
-          onOpenChange={setIsCreateConnectionDialogOpen}
-          sourcePerson={sourcePersonForConnection}
-          targetPerson={targetPersonForConnection}
-          onSave={handleSaveConnection}
-          isProcessing={isSavingConnection}
-          allUserPeople={allUserPeople || []}
+      
+      {personToEdit && (
+        <EditPersonDialog
+          person={personToEdit}
+          isOpen={!!personToEdit}
+          onClose={() => setPersonToEdit(null)}
+          onUpdate={handleUpdatePerson}
         />
       )}
       
       {personToDelete && (
         <DeletePersonDialog
           person={personToDelete}
-          isOpen={isIndividualDeleteDialogOpen}
-          onClose={() => {
-            setIsIndividualDeleteDialogOpen(false);
-            setPersonToDelete(null);
-          }}
-          onConfirm={handleConfirmIndividualDelete}
-          connectionCount={connectionCountForDelete}
+          isOpen={!!personToDelete}
+          onClose={() => setPersonToDelete(null)}
+          onConfirm={handleConfirmDelete}
+          connectionCount={connections.filter(c => c.fromPersonId === personToDelete.id || c.toPersonId === personToDelete.id).length}
         />
       )}
       
@@ -636,7 +133,7 @@ export default function ManagePeoplePage() {
         isOpen={isAddPersonDialogOpen}
         onClose={() => setIsAddPersonDialogOpen(false)}
         onAdd={handleAddPerson}
-      />
+      /> 
     </div>
   );
 }

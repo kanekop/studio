@@ -1,61 +1,43 @@
 "use client";
 import React from 'react';
-import type { Person } from '@/shared/types';
+import type { Person, Connection } from '@/shared/types';
 import PeopleListItem from './PeopleListItem';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from "@/components/ui/card";
 
 interface PeopleListProps {
   people: Person[];
+  connections: Connection[];
   isLoading: boolean;
   onEditClick: (person: Person) => void;
-  onInitiateConnection: (sourcePersonId: string, targetPersonId: string) => void;
-  onDeleteClick?: (person: Person) => void;
-  selectionMode?: 'merge' | 'delete' | 'none';
-  selectedForMergeIds?: string[];
-  onToggleMergeSelection?: (personId: string) => void;
-  selectedForDeletionIds?: string[];
-  onToggleDeleteSelection?: (personId: string) => void;
-  generalActionDisabled?: boolean;
-  allUserPeople?: Person[];
+  onDeleteClick: (person: Person) => void;
 }
 
 export default function PeopleList({
   people,
+  connections,
   isLoading,
   onEditClick,
-  onInitiateConnection,
   onDeleteClick,
-  selectionMode = 'none',
-  selectedForMergeIds = [],
-  onToggleMergeSelection,
-  selectedForDeletionIds = [],
-  onToggleDeleteSelection,
-  generalActionDisabled = false,
-  allUserPeople = []
 }: PeopleListProps) {
-  // Safe array access with fallback
-  const safePeople = people || [];
-  const safeSelectedForMergeIds = selectedForMergeIds || [];
-  const safeSelectedForDeletionIds = selectedForDeletionIds || [];
 
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
         {Array.from({ length: 12 }).map((_, index) => (
-          <Skeleton key={index} className="h-[220px] w-full rounded-lg" />
+          <Skeleton key={index} className="h-[280px] w-full rounded-lg" />
         ))}
       </div>
     );
   }
 
-  if (safePeople.length === 0) {
+  if (people.length === 0) {
     return (
       <Card className="mt-4">
         <CardContent className="pt-6">
           <div className="text-center text-muted-foreground">
             <p className="font-semibold">No people found.</p>
-            <p className="text-sm">Try adjusting your search or filters.</p>
+            <p className="text-sm">Try adjusting your search or filters, or add a new person.</p>
           </div>
         </CardContent>
       </Card>
@@ -64,7 +46,7 @@ export default function PeopleList({
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-      {safePeople.map((person) => {
+      {people.map((person) => {
         if (!person?.id) {
           console.warn('Person object missing id:', person);
           return null;
@@ -74,16 +56,9 @@ export default function PeopleList({
           <PeopleListItem
             key={person.id}
             person={person}
-            onEditClick={() => onEditClick(person)}
-            onInitiateConnection={onInitiateConnection}
-            onDeleteClick={onDeleteClick ? () => onDeleteClick(person) : undefined}
-            selectionMode={selectionMode}
-            isSelectedForMerge={selectionMode === 'merge' && onToggleMergeSelection ? safeSelectedForMergeIds.includes(person.id) : false}
-            onToggleMergeSelection={() => selectionMode === 'merge' && onToggleMergeSelection ? onToggleMergeSelection(person.id) : undefined}
-            isSelectedForDeletion={selectionMode === 'delete' && onToggleDeleteSelection ? safeSelectedForDeletionIds.includes(person.id) : false}
-            onToggleDeleteSelection={() => selectionMode === 'delete' && onToggleDeleteSelection ? onToggleDeleteSelection(person.id) : undefined}
-            generalActionDisabled={generalActionDisabled}
-            allUserPeople={allUserPeople}
+            onEditClick={onEditClick}
+            onDeleteClick={onDeleteClick}
+            connections={connections}
           />
         );
       })}

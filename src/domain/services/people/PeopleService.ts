@@ -1,6 +1,26 @@
 import { Person as PersonEntity } from '@/domain/entities';
-import { Person, EditablePersonInContext, FaceAppearance } from '@/shared/types';
+import { Person, EditablePersonInContext, FaceAppearance, Connection } from '@/shared/types';
 import { v4 as uuidv4 } from 'uuid';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where,
+  serverTimestamp,
+  writeBatch,
+  documentId
+} from 'firebase/firestore';
+import { db } from '@/infrastructure/firebase/config';
+import { getAuth } from "firebase/auth";
+
+// Data type for creating a person. `addedBy` will be set by the service.
+export type CreatePersonData = Omit<Person, 'id' | 'createdAt' | 'updatedAt' | 'rosterIds' | 'faceAppearances' | 'age' | 'userId' | 'addedBy'>;
+export type UpdatePersonData = Partial<Omit<Person, 'id' | 'createdAt' | 'updatedAt' | 'userId'>>;
 
 export interface PersonSearchCriteria {
   query?: string;
@@ -8,6 +28,7 @@ export interface PersonSearchCriteria {
   rosterId?: string;
   hasConnections?: boolean;
   ageRange?: { min?: number; max?: number };
+  rostersCount: number;
 }
 
 export interface PersonStatistics {
@@ -150,7 +171,6 @@ export class PeopleService {
       name: '',
       isNew: true,
       tempFaceImageDataUri: faceImageDataUri,
-      tempOriginalRegion: faceRegion,
       currentRosterAppearance: {
         rosterId,
         faceImageStoragePath: '', // Will be set when saved
@@ -272,4 +292,107 @@ export class PeopleService {
 
     return matrix[str2.length][str1.length];
   }
+
+  // --- CRUD Operations ---
+
+  static async createPerson(data: CreatePersonData): Promise<Person> {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      throw new Error("User not authenticated to create a person.");
+    }
+
+    const docRef = await addDoc(collection(db, 'people'), {
+      ...data,
+      userId: currentUser.uid,
+      rosterIds: [],
+      faceAppearances: [],
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+    
+    const newPersonDoc = await getDoc(docRef);
+    return {
+      id: newPersonDoc.id,
+      ...newPersonDoc.data()
+    } as Person;
+  }
+
+  static async updatePerson(id: string, data: UpdatePersonData): Promise<void> {
+    await updateDoc(doc(db, 'people', id), {
+      ...data,
+      updatedAt: serverTimestamp()
+    });
+  }
+
+  static async deletePerson(id: string): Promise<void> {
+    const batch = writeBatch(db);
+
+    // Find and delete related connections
+    const fromConnectionsQuery = query(collection(db, 'connections'), where('fromPersonId', '==', id));
+    const toConnectionsQuery = query(collection(db, 'connections'), where('toPersonId', '==', id));
+    
+    const [fromConnectionsSnapshot, toConnectionsSnapshot] = await Promise.all([
+      getDocs(fromConnectionsQuery),
+      getDocs(toConnectionsQuery)
+    ]);
+
+    fromConnectionsSnapshot.forEach(doc => batch.delete(doc.ref));
+    toConnectionsSnapshot.forEach(doc => batch.delete(doc.ref));
+
+    // Delete the person doc
+    const personDocRef = doc(db, 'people', id);
+    batch.delete(personDocRef);
+
+    await batch.commit();
+  }
+
+  static async getPerson(id: string): Promise<Person | null> {
+    const docSnap = await getDoc(doc(db, 'people', id));
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Person;
+    }
+    return null;
+  }
+
+  static async getAllPeople(): Promise<Person[]> {
+    const querySnapshot = await getDocs(collection(db, "people"));
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Person);
+  }
+
+  static async getConnectionsForPerson(personId: string): Promise<Connection[]> {
+    const fromQuery = query(collection(db, "connections"), where("fromPersonId", "==", personId));
+    const toQuery = query(collection(db, "connections"), where("toPersonId", "==", personId));
+
+    const [fromSnapshot, toSnapshot] = await Promise.all([getDocs(fromQuery), getDocs(toQuery)]);
+    
+    const connections: Connection[] = [];
+    const connectionIds = new Set<string>();
+
+    fromSnapshot.forEach(doc => {
+      if(!connectionIds.has(doc.id)){
+        connections.push({ id: doc.id, ...doc.data() } as Connection);
+        connectionIds.add(doc.id);
+      }
+    });
+    toSnapshot.forEach(doc => {
+      if(!connectionIds.has(doc.id)){
+        connections.push({ id: doc.id, ...doc.data() } as Connection);
+        connectionIds.add(doc.id);
+      }
+    });
+
+    return connections;
+  }
+
+  static async getPeopleByIds(personIds: string[]): Promise<Person[]> {
+    if (personIds.length === 0) {
+      return [];
+    }
+    const peopleRef = collection(db, "people");
+    const q = query(peopleRef, where(documentId(), "in", personIds));
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Person));
+  }
+
 }
