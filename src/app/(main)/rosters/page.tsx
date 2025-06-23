@@ -134,69 +134,75 @@ const RostersPage = () => {
 
   return (
     <>
-      <div className="container mx-auto py-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="container mx-auto py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center">
-            <Camera className="h-8 w-8 mr-4 text-primary" />
-            <h1 className="text-3xl font-bold">名簿管理</h1>
+            <Camera className="h-6 w-6 sm:h-8 sm:w-8 mr-2 sm:mr-4 text-primary" />
+            <h1 className="text-2xl sm:text-3xl font-bold">名簿管理</h1>
           </div>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
             <PlusCircle className="mr-2 h-4 w-4" />
             新規作成
           </Button>
         </div>
 
         {/* Search and Filter Bar */}
-        <div className="mb-6 flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+        <div className="mb-6 space-y-4">
+          {/* Search Input */}
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               type="text"
               placeholder="名簿を検索..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-10 w-full"
             />
           </div>
           
-          <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="並び替え" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="createdAt">作成日時</SelectItem>
-              <SelectItem value="name">名前順</SelectItem>
-              <SelectItem value="peopleCount">人数順</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Controls Row */}
+          <div className="flex flex-wrap gap-2">
+            <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="並び替え" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="createdAt">作成日時</SelectItem>
+                <SelectItem value="name">名前順</SelectItem>
+                <SelectItem value="peopleCount">人数順</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <RosterFilterPanel
-            availableTags={allTags}
-            selectedTags={selectedTags}
-            onTagsChange={setSelectedTags}
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-            peopleCountRange={peopleCountRange}
-            onPeopleCountRangeChange={setPeopleCountRange}
-            maxPeopleCount={maxPeopleCount}
-            onReset={resetFilters}
-          />
+            <RosterFilterPanel
+              availableTags={allTags}
+              selectedTags={selectedTags}
+              onTagsChange={setSelectedTags}
+              dateRange={dateRange}
+              onDateRangeChange={setDateRange}
+              peopleCountRange={peopleCountRange}
+              onPeopleCountRangeChange={setPeopleCountRange}
+              maxPeopleCount={maxPeopleCount}
+              onReset={resetFilters}
+            />
 
-          <div className="flex gap-2">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('grid')}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-4 w-4" />
-            </Button>
+            <div className="flex gap-1 ml-0 sm:ml-auto">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('grid')}
+                className="h-10 w-10"
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('list')}
+                className="h-10 w-10"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 

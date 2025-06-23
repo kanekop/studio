@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { Person } from '@/shared/types';
 import { PeopleService, PersonSearchCriteria } from '@/domain/services';
 import { SortOption } from '@/shared/constants';
+import { useRecentlySelectedPeople } from '@/hooks/useRecentlySelectedPeople';
 
 interface UsePeopleSearchOptions {
   query?: string;
@@ -26,6 +27,7 @@ export function usePeopleSearch(
   };
 } {
   const { query, company, rosterId, sortBy = 'createdAt_desc' } = options;
+  const { sortPeopleByRecency } = useRecentlySelectedPeople();
 
   const [searchResults, setSearchResults] = useState<Person[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -75,6 +77,11 @@ export function usePeopleSearch(
         results, 
         sortBy as 'name_asc' | 'name_desc' | 'createdAt_asc' | 'createdAt_desc'
       );
+    }
+
+    // If no specific sort is applied or searching, prioritize recently selected people
+    if (!query && !company && sortBy === 'createdAt_desc') {
+      results = sortPeopleByRecency(results);
     }
 
     return results;

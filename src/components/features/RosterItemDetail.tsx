@@ -13,11 +13,13 @@ import type { EditablePersonInContext } from '@/shared/types';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
 import { PeopleService, CreatePersonData } from '@/domain/services/people/PeopleService';
 import { useToast } from '@/hooks/use-toast';
+import { useRecentlySelectedPeople } from '@/hooks/useRecentlySelectedPeople';
 
 const RosterItemDetail = () => {
   const { roster, selectedPersonId, setRoster } = useFaceRoster();
   const { toast } = useToast();
   const { isProcessing: isGlobalProcessing } = useUI();
+  const { addRecentPerson } = useRecentlySelectedPeople();
   const [isSaving, setIsSaving] = useState(false);
 
   const selectedPerson = useMemo(() => {
@@ -53,6 +55,11 @@ const RosterItemDetail = () => {
       
       if (selectedPerson.name === '' || selectedPerson.isNew) {
         setIsEditing(true);
+      }
+      
+      // Record selection if it's not a new person
+      if (!selectedPerson.isNew && selectedPerson.id) {
+        addRecentPerson(selectedPerson.id);
       }
     } else {
       // Clear fields if no person is selected

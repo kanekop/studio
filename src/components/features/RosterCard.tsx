@@ -237,11 +237,11 @@ export const RosterCard: React.FC<RosterCardProps> = ({
           </div>
         ) : (
           <h3 
-            className="font-semibold text-lg mb-1 line-clamp-1 group/title flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="font-semibold text-base sm:text-lg mb-1 line-clamp-1 group/title flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
             onClick={handleTitleClick}
           >
-            {roster.rosterName}
-            <Edit className="h-4 w-4 opacity-0 group-hover/title:opacity-100 transition-opacity" />
+            <span className="truncate">{roster.rosterName}</span>
+            <Edit className="h-3 w-3 sm:h-4 sm:w-4 opacity-0 group-hover/title:opacity-100 transition-opacity flex-shrink-0" />
           </h3>
         )}
         
@@ -251,17 +251,17 @@ export const RosterCard: React.FC<RosterCardProps> = ({
           </p>
         )}
 
-        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center">
-            <Calendar className="h-3 w-3 mr-1" />
-            {formatDate()}
+            <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
+            <span className="truncate">{formatDate()}</span>
           </div>
           
           {/* Location from EXIF */}
           {roster.imageMetadata?.location && (
-            <div className="flex items-center">
-              <MapPin className="h-3 w-3 mr-1" />
-              <span>{roster.imageMetadata.location.placeName || '位置情報あり'}</span>
+            <div className="flex items-center min-w-0">
+              <MapPin className="h-3 w-3 mr-1 flex-shrink-0" />
+              <span className="truncate">{roster.imageMetadata.location.placeName || '位置情報あり'}</span>
             </div>
           )}
         </div>

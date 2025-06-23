@@ -13,7 +13,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { EditRosterDialog } from '@/components/features/EditRosterDialog';
+import { ImageZoomDialog } from '@/components/features/ImageZoomDialog';
 import { Badge } from '@/components/ui/badge';
+import { ZoomIn } from 'lucide-react';
+import { RosterImageWithRegions } from '@/components/features/RosterImageWithRegions';
+import { FaceRegionPersonAssignment } from '@/components/features/FaceRegionPersonAssignment';
+import { RegisteredPeopleList } from '@/components/features/RegisteredPeopleList';
+import { Region } from '@/shared/types';
 
 const RosterDetailPage = () => {
   const params = useParams();
@@ -25,6 +31,9 @@ const RosterDetailPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isZoomDialogOpen, setIsZoomDialogOpen] = useState(false);
+  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
+  const [isFaceAssignmentOpen, setIsFaceAssignmentOpen] = useState(false);
   
   const { imageUrl: originalImageUrl, isLoading: isImageLoading } = useStorageImage(
     rosterData?.originalImageStoragePath
@@ -67,6 +76,16 @@ const RosterDetailPage = () => {
     setRosterData(updatedRoster);
   };
 
+  const handleRegionClick = (region: Region, index: number) => {
+    setSelectedRegion(region);
+    setIsFaceAssignmentOpen(true);
+  };
+
+  const handleFaceAssignmentSuccess = () => {
+    // Reload roster data to reflect updates
+    loadRoster();
+  };
+
   const formatDate = (date: any) => {
     if (!date) return '不明';
     try {
@@ -79,7 +98,7 @@ const RosterDetailPage = () => {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
           <Skeleton className="h-10 w-32" />
         </div>
@@ -107,7 +126,7 @@ const RosterDetailPage = () => {
 
   if (error) {
     return (
-      <div className="container mx-auto py-8">
+      <div className="container mx-auto py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
         <Button
           variant="ghost"
           onClick={() => router.push('/rosters')}
@@ -132,8 +151,8 @@ const RosterDetailPage = () => {
 
   return (
     <>
-      <div className="container mx-auto py-8">
-        <div className="mb-6 flex items-center justify-between">
+      <div className="container mx-auto py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-4 sm:mb-6 flex items-center justify-between">
           <Button
             variant="ghost"
             onClick={() => router.push('/rosters')}
@@ -151,18 +170,40 @@ const RosterDetailPage = () => {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {/* Left Column: Image and Details */}
           <Card>
-            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100 group">
               {isImageLoading ? (
                 <Skeleton className="absolute inset-0" />
               ) : originalImageUrl ? (
-                <img
-                  src={originalImageUrl}
-                  alt={rosterData.rosterName}
-                  className="absolute inset-0 w-full h-full object-contain"
-                />
+                <>
+                  {rosterData.faceRegions && rosterData.faceRegions.length > 0 ? (
+                    <RosterImageWithRegions
+                      imageUrl={originalImageUrl}
+                      imageAlt={rosterData.rosterName}
+                      regions={rosterData.faceRegions}
+                      onClick={() => setIsZoomDialogOpen(true)}
+                      onRegionClick={handleRegionClick}
+                    />
+                  ) : (
+                    <img
+                      src={originalImageUrl}
+                      alt={rosterData.rosterName}
+                      className="absolute inset-0 w-full h-full object-contain cursor-pointer"
+                      onClick={() => setIsZoomDialogOpen(true)}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors pointer-events-none" />
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={() => setIsZoomDialogOpen(true)}
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+                </>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-400">
                   <CameraIcon className="h-16 w-16" />
@@ -170,8 +211,8 @@ const RosterDetailPage = () => {
               )}
             </div>
             
-            <CardContent className="p-6">
-              <h1 className="text-2xl font-bold mb-4">{rosterData.rosterName}</h1>
+            <CardContent className="p-4 sm:p-6">
+              <h1 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4">{rosterData.rosterName}</h1>
               
               {rosterData.description && (
                 <p className="text-gray-600 dark:text-gray-400 mb-4">
@@ -220,6 +261,13 @@ const RosterDetailPage = () => {
                     ))}
                   </div>
                 )}
+                
+                {rosterData.faceRegions && rosterData.faceRegions.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                    <Users className="h-4 w-4 text-gray-500" />
+                    <span>{rosterData.faceRegions.length}個の顔領域が選択されています</span>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -235,12 +283,7 @@ const RosterDetailPage = () => {
                   <p className="text-sm text-gray-600">
                     この名簿には{rosterData.peopleIds.length}人が登録されています。
                   </p>
-                  <div className="p-8 text-center bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p className="text-sm text-gray-500">
-                      人物の詳細管理機能は開発中です
-                    </p>
-                  </div>
+                  <RegisteredPeopleList peopleIds={rosterData.peopleIds} />
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -248,9 +291,11 @@ const RosterDetailPage = () => {
                   <p className="text-gray-500">
                     まだ人物が登録されていません
                   </p>
-                  <p className="text-sm text-gray-400 mt-2">
-                    画像から顔を識別して人物を登録できます
-                  </p>
+                  {rosterData.faceRegions && rosterData.faceRegions.length > 0 && (
+                    <p className="text-sm text-primary mt-2">
+                      左の画像で青い枠をクリックして人物を登録してください
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -264,6 +309,26 @@ const RosterDetailPage = () => {
         roster={rosterData}
         onUpdate={handleUpdateRoster}
       />
+      
+      {originalImageUrl && (
+        <ImageZoomDialog
+          isOpen={isZoomDialogOpen}
+          onOpenChange={setIsZoomDialogOpen}
+          imageUrl={originalImageUrl}
+          imageAlt={rosterData?.rosterName}
+        />
+      )}
+      
+      {selectedRegion && originalImageUrl && rosterData && (
+        <FaceRegionPersonAssignment
+          isOpen={isFaceAssignmentOpen}
+          onOpenChange={setIsFaceAssignmentOpen}
+          region={selectedRegion}
+          imageUrl={originalImageUrl}
+          roster={rosterData}
+          onSuccess={handleFaceAssignmentSuccess}
+        />
+      )}
     </>
   );
 };

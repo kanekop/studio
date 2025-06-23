@@ -7,8 +7,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/shared/utils/utils';
 import { useStorageImage } from '@/hooks/useStorageImage.improved';
 import { usePersonConnections } from '@/presentation/hooks/usePersonConnections';
+import { useRecentlySelectedPeople } from '@/hooks/useRecentlySelectedPeople';
 import OptimizedImage from '@/components/ui/optimized-image';
 import SimplePeopleMenu from './SimplePeopleMenu';
+import { Clock } from 'lucide-react';
 
 interface PeopleListItemProps {
   person: Person;
@@ -23,6 +25,9 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   onDeleteClick,
   connections,
 }) => {
+  const { getRecentPersonIds } = useRecentlySelectedPeople();
+  const recentPersonIds = getRecentPersonIds();
+  const isRecent = recentPersonIds.includes(person.id);
 
   const imagePath = person.primaryFaceAppearancePath || person.faceAppearances?.[0]?.faceImageStoragePath;
   const { url: displayImageUrl, isLoading: isImageLoading } = useStorageImage(imagePath, {
@@ -47,7 +52,8 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
   return (
     <Card
       className={cn(
-        "flex flex-col h-full shadow-md hover:shadow-lg transition-all duration-200 rounded-lg overflow-hidden relative group"
+        "flex flex-col h-full shadow-md hover:shadow-lg transition-all duration-200 rounded-lg overflow-hidden relative group",
+        isRecent && "ring-2 ring-primary/30"
       )}
     >
       <SimplePeopleMenu
@@ -75,8 +81,11 @@ const PeopleListItem: React.FC<PeopleListItemProps> = React.memo(({
           </div>
         </CardHeader>
         <CardContent className="p-3 flex-grow">
-          <CardTitle className="text-lg font-semibold truncate" title={person?.name || 'Unknown'}>
+          <CardTitle className="text-lg font-semibold truncate flex items-center gap-2" title={person?.name || 'Unknown'}>
             {person?.name || 'Unknown'}
+            {isRecent && (
+              <Clock className="h-4 w-4 text-primary/60" title="最近選択されました" />
+            )}
           </CardTitle>
           {person?.company && (
             <p className="text-xs text-muted-foreground truncate" title={person.company}>{person.company}</p>

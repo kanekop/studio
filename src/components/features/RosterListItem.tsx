@@ -68,14 +68,14 @@ export const RosterListItem: React.FC<RosterListItemProps> = ({
   return (
     <div
       className={cn(
-        "group flex items-center gap-4 p-4 rounded-lg border",
+        "group flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border",
         "hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer",
         "border-gray-200 dark:border-gray-700"
       )}
       onClick={handleClick}
     >
       {/* Thumbnail */}
-      <div className="relative w-24 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+      <div className="relative w-full sm:w-24 h-32 sm:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
         {isThumbnailLoading ? (
           <Skeleton className="absolute inset-0" />
         ) : imageLoadError || !thumbnailUrl ? (
@@ -134,7 +134,7 @@ export const RosterListItem: React.FC<RosterListItemProps> = ({
           </p>
         )}
 
-        <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center">
             <Users className="h-3 w-3 mr-1" />
             <span>{peopleCount}人</span>

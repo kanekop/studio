@@ -97,6 +97,8 @@ export interface ImageSet {
       model?: string;
     };
   };
+  
+  faceRegions?: Region[]; // Optional: Manual face regions selected by user
 }
 
 // Defines the user's choices for merging conflicting fields between two Person objects.

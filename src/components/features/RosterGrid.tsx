@@ -41,7 +41,7 @@ export const RosterGrid: React.FC<RosterGridProps> = ({
     }
     
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
         {[...Array(8)].map((_, index) => (
           <Card key={index} className="overflow-hidden">
             <Skeleton className="aspect-video" />
@@ -103,7 +103,7 @@ export const RosterGrid: React.FC<RosterGridProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
       {rosters.map((roster) => (
         <RosterCard
           key={roster.id}

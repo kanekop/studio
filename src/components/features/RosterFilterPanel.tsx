@@ -69,7 +69,7 @@ export const RosterFilterPanel: React.FC<RosterFilterPanelProps> = ({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-4" align="end">
+      <PopoverContent className="w-[calc(100vw-2rem)] max-w-md p-4" align="end">
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold">フィルター設定</h3>

@@ -23,9 +23,10 @@ import { PeopleService, UpdatePersonData } from '@/domain/services/people/People
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
 interface PeopleContextType {
-  people: Person[];
+  allUserPeople: Person[];
   setPeople: React.Dispatch<React.SetStateAction<Person[]>>;
   filteredPeople: Person[];
+  fetchAllUserPeople: () => Promise<void>;
   searchParams: AdvancedSearchParams;
   setSearchParams: React.Dispatch<React.SetStateAction<AdvancedSearchParams>>;
   sortOption: PeopleSortOptionValue;
@@ -43,7 +44,6 @@ interface PeopleContextType {
   selectedForDeletion: Person[];
   toggleDeletionSelection: (person: Person) => void;
   clearDeletionSelection: () => void;
-  deleteSelectedPeople: () => Promise<void>;
   isDeleting: boolean;
   connections: Connection[];
   fetchConnections: (personId: string) => Promise<void>;
@@ -309,9 +309,10 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [currentUser?.uid, fetchAllUserPeople]);
 
   const value: PeopleContextType = {
-    people,
+    allUserPeople: people,
     setPeople,
     filteredPeople,
+    fetchAllUserPeople,
     searchParams,
     setSearchParams,
     sortOption,
@@ -329,7 +330,6 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     selectedForDeletion: [],
     toggleDeletionSelection: () => {},
     clearDeletionSelection: () => {},
-    deleteSelectedPeople,
     isDeleting: false,
     connections: [],
     fetchConnections: async () => {},
