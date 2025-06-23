@@ -74,6 +74,7 @@ export interface ImageSet {
   
   originalImageStoragePath: string; // Path to the original uploaded image in Cloud Storage
   originalImageSize: { width: number; height: number }; // Dimensions of the original image
+  thumbnailUrl?: string; // URL of the thumbnail image for this roster
   
   peopleIds: string[]; // Array of 'people' document IDs belonging to this roster
   people?: EditablePersonInContext[]; // Optional: Embedded people data for this roster
@@ -82,6 +83,20 @@ export interface ImageSet {
   updatedAt: Timestamp | any; // Firestore serverTimestamp for last update
   
   tags: string[];
+  
+  // Image metadata from EXIF
+  imageMetadata?: {
+    capturedAt?: Date | Timestamp | any;      // EXIF撮影日時
+    location?: {            // GPS情報
+      latitude: number;
+      longitude: number;
+      placeName?: string;   // 逆ジオコーディング結果
+    };
+    cameraInfo?: {          // カメラ情報
+      make?: string;
+      model?: string;
+    };
+  };
 }
 
 // Defines the user's choices for merging conflicting fields between two Person objects.

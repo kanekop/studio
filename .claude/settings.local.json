@@ -23,7 +23,8 @@
       "Bash(npx kill-port:*)",
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npx shadcn@latest add:*)"
     ],
     "deny": []
   }

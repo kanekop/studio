@@ -21,27 +21,46 @@ import { useToast } from '@/hooks/use-toast';
 import { FirebaseStorageRepository } from '@/infrastructure/firebase/repositories/FirebaseStorageRepository';
 import { FirebaseRosterRepository } from '@/infrastructure/firebase/repositories/FirebaseRosterRepository';
 import { ImageSet } from '@/shared/types';
+import { generateThumbnail, extractExifData, ImageMetadata } from '@/shared/utils/image-processing';
 
 interface CreateRosterDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
+  onSuccess?: () => void;
 }
 
-export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, onOpenChange }) => {
+export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, onOpenChange, onSuccess }) => {
   const [rosterName, setRosterName] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageMetadata, setImageMetadata] = useState<ImageMetadata | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   const { currentUser } = useAuth();
   const { toast } = useToast();
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles && acceptedFiles.length > 0) {
-      setImageFile(acceptedFiles[0]);
+      const file = acceptedFiles[0];
+      setImageFile(file);
+      
+      // Extract EXIF data
+      const metadata = await extractExifData(file);
+      setImageMetadata(metadata);
+      
+      // Auto-fill date if available
+      if (metadata?.capturedAt && !description) {
+        const date = new Date(metadata.capturedAt);
+        const dateStr = date.toLocaleDateString('ja-JP', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        setDescription(`撮影日: ${dateStr}`);
+      }
     }
-  }, []);
+  }, [description]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -52,6 +71,7 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
 
   const handleRemoveImage = () => {
     setImageFile(null);
+    setImageMetadata(null);
   };
 
   const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
@@ -89,7 +109,7 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
 
       // 2. Create roster document in Firestore
       const rosterRepo = new FirebaseRosterRepository();
-      const newRosterData = {
+      const newRosterData: Omit<ImageSet, 'id' | 'createdAt' | 'updatedAt'> = {
         ownerId: currentUser.uid,
         rosterName,
         description,
@@ -98,22 +118,48 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
         originalImageSize: dimensions,
         people: [],
         peopleIds: [],
+        ...(imageMetadata && {
+          imageMetadata: {
+            capturedAt: imageMetadata.capturedAt,
+            location: imageMetadata.location,
+            cameraInfo: imageMetadata.cameraInfo,
+          }
+        }),
       };
       
-      await rosterRepo.createRoster(newRosterData);
+      const createdRoster = await rosterRepo.createRoster(newRosterData);
+
+      // 3. Generate and upload thumbnail
+      try {
+        const thumbnail = await generateThumbnail(imageFile);
+        await rosterRepo.uploadThumbnail(currentUser.uid, createdRoster.id, thumbnail);
+      } catch (thumbnailError) {
+        console.warn('Failed to generate thumbnail:', thumbnailError);
+        // Continue even if thumbnail generation fails
+      }
 
       toast({
-        title: "Roster Created!",
-        description: "Your new roster has been successfully created.",
+        title: "名簿を作成しました",
+        description: "新しい名簿が正常に作成されました。",
       });
 
+      // Reset form state
+      setRosterName('');
+      setDescription('');
+      setTags('');
+      setImageFile(null);
+      
       onOpenChange(false);
-      // TODO: Reset state after closing
+      
+      // Call success callback if provided
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       console.error("Failed to create roster:", error);
       toast({
-        title: "Error",
-        description: "Could not create the roster. Please try again.",
+        title: "エラー",
+        description: "名簿の作成に失敗しました。もう一度お試しください。",
         variant: "destructive",
       });
     } finally {
@@ -127,9 +173,9 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Create New Roster</DialogTitle>
+          <DialogTitle>新規名簿作成</DialogTitle>
           <DialogDescription>
-            Upload an image and provide details to create a new roster.
+            画像をアップロードして名簿を作成します
           </DialogDescription>
         </DialogHeader>
         
@@ -146,9 +192,9 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
               <div className="flex flex-col items-center justify-center pt-5 pb-6">
                 <UploadCloud className="w-10 h-10 mb-3 text-gray-400" />
                 <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-semibold">Click to upload</span> or drag and drop
+                  <span className="font-semibold">クリックしてアップロード</span> またはドラッグ&ドロップ
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG or WEBP (MAX. 10MB)</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">PNG, JPG, WEBP (最大 10MB)</p>
               </div>
             </div>
           ) : (
@@ -164,30 +210,30 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="roster-name">Roster Name *</Label>
+            <Label htmlFor="roster-name">名簿名 *</Label>
             <Input 
               id="roster-name" 
-              placeholder="e.g., Team Offsite 2024"
+              placeholder="例：営業会議 2025/01"
               value={rosterName}
               onChange={(e) => setRosterName(e.target.value)} 
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="roster-description">Description</Label>
+            <Label htmlFor="roster-description">説明</Label>
             <Textarea 
               id="roster-description" 
-              placeholder="A brief description of the event or photo."
+              placeholder="この名簿についての説明を入力..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="roster-tags">Tags (comma-separated)</Label>
+            <Label htmlFor="roster-tags">タグ（カンマ区切り）</Label>
             <Input 
               id="roster-tags" 
-              placeholder="e.g., Conference, 2024"
+              placeholder="例：会議, 営業部, 2025年"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
             />
@@ -195,9 +241,9 @@ export const CreateRosterDialog: React.FC<CreateRosterDialogProps> = ({ isOpen, 
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCreating}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCreating}>キャンセル</Button>
           <Button onClick={handleCreateRoster} disabled={isUploadDisabled}>
-            {isCreating ? "Creating..." : "Upload & Create"}
+            {isCreating ? "作成中..." : "アップロードして作成"}
           </Button>
         </DialogFooter>
       </DialogContent>

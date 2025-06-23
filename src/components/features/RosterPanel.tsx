@@ -1,4 +1,3 @@
-
 "use client";
 import React from 'react';
 import RosterList from './RosterList';
@@ -20,7 +19,7 @@ const RosterPanel = () => {
               <Users className="mr-2 h-5 w-5 text-primary" /> Roster
             </CardTitle>
             <CardDescription className="mt-1">
-              {roster.length > 0 ? "Manage identified people." : "No people in this roster yet." }
+              {roster?.length > 0 ? "Manage identified people." : "No people in this roster yet." }
             </CardDescription>
           </div>
           {/* Merge UI removed from here */}
@@ -29,7 +28,7 @@ const RosterPanel = () => {
       </CardHeader>
       <CardContent className="p-4 md:p-2 lg:p-4 flex-grow flex flex-col md:flex-row gap-4 overflow-hidden">
         <div className="w-full md:w-2/5 lg:w-1/3 md:pr-2 lg:pr-4 md:border-r border-border md:max-h-full overflow-y-auto">
-          {roster.length > 0 ? (
+          {roster?.length > 0 ? (
             <RosterList />
           ) : (
              <div className="p-4 text-center text-sm text-muted-foreground border border-dashed rounded-md h-full flex items-center justify-center">

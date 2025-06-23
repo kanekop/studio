@@ -18,7 +18,7 @@ import { useAuth } from './AuthContext';
 import { useUI } from './UIContext';
 import type { Person, AdvancedSearchParams, Connection } from '@/shared/types';
 import { useToast } from "@/hooks/use-toast";
-import { PeopleService } from '@/domain/services/people/PeopleService';
+import { PeopleService, UpdatePersonData } from '@/domain/services/people/PeopleService';
 
 export type PeopleSortOptionValue = 'createdAt_desc' | 'createdAt_asc' | 'name_asc' | 'name_desc';
 
@@ -31,6 +31,9 @@ interface PeopleContextType {
   sortOption: PeopleSortOptionValue;
   setSortOption: React.Dispatch<React.SetStateAction<PeopleSortOptionValue>>;
   addPerson: (personData: Omit<Person, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => Promise<Person | undefined>;
+  updatePerson: (personId: string, updates: UpdatePersonData) => Promise<boolean>;
+  deletePerson: (personId: string) => Promise<boolean>;
+  deleteMultiplePeople: (personIds: string[]) => Promise<boolean>;
   getPersonById: (id: string) => Person | undefined;
   isLoading: boolean;
   error: Error | null;
@@ -167,6 +170,90 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const updatePerson = async (personId: string, updates: UpdatePersonData): Promise<boolean> => {
+    setIsProcessing(true);
+    try {
+      await PeopleService.updatePerson(personId, updates);
+      
+      setPeople(prevPeople =>
+        prevPeople.map(p =>
+          p.id === personId ? { ...p, ...updates, updatedAt: new Date() } : p
+        )
+      );
+      
+      toast({
+        title: "Success",
+        description: "Person information has been updated.",
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Error updating person:', error);
+      toast({
+        title: "Error",
+        description: `Failed to update person: ${error.message}`,
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const deletePerson = async (personId: string): Promise<boolean> => {
+    setIsProcessing(true);
+    try {
+      await PeopleService.deletePerson(personId);
+      setPeople(prevPeople => prevPeople.filter(p => p.id !== personId));
+      toast({
+        title: "Success",
+        description: "Person has been deleted.",
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Error deleting person:', error);
+      toast({
+        title: "Error",
+        description: `Failed to delete person: ${error.message}`,
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const deleteMultiplePeople = async (personIds: string[]): Promise<boolean> => {
+    if (!currentUser?.uid || personIds.length === 0) return false;
+
+    setIsProcessing(true);
+    try {
+      const batch = writeBatch(db);
+      personIds.forEach(id => {
+        const personRef = doc(db, 'people', id);
+        batch.delete(personRef);
+      });
+      await batch.commit();
+
+      setPeople(prev => prev.filter(p => !personIds.includes(p.id)));
+      
+      toast({
+        title: "Success",
+        description: `${personIds.length} people have been deleted.`,
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Error deleting multiple people:', error);
+      toast({
+        title: "Error",
+        description: `Failed to delete people: ${error.message}`,
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const getPersonById = useCallback((id: string) => {
     return people.find(person => person.id === id);
   }, [people]);
@@ -230,6 +317,9 @@ export const PeopleProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     sortOption,
     setSortOption,
     addPerson,
+    updatePerson,
+    deletePerson,
+    deleteMultiplePeople,
     getPersonById,
     isLoading: isLoadingAllUserPeople,
     error: null,

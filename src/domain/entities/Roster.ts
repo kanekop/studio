@@ -13,7 +13,8 @@ export class Roster {
     public updatedAt: Timestamp,
     public description?: string,
     public people?: EditablePersonInContext[],
-    public tags: string[] = []
+    public tags: string[] = [],
+    public thumbnailUrl?: string
   ) {}
 
   static fromFirestore(data: ImageSet): Roster {
@@ -28,7 +29,8 @@ export class Roster {
       data.updatedAt as Timestamp,
       data.description,
       data.people,
-      data.tags
+      data.tags,
+      data.thumbnailUrl
     );
   }
 
@@ -44,6 +46,7 @@ export class Roster {
       description: this.description,
       people: this.people,
       tags: this.tags,
+      thumbnailUrl: this.thumbnailUrl,
     };
   }
 
